@@ -3,10 +3,7 @@ import lombok.Setter;
 import lombok.AllArgsConstructor;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 import java.lang.reflect.Field;
 
 @AllArgsConstructor
@@ -162,6 +159,57 @@ public class ServerProperties {
         pw.close();
         fw.close();
         System.out.println("Escritura de propiedades finalizada");
+    }
+
+    void leerPropiedades(ServerConfig serverConfig) {
+        File serverConfigFolder = new File(serverConfig.getRuta()).getParentFile();
+        File propierties = new File(serverConfigFolder, "server.properties");
+        if (propierties.exists()) {
+            try{
+                BufferedReader br = new BufferedReader(new FileReader(propierties));
+                int caracter;
+                String propiedad;
+                String valor;
+                String aux;
+                StringBuilder builder = new StringBuilder();
+                while ((caracter = br.read())!=-1) {
+                    if(caracter=='#') {
+                        aux = br.readLine();
+                        System.out.println("Comentario: "+aux);
+                    } else if(caracter=='=') {
+                        propiedad = builder.toString().trim();
+                        builder.delete(0, builder.length());
+                        valor = br.readLine().trim();
+                        if(propiedad.length()>0) {
+                            for(Field campo : this.getClass().getDeclaredFields()){
+                                if(campo.getName().replace("_","-").trim().contentEquals(propiedad)){
+                                    campo.setAccessible(true);
+                                    if(campo.getType().equals(Integer.class) || campo.getType().equals(int.class)) {
+                                        campo.set(this, Integer.parseInt(valor));
+                                        System.out.println("La propiedad "+campo.getName() + " se asignó al valor "+valor + " (int)");
+                                    }
+                                    else if(campo.getType().equals(Boolean.class)) {
+                                        campo.set(this, Boolean.parseBoolean(valor));
+                                        System.out.println("La propiedad "+campo.getName() + " se asignó al valor "+valor + " (Boolean)");
+                                    }
+                                    else{
+                                        campo.set(this, valor);
+                                        System.out.println("La propiedad "+campo.getName() + " se asignó al valor "+valor + " (String)");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else{
+                        builder.append((char)caracter);
+                    }
+                }
+            } catch (IOException e) {
+                System.out.println("Error al leer el archivo propiedades.");
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
 }

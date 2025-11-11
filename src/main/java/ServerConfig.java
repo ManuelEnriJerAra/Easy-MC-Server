@@ -37,8 +37,8 @@ public class ServerConfig {
 
     public static void guardarConfig(ServerConfig serverConfig) {
         ObjectMapper mapper = new ObjectMapper();
-        System.out.println(serverConfig.getRamMin() + " " + serverConfig.getRamMax() + " " + serverConfig.getRuta());
+        // System.out.println(serverConfig.getRamMin() + " " + serverConfig.getRamMax() + " " + serverConfig.getRuta());
         mapper.writerWithDefaultPrettyPrinter().writeValue(new File("ServerConfig.json"), serverConfig);
-        System.out.println("ServerConfig.json guardado correctamente");
+        // System.out.println("ServerConfig.json guardado correctamente");
     }
 }
