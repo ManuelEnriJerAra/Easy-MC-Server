@@ -1,5 +1,4 @@
 import tools.jackson.databind.ObjectMapper;
-
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -10,21 +9,9 @@ import java.awt.event.*;
 import java.io.*;
 import java.lang.reflect.Field;
 
-public class main {
-    static Server server = new Server();
+public class Main {
 
-    static void setServidor(Server serverIn) {
-        server = serverIn;
-    }
-
-    static ServerConfig getServerConfig() {
-        return server.getServerConfig();
-    }
-
-    static boolean comprobarEstadoServidor() {
-        return server.getServerProcess().isAlive();
-    }
-
+    // copiar un archivo sin importar el formato de un origen a un destino
     public static void copiarArchivo(File origen, File destino) throws IOException {
         try (InputStream in = new FileInputStream(origen);
              OutputStream out = new FileOutputStream(destino)) {
@@ -38,37 +25,65 @@ public class main {
         System.out.println("Archivo copiado a: " + destino.getAbsolutePath());
     }
 
-    static ServerConfig leerServerConfig() {
-        File serverConfigFile = new File("ServerConfig.json");
-        ServerConfig serverConfig = null;
+    // genera un archivo llamado eula.txt con el texto eula=true en la dirección indicada
+    public static void rellenaEULA(File direccion){
+        File eula = new File(direccion,"eula.txt");
+        try{
+            FileWriter fw = new FileWriter(eula);
+            BufferedWriter bw = new BufferedWriter(fw);
+            bw.write("eula=true");
+            bw.close();
+            fw.close();
+        }catch(IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    // devuelve el último servidor que haya en el JSON
+    public static Server leerUltimoServidor(){
+        File json = new File("ServerConfigList.json");
         ObjectMapper mapper = new ObjectMapper();
-        if (serverConfigFile.exists()) {
-            try {
-                serverConfig = mapper.readValue(serverConfigFile, ServerConfig.class);
-            } catch (Exception e) {
-                System.out.println("El archivo ServerConfig.json no contiene ningún servidor válido.");
-                return null;
+        ServerConfig serverConfig = mapper.readValue(json, ServerConfig.class);
+        Server server = new Server();
+        server.setServerConfig(serverConfig);
+        System.out.println("Servidor: " + server.getServerConfig().getRuta());
+        if(server.getServerConfig().getRuta()!=null){
+            File serverFile = new File(server.getServerConfig().getRuta());
+            if(serverFile.exists()){
+                return server;
             }
         }
-        return serverConfig;
+        return null;
     }
 
-    static void guardarServidor(File servidor) {
-        try{
-            FileWriter fr = new FileWriter("SavedServers.txt");
-            BufferedWriter bw = new BufferedWriter(fr);
-            bw.write(servidor.getAbsolutePath());
-            bw.close();
-            fr.close();
-        } catch (IOException e) {}
-        System.out.println("Servidor guardado");
-    }
+    public static Server selectedServer;
 
     public static void main(String[] args) throws IllegalAccessException {
+        // inicialización de la api
+        MojangAPI api = new MojangAPI();
+
         // inicialización del servidor
-        server.setServerConfig(leerServerConfig());
-        File carpetaServidor=new File(getServerConfig().getRuta()).getParentFile();
-        server.getServerProperties().leerPropiedades(getServerConfig());
+        selectedServer = leerUltimoServidor();
+        if(selectedServer!=null){
+
+        }
+        else{
+            selectedServer = new Server();
+        }
+        File carpetaServidor; // creo un file para manejar la carpeta del servidor más fácilmente
+        File serverConfigList = new File("ServerConfigList.json"); // creo un file para tener acceso a la lista de servidores guardados
+        ProcessBuilder pb; // preparo el processBuilder que va a controlar el proceso del servidor
+        if(serverConfigList.length()>0){ // si el JSON tiene texto:
+            System.out.println("El JSON no está vacío, se va a inspeccionar.");
+        }
+        if(selectedServer.getServerConfig().getRuta()==null){ // si el servidor no tiene ruta (no ha sido validado)
+            carpetaServidor = null;
+        }
+        else{ // si el servidor tiene ruta (ha sido inicializado)
+            carpetaServidor = new File(selectedServer.getServerConfig().getRuta()).getParentFile();
+            selectedServer.getServerProperties().leerPropiedades(selectedServer.getServerConfig());
+        }
+
         String[] modos = { "survival", "creative", "adventure", "spectator" };
 
 
@@ -82,16 +97,19 @@ public class main {
         JPanel servidor = new JPanel(new BorderLayout());
 
         // servidorLabel: muestra, si hay un servidor seleccionado, su dirección
-        JLabel servidorLabel = new JLabel("No hay ningún servidor seleccionado.");
+        JLabel servidorLabel;
+        if (selectedServer.getServerConfig().getRuta()!=null){
+            servidorLabel = new JLabel("Servidor: " + selectedServer.getServerConfig().getRuta());
+        }
+        else{
+            servidorLabel = new JLabel("No hay ningún servidor seleccionado.");
+        }
         servidorLabel.setHorizontalAlignment(JLabel.LEFT);
         servidorLabel.setVerticalAlignment(JLabel.TOP);
-        if (getServerConfig() != null) {
-             servidorLabel.setText(getServerConfig().getRuta());
-        }
 
         // sliders y sus label correspondientes
-        JSlider initRamSlider = new JSlider(1024,16384,getServerConfig().getRamMin());
-        JSlider maxRamSlider = new JSlider(1024,16384,getServerConfig().getRamMax());
+        JSlider initRamSlider = new JSlider(1024,16384,selectedServer.getServerConfig().getRamMin());
+        JSlider maxRamSlider = new JSlider(1024,16384,selectedServer.getServerConfig().getRamMax());
         JLabel initRamLabel = new JLabel("Mínimo de RAM: "+initRamSlider.getValue()+"M");
         JLabel maxRamLabel = new JLabel("Máximo de RAM: "+maxRamSlider.getValue()+"M");
         initRamSlider.setMajorTickSpacing(1024);
@@ -114,7 +132,7 @@ public class main {
         JPanel propiedadesPanel = new JPanel();
         propiedadesPanel.setLayout(new BoxLayout(propiedadesPanel, BoxLayout.Y_AXIS));
         propiedadesPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        for(Field campo : server.getServerProperties().getClass().getDeclaredFields()){
+        for(Field campo : selectedServer.getServerProperties().getClass().getDeclaredFields()){
             campo.setAccessible(true);
             JPanel fila = new JPanel(new GridBagLayout());
             GridBagConstraints filaC = new GridBagConstraints();
@@ -134,16 +152,16 @@ public class main {
             filaC.weightx = 0.0;
             if(campo.getType()==Boolean.class){
                 JCheckBox checkBox = new JCheckBox();
-                if((boolean) campo.get(server.getServerProperties())){
+                if((boolean) campo.get(selectedServer.getServerProperties())){
                     checkBox.setSelected(true);
                 }
                 fila.add(checkBox, filaC);
                 checkBox.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
                         try {
-                            campo.set(server.getServerProperties(), checkBox.isSelected());
+                            campo.set(selectedServer.getServerProperties(), checkBox.isSelected());
                             System.out.println("Campo: "+campo.getName() + " cambia a "+checkBox.isSelected());
-                            server.getServerProperties().escribePropiedades(carpetaServidor);
+                            selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                         } catch (IllegalAccessException ex) {
                             throw new RuntimeException(ex);
                         } catch (IOException ex) {
@@ -156,7 +174,7 @@ public class main {
                 // System.out.println("Campo name: "+texto.getText()+" comparo con gamemode");
                 if(texto.getText() == "gamemode"){
                     JComboBox<String> comboBox = new JComboBox(modos);
-                    String valorActual = campo.get(server.getServerProperties()).toString();
+                    String valorActual = campo.get(selectedServer.getServerProperties()).toString();
                     if(valorActual.contentEquals(modos[0])){
                         comboBox.setSelectedIndex(0);
                     }
@@ -172,9 +190,9 @@ public class main {
                     comboBox.addActionListener(new ActionListener() {
                         public void actionPerformed(ActionEvent e) {
                             try {
-                                campo.set(server.getServerProperties(), comboBox.getSelectedItem().toString());
+                                campo.set(selectedServer.getServerProperties(), comboBox.getSelectedItem().toString());
                                 System.out.println("Campo: "+campo.getName() + " cambia a "+ comboBox.getSelectedItem().toString());
-                                server.getServerProperties().escribePropiedades(carpetaServidor);
+                                selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                             } catch (IllegalAccessException ex) {
                                 throw new RuntimeException(ex);
                             } catch (IOException ex) {
@@ -185,14 +203,14 @@ public class main {
                     fila.add(comboBox, filaC);
                 }
                 else{
-                    campoText.setText(campo.get(server.getServerProperties()).toString());
+                    campoText.setText(campo.get(selectedServer.getServerProperties()).toString());
                     campoText.getDocument().addDocumentListener(new DocumentListener() {
                         @Override
                         public void insertUpdate(DocumentEvent e) {
                             try {
-                                campo.set(server.getServerProperties(), campoText.getText());
+                                campo.set(selectedServer.getServerProperties(), campoText.getText());
                                 System.out.println("Campo: "+campo.getName() + " cambia a "+ campoText.getText());
-                                server.getServerProperties().escribePropiedades(carpetaServidor);
+                                selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                             } catch (IllegalAccessException ex) {
                                 throw new RuntimeException(ex);
                             } catch (IOException ex) {
@@ -203,9 +221,9 @@ public class main {
                         @Override
                         public void removeUpdate(DocumentEvent e) {
                             try {
-                                campo.set(server.getServerProperties(), campoText.getText());
+                                campo.set(selectedServer.getServerProperties(), campoText.getText());
                                 System.out.println("Campo: "+campo.getName() + " cambia a "+ campoText.getText());
-                                server.getServerProperties().escribePropiedades(carpetaServidor);
+                                selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                             } catch (IllegalAccessException ex) {
                                 throw new RuntimeException(ex);
                             } catch (IOException ex) {
@@ -215,9 +233,9 @@ public class main {
 
                         public void changedUpdate(DocumentEvent e) {
                             try {
-                                campo.set(server.getServerProperties(), campoText.getText());
+                                campo.set(selectedServer.getServerProperties(), campoText.getText());
                                 System.out.println("Campo: "+campo.getName() + " cambia a "+ campoText.getText());
-                                server.getServerProperties().escribePropiedades(carpetaServidor);
+                                selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                             } catch (IllegalAccessException ex) {
                                 throw new RuntimeException(ex);
                             } catch (IOException ex) {
@@ -229,14 +247,14 @@ public class main {
                 }
             }
             else{
-                JSpinner spinner = new JSpinner(new SpinnerNumberModel(campo.getInt(server.getServerProperties()),0,99999999,1));
+                JSpinner spinner = new JSpinner(new SpinnerNumberModel(campo.getInt(selectedServer.getServerProperties()),0,99999999,1));
                 spinner.setPreferredSize(new Dimension(100,20));
                 spinner.addChangeListener(new ChangeListener() {
                     public void stateChanged(ChangeEvent e) {
                         try {
-                            campo.set(server.getServerProperties(),spinner.getValue());
+                            campo.set(selectedServer.getServerProperties(),spinner.getValue());
                             System.out.println("Campo: "+campo.getName() + " cambia a "+ spinner.getValue());
-                            server.getServerProperties().escribePropiedades(carpetaServidor);
+                            selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                         } catch (IllegalAccessException ex) {
                             throw new RuntimeException(ex);
                         } catch (IOException ex) {
@@ -260,6 +278,7 @@ public class main {
         JButton reiniciarServidor = new JButton("Reiniciar Servidor");
         JButton establecerImagen = new JButton();
         JButton refrescar = new JButton("Refrescar");
+        JButton nuevoServidor =  new JButton("Nuevo Servidor");
         pararServidor.setBackground(new Color(150, 10, 10));
         pararServidor.setForeground(Color.WHITE);
 
@@ -275,7 +294,7 @@ public class main {
         // icono del servidor
         JPanel panelPrevisualizar = new JPanel(new BorderLayout());
         ImageIcon iconoServer = new ImageIcon(carpetaServidor+"/server-icon.png");
-        JTextField serverName = new JTextField(server.getServerProperties().getMotd());
+        JTextField serverName = new JTextField(selectedServer.getServerProperties().getMotd());
         establecerImagen.setIcon(iconoServer);
         establecerImagen.setSize(64,64);
         establecerImagen.setPreferredSize(new Dimension(64,64));
@@ -289,12 +308,13 @@ public class main {
 
         panelPrevisualizar.add(serverStatusLabel, BorderLayout.EAST);
 
-        JPanel botonesPrevisualizar = new JPanel(new GridLayout(1,5));
+        JPanel botonesPrevisualizar = new JPanel(new GridLayout(1,6));
         botonesPrevisualizar.add(iniciarServidor);
         botonesPrevisualizar.add(pararServidor);
         botonesPrevisualizar.add(reiniciarServidor);
         botonesPrevisualizar.add(seleccionarServidor);
         botonesPrevisualizar.add(refrescar);
+        botonesPrevisualizar.add(nuevoServidor);
 
         panelPrevisualizar.add(botonesPrevisualizar, BorderLayout.SOUTH);
 
@@ -304,7 +324,7 @@ public class main {
         JButton send = new JButton("Enviar");
         send.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                OutputStream os = server.getServerProcess().getOutputStream();
+                OutputStream os = selectedServer.getServerProcess().getOutputStream();
                 PrintWriter pw = new PrintWriter(os, true);
                 pw.println(textArea.getText());
             }
@@ -325,23 +345,28 @@ public class main {
 
 
         // gestión de proceso
-        ProcessBuilder pb = new ProcessBuilder("java",
+        if (carpetaServidor != null) {
+            pb = new ProcessBuilder("java",
                 "-Xms"+initRamSlider.getValue()+"M",
                 "-Xmx"+maxRamSlider.getValue()+"M",
                 "-jar",
-                getServerConfig().getRuta(),
+                selectedServer.getServerConfig().getRuta(),
                 "nogui");
-        pb.directory(carpetaServidor);
-        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+            pb.directory(carpetaServidor);
+            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);}
+        else {
+            pb = null;
+        }
+
 
         // listeners y actuadores
 
         //scheduler.scheduleAtFixedRate(comprobarEstadoServidor())
         serverName.getDocument().addDocumentListener(new DocumentListener(){
             public void insertUpdate(DocumentEvent e) {
-                server.getServerProperties().setMotd(serverName.getText());
+                selectedServer.getServerProperties().setMotd(serverName.getText());
                 try {
-                    server.getServerProperties().escribePropiedades(carpetaServidor);
+                    selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                 } catch (IOException ex) {
                     throw new RuntimeException(ex);
                 } catch (IllegalAccessException ex) {
@@ -349,9 +374,9 @@ public class main {
                 }
             }
             public void removeUpdate(DocumentEvent e) {
-                server.getServerProperties().setMotd(serverName.getText());
+                selectedServer.getServerProperties().setMotd(serverName.getText());
                 try {
-                    server.getServerProperties().escribePropiedades(carpetaServidor);
+                    selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                 } catch (IOException ex) {
                     throw new RuntimeException(ex);
                 } catch (IllegalAccessException ex) {
@@ -359,9 +384,9 @@ public class main {
                 }
             }
             public void changedUpdate(DocumentEvent e) {
-                server.getServerProperties().setMotd(serverName.getText());
+                selectedServer.getServerProperties().setMotd(serverName.getText());
                 try {
-                    server.getServerProperties().escribePropiedades(carpetaServidor);
+                    selectedServer.getServerProperties().escribePropiedades(carpetaServidor);
                 } catch (IOException ex) {
                     throw new RuntimeException(ex);
                 } catch (IllegalAccessException ex) {
@@ -372,16 +397,16 @@ public class main {
         initRamSlider.addChangeListener(new ChangeListener() {
             public void stateChanged(ChangeEvent e) {
                 initRamLabel.setText("Mínimo de RAM: "+initRamSlider.getValue()+"M");
-                getServerConfig().setRamMin(initRamSlider.getValue());
-                ServerConfig.guardarConfig(getServerConfig());
+                selectedServer.getServerConfig().setRamMin(initRamSlider.getValue());
+                selectedServer.getServerConfig().guardarServerConfig();
 
             }
         });
         maxRamSlider.addChangeListener(new ChangeListener() {
             public void stateChanged(ChangeEvent e) {
                 maxRamLabel.setText("Máximo de RAM: "+maxRamSlider.getValue()+"M");
-                getServerConfig().setRamMax(maxRamSlider.getValue());
-                ServerConfig.guardarConfig(getServerConfig());
+                selectedServer.getServerConfig().setRamMax(maxRamSlider.getValue());
+                selectedServer.getServerConfig().guardarServerConfig();
             }
         });
         seleccionarServidor.addActionListener(new ActionListener() {
@@ -390,9 +415,10 @@ public class main {
                 if(fc.showOpenDialog(ventanaPrincipal)==JFileChooser.APPROVE_OPTION) {
                     ServerConfig serverConfig = new ServerConfig(initRamSlider.getValue(),  maxRamSlider.getValue(), fc.getSelectedFile().getAbsolutePath());
                     File archivoSeleccionado = fc.getSelectedFile();
-                    guardarServidor(archivoSeleccionado);
-                    server.setServerConfig(leerServerConfig());
-                    ServerConfig.guardarConfig(serverConfig);
+                    selectedServer.getServerConfig().setRuta(archivoSeleccionado.getAbsolutePath());
+                    selectedServer.getServerConfig().guardarServerConfig();
+                    selectedServer.setServerConfig(selectedServer.getServerConfig().leerServerConfig());
+                    selectedServer.getServerConfig().guardarServerConfig();
                 }
             }
         });
@@ -406,37 +432,24 @@ public class main {
 
         iniciarServidor.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                try {
-                    server.setServerProcess(pb.start());
-                    if(comprobarEstadoServidor()) {
-                        serverStatusLabel.setText("Activo");
-                        serverStatusLabel.setBackground(Color.GREEN);
-                        System.out.println("Servidor iniciado");
-                    }
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(ventanaPrincipal, "Error al abrir archivo: "+ex.getMessage());
-                }
+                selectedServer.ejecutarServidor();
             }
         });
         pararServidor.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                if (comprobarEstadoServidor()) {
-                    serverStatusLabel.setText("Inactivo");
-                    serverStatusLabel.setBackground(Color.RED);
-                    OutputStream os = server.getServerProcess().getOutputStream();
-                    PrintWriter pw = new PrintWriter(os, true);
-                    pw.println("stop");
-                    System.out.println("Servidor cerrado");
-
+                try {
+                    selectedServer.safePararServidor();
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
                 }
             }
         });
         ventanaPrincipal.addWindowListener(new  WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                if (server.getServerProcess()!=null) {
-                    if(comprobarEstadoServidor()) {
-                        OutputStream os = server.getServerProcess().getOutputStream();
+                if (selectedServer.getServerProcess()!=null) {
+                    if(selectedServer.comprobarEstadoServidor()) {
+                        OutputStream os = selectedServer.getServerProcess().getOutputStream();
                         PrintWriter pw = new PrintWriter(os, true);
                         pw.println("stop");
                         System.out.println("Servidor cerrado");
@@ -446,17 +459,17 @@ public class main {
         });
         reiniciarServidor.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                if (comprobarEstadoServidor()) {
+                if (selectedServer.comprobarEstadoServidor()) {
                     serverStatusLabel.setText("Inactivo");
                     serverStatusLabel.setBackground(Color.RED);
-                    OutputStream os = server.getServerProcess().getOutputStream();
+                    OutputStream os = selectedServer.getServerProcess().getOutputStream();
                     PrintWriter pw = new PrintWriter(os, true);
                     pw.println("stop");
                     System.out.println("Servidor cerrado");
                 }
                 try {
-                    server.setServerProcess(pb.start());
-                    if(comprobarEstadoServidor()) {
+                    selectedServer.setServerProcess(pb.start());
+                    if(selectedServer.comprobarEstadoServidor()) {
                         serverStatusLabel.setText("Servidor iniciado");
                         serverStatusLabel.setBackground(Color.GREEN);
                         System.out.println("Servidor iniciado");
@@ -481,6 +494,42 @@ public class main {
                 }
                 ImageIcon icono = new ImageIcon(destino.toString());
                 establecerImagen.setIcon(icono);
+            }
+        });
+        nuevoServidor.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                JFileChooser chooser = new JFileChooser();
+                chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                chooser.setAcceptAllFileFilterUsed(false);
+                if(chooser.showOpenDialog(ventanaPrincipal)==JFileChooser.APPROVE_OPTION) {
+                    int eula = JOptionPane.showConfirmDialog(ventanaPrincipal, "¿Aceptas el EULA de Mojang (https://aka.ms/MinecraftEULA)?", "EULA",  JOptionPane.YES_NO_OPTION);
+                    if(eula==JOptionPane.YES_OPTION) {
+                        File carpetaSeleccionada = chooser.getSelectedFile();
+                        if(!carpetaSeleccionada.isDirectory()) {
+                            carpetaSeleccionada = carpetaSeleccionada.getParentFile();
+                        }
+
+                        JComboBox versiones = new  JComboBox(api.obtenerListaVersiones().toArray());
+                        int seleccion = JOptionPane.showConfirmDialog(ventanaPrincipal, versiones, "Lista Versiones", JOptionPane.OK_CANCEL_OPTION);
+                        if(seleccion==JOptionPane.OK_OPTION) {
+                            File newCarpeta = new File (carpetaSeleccionada.getAbsoluteFile(), versiones.getSelectedItem().toString()+"_server");
+                            System.out.println("NUEVA CARPETA"+newCarpeta.getAbsolutePath());
+                            newCarpeta.mkdir();
+                            carpetaSeleccionada = newCarpeta;
+                            String version = (String) versiones.getSelectedItem();
+                            File serverFile = new File(carpetaSeleccionada,version+"_server.jar");
+                            api.descargar(api.obtenerUrlServerJar(version), serverFile);
+                            rellenaEULA(carpetaSeleccionada);
+                            File icono = new File(carpetaSeleccionada, "server-icon.png");
+                            try {
+                                copiarArchivo(new File("default_image.png"), icono);
+                            } catch (IOException ex) {
+                                throw new RuntimeException(ex);
+                            }
+                            selectedServer.inicializarServidor(serverFile);
+                        }
+                    }
+                }
             }
         });
     }

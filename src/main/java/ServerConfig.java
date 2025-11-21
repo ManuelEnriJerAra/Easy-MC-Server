@@ -1,14 +1,15 @@
 import tools.jackson.databind.ObjectMapper;
-
 import java.io.File;
-import java.io.IOException;
 
 public class ServerConfig {
     private int ramMin;
     private int ramMax;
     private String ruta;
 
-    public ServerConfig(){}
+    public ServerConfig(){
+        this.ramMin = 1024;
+        this.ramMax = 2048;
+    }
 
     public ServerConfig(int ramMin, int ramMax, String ruta) {
         this.ramMin = ramMin;
@@ -35,10 +36,33 @@ public class ServerConfig {
         this.ruta = ruta;
     }
 
-    public static void guardarConfig(ServerConfig serverConfig) {
+
+    // leer el fichero JSON y obtener la configuración de este
+    ServerConfig leerServerConfig() {
+        File serverConfigFile = new File("ServerConfigList.json");
         ObjectMapper mapper = new ObjectMapper();
-        // System.out.println(serverConfig.getRamMin() + " " + serverConfig.getRamMax() + " " + serverConfig.getRuta());
-        mapper.writerWithDefaultPrettyPrinter().writeValue(new File("ServerConfig.json"), serverConfig);
-        // System.out.println("ServerConfig.json guardado correctamente");
+        if (serverConfigFile.exists()) {
+            try {
+                return mapper.readValue(serverConfigFile, ServerConfig.class);
+            } catch (Exception e) {
+                System.out.println("El archivo ServerConfigList.json no contiene ningún servidor válido.");
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    // almacenar en el archivo JSON los valores del servidor
+    void guardarServerConfig() {
+        File serverConfigFile = new File("ServerConfigList.json");
+        ObjectMapper mapper = new ObjectMapper();
+        try{
+            System.out.println();
+            mapper.writeValue(serverConfigFile, this);
+            System.out.println("Servidor guardado");
+        }catch(Exception e){
+            System.out.println("No se ha podido guardar el servidor en ServerConfigList.json");
+        }
     }
 }
