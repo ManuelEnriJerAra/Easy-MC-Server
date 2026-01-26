@@ -17,13 +17,16 @@ package Modelo;
 import java.io.*;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Setter;
 import lombok.Getter;
 
@@ -45,11 +48,11 @@ public class Server {
 
     // ===== DATOS DE EJECUCIÓN =====
     // lo que sea transient no se va a guardar en el JSON
-    private transient Process serverProcess; // proceso del servidor NUNCA DEBE GUARDARSE, ES DE TIPO RUNTIME
-    private transient StringBuilder consoleBuffer = new StringBuilder(); // buffer de consola NO LO GUARDO
-    private transient List<Consumer<String>> consoleListeners = new ArrayList<>(); // es transient, no se guarda
-    private transient Boolean logReaderIniciado = false; // NO LO GUARDO
-    private transient List<String> rawLogLines = new ArrayList<>(); // líneas de logs sin traducir
+    @JsonIgnore private transient Process serverProcess; // proceso del servidor NUNCA DEBE GUARDARSE, ES DE TIPO RUNTIME
+    @JsonIgnore transient StringBuilder consoleBuffer = new StringBuilder(); // buffer de consola NO LO GUARDO
+    @JsonIgnore transient List<Consumer<String>> consoleListeners = new ArrayList<>(); // es transient, no se guarda
+    @JsonIgnore transient Boolean logReaderIniciado = false; // NO LO GUARDO
+    @JsonIgnore transient List<String> rawLogLines = new ArrayList<>(); // líneas de logs sin traducir
 
     /*
 
@@ -74,21 +77,29 @@ public class Server {
 
     // ===== CONSOLA =====
 
+    @JsonIgnore static final Pattern HORA = Pattern.compile("^\\[\\d{2}:\\d{2}:\\d{2}]\\s*");
+
+    private String conHoraSiFalta(String linea){
+        if(linea==null) return null;
+        if(HORA.matcher(linea).find()) return linea; // ya tiene la hora
+        String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        return "["+hora+"] "+linea;
+    }
+
     public synchronized void appendConsoleLinea(String linea){
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("(HH:mm:ss)");
-        String hora = LocalDateTime.now().format(dtf);
-        String lineaFormateada = hora + linea ;
+        linea = conHoraSiFalta(linea);
         if(!Objects.equals(linea, "")){
-            consoleBuffer.append(lineaFormateada).append("\n");
+            consoleBuffer.append(linea).append("\n");
         }
         // limitamos el tamaño
         if(consoleBuffer.length()>300_000){
             consoleBuffer.delete(0, consoleBuffer.length()-200_000);
         }
-        for(var listener: consoleListeners) listener.accept(lineaFormateada);
+        for(var listener: consoleListeners) listener.accept(linea);
+        appendRawLogLine(linea);
     }
 
-    public synchronized String getConsoleText(){
+    @JsonIgnore public synchronized String getConsoleText(){
         return consoleBuffer.toString();
     }
 
@@ -100,7 +111,7 @@ public class Server {
         consoleListeners.remove(listener);
     }
 
-   public synchronized int getConsoleListenerCount(){
+   @JsonIgnore synchronized int getConsoleListenerCount(){
         return consoleListeners.size();
    }
 
@@ -123,6 +134,7 @@ public class Server {
 
     // ===== GET =====
 
+    @JsonIgnore
     public ImageIcon getServerIconOrUseDefault(){
         File iconFile = new File(serverDir, "server-icon.png");
         if (iconFile.exists()){

@@ -14,6 +14,7 @@ package Vista;
 import Controlador.ConsolaOutputStream;
 import Controlador.GestorServidores;
 import Modelo.Server;
+import com.formdev.flatlaf.ui.FlatRoundBorder;
 
 import javax.swing.*;
 import java.awt.*;
@@ -41,7 +42,6 @@ public class VentanaPrincipal extends JFrame {
 
         // PANEL IZQUIERDO ---------------------------------------------------------------------------------------------
         panelIzquierdo = new JPanel(new BorderLayout()); // este es un panel auxiliar que engloba toda la parte izq
-        ventanaPrincipalPanel.add(panelIzquierdo, BorderLayout.WEST);
 
         // PANEL DE GRÁFICAS DE RENDIMIENTO
         JPanel rendimientoPanel = new JPanel(new GridLayout(1,3));
@@ -92,7 +92,23 @@ public class VentanaPrincipal extends JFrame {
         // PANEL DERECHO -----------------------------------------------------------------------------------------------
 
         panelDerecho = new JPanel(new BorderLayout()); // este es un panel auxiliar que engloba toda la parte dcha
-        this.add(panelDerecho, BorderLayout.EAST);
+
+        // SPLIT PANE
+
+        JPanel wrapperIzquierdo = new JPanel(new BorderLayout());
+        wrapperIzquierdo.add(panelIzquierdo, BorderLayout.CENTER);
+        wrapperIzquierdo.setOpaque(false);
+
+        JPanel wrapperDerecho = new JPanel(new BorderLayout());
+        wrapperDerecho.add(panelDerecho, BorderLayout.CENTER);
+        wrapperDerecho.setOpaque(false);
+
+        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, wrapperIzquierdo, wrapperDerecho);
+        splitPrincipal.setDividerSize(4);
+        splitPrincipal.setResizeWeight(0.1);
+        splitPrincipal.setBorder(null);
+
+        ventanaPrincipalPanel.add(splitPrincipal, BorderLayout.CENTER);
 
         /*
         ventanaPrincipalPanel.add(panelDerecho, BorderLayout.EAST);

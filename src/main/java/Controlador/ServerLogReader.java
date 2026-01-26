@@ -21,7 +21,6 @@ public class ServerLogReader implements Runnable{
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
             String linea;
             while ((linea = reader.readLine()) != null) {
-                server.appendRawLogLine(linea);
                 server.appendConsoleLinea(linea);
             }
         } catch (IOException e) {

@@ -29,6 +29,7 @@ public class Main {
 
     static void main(String[] args){
         FlatMTSolarizedLightIJTheme.setup();
+        //FlatLightFlatIJTheme.setup();
         SwingUtilities.invokeLater(()->{
             if (SystemInfo.isLinux) {
                 JFrame.setDefaultLookAndFeelDecorated(true);

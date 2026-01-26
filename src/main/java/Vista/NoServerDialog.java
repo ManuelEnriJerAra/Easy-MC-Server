@@ -109,6 +109,9 @@ public class NoServerDialog extends JDialog {
             if (server!=null){
                 // servidor creado exitosamente, pasamos a la ventana principal
                 JOptionPane.showMessageDialog(this, "Se ha importado el servidor", "Servidor importado exitosamente", JOptionPane.INFORMATION_MESSAGE);
+                VentanaPrincipal ventanaPrincipal = new VentanaPrincipal(gestorServidores);
+                ventanaPrincipal.setVisible(true);
+                this.dispose();
             }
         });
         botonesNuevo.add(importar);

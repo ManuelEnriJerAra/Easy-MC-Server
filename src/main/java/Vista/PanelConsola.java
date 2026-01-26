@@ -19,6 +19,8 @@ public class PanelConsola extends JPanel {
     private static final Pattern CHAT = Pattern.compile("<([^>]+)>\\s*(.*)");
     private static final Pattern JOIN = Pattern.compile("([^\\s]+) joined the game");
     private static final Pattern LEFT = Pattern.compile("([^\\s]+) left the game");
+    private static final Pattern HORA = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
+
 
     private final Color colorConsola = Color.decode("#1D2036");
 
@@ -162,11 +164,24 @@ public class PanelConsola extends JPanel {
 
     private String traducirLinea(String linea){
         // ===== TRADUCCIÓN DE EVENTOS CONOCIDOS =====
+        // vamos a quitarle la hora primero
+        String hora = extraerHora(linea);
+
+
+        if (linea.contains("[INFO]") || linea.contains("[CHAT]") || linea.contains("[ERROR]")) {
+            return linea; // es una línea que yo he escrito, que pase
+        }
+
+        // Errores
+        if (linea.contains("FAILED TO BIND TO PORT")){
+            return hora+"[ERROR] El puerto ya está en uso, es probable que haya otro servidor abierto.";
+        }
+
         if(linea.contains("Done")){
-            return("[INFO] El servidor se ha iniciado exitosamente.");
+            return(hora+"[INFO] El servidor se ha iniciado exitosamente.");
         }
         if(linea.contains("All dimensions are saved")){
-            return("[INFO] Mundo guardado.");
+            return(hora+"[INFO] Mundo guardado.");
         }
 
         // Chat
@@ -174,17 +189,19 @@ public class PanelConsola extends JPanel {
         if(mChat.find()){
             String user = mChat.group(1);
             String mensaje = mChat.group(2);
-            return ("[CHAT] " + user + " ha dicho: " + mensaje);
+            mensaje = mensaje.replaceAll("§.", "").trim();
+            if(mensaje.isBlank()) return null;
+            return (hora+"[CHAT] " + user + " ha dicho: " + mensaje);
         }
 
         // Join / Leave
         Matcher mJoin = JOIN.matcher(linea);
         if(mJoin.find()){
-            return("[INFO] "+mJoin.group(1)+" ha entrado.");
+            return(hora+"[INFO] "+mJoin.group(1)+" ha entrado.");
         }
         Matcher mLeft = LEFT.matcher(linea);
         if(mLeft.find()){
-            return ("[INFO] "+mLeft.group(1)+" ha salido.");
+            return (hora+"[INFO] "+mLeft.group(1)+" ha salido.");
         }
         return null;
     }
@@ -196,5 +213,14 @@ public class PanelConsola extends JPanel {
             this.texto = texto;
             this.estilo = estilo;
         }
+    }
+
+    private String extraerHora(String linea){
+        if(linea == null) return null;
+        Matcher mHora = HORA.matcher(linea);
+        if(mHora.find()){
+            return "["+mHora.group(1)+"] ";
+        }
+        return null;
     }
 }

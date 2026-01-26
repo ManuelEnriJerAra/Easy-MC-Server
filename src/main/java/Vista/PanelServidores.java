@@ -29,7 +29,6 @@ import java.util.List;
 
 public class PanelServidores extends FlatScrollPane {
     int arc = UIManager.getInt("Component.arc");
-
     Color acento = UIManager.getColor("Component.focusColor");
     Color base = UIManager.getColor("Component.borderColor");
     Color bgNormal = UIManager.getColor("Panel.background");
@@ -204,7 +203,6 @@ public class PanelServidores extends FlatScrollPane {
             public void mousePressed(MouseEvent e){
                 fila.setBackground(bgPresionado);
                 fila.repaint();
-
             }
 
             @Override
