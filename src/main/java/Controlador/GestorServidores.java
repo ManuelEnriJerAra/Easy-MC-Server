@@ -25,14 +25,9 @@ import java.beans.PropertyChangeSupport;
 import java.io.*;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static Controlador.Utilidades.copiarArchivo;
 import static Controlador.Utilidades.rellenaEULA;
