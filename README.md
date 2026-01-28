@@ -1,0 +1,3 @@
+# Easy MC Server
+
+### En construcción...
