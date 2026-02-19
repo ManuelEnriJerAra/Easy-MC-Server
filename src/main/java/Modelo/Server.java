@@ -15,6 +15,7 @@
 package Modelo;
 
 import java.io.*;
+import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -31,6 +32,7 @@ import lombok.Setter;
 import lombok.Getter;
 
 import javax.swing.*;
+import javax.imageio.ImageIO;
 
 import static tools.jackson.databind.type.LogicalType.DateTime;
 
@@ -52,20 +54,8 @@ public class Server {
     @JsonIgnore transient StringBuilder consoleBuffer = new StringBuilder(); // buffer de consola NO LO GUARDO
     @JsonIgnore transient List<Consumer<String>> consoleListeners = new ArrayList<>(); // es transient, no se guarda
     @JsonIgnore transient Boolean logReaderIniciado = false; // NO LO GUARDO
+    @JsonIgnore transient Boolean restartPending = false; // reinicio pendiente
     @JsonIgnore transient List<String> rawLogLines = new ArrayList<>(); // líneas de logs sin traducir
-
-    /*
-
-    ===== EN PRINCIPIO TOODO ESTO SOBRA =====
-
-
-    private String serverJar; // nombre del fichero .jar -------ACTUALIZAR A JARFILE------------------------------------ fixme
-    private String serverMotd; // nombre del servidor en propiedades NO DEBE GUARDARSE AQUÍ, YA EXISTE EN EL PROPERTIES
-    private ServerProperties serverProperties; // server.properties NO DEBE GUARDARSE AQUÍ, YA EXISTE EL ARCHIVO PROPERTIES
-    private ImageIcon serverImage; // icono del servidor NO LO GUARDAMOS
-    */
-
-
 
     // ===== CONSTRUCTORES =====
 
@@ -134,37 +124,30 @@ public class Server {
 
     // ===== GET =====
 
+    // devuelve el icono, si no tiene usa el predeterminado
     @JsonIgnore
     public ImageIcon getServerIconOrUseDefault(){
-        File iconFile = new File(serverDir, "server-icon.png");
-        if (iconFile.exists()){
-            return new ImageIcon(iconFile.getAbsolutePath());
-        }
-        return new ImageIcon("default-image.png");
-    }
-
-    /*
-    public ImageIcon getImage(){
-        File imagenFile = new File(serverConfig.getServerRuta(),"server-icon.png");
-        return new ImageIcon(imagenFile.getAbsolutePath());
-    }
-
-    private void crearDesdeCarpeta(File carpeta){
-        serverImage = new ImageIcon("default_image.png");
-        if(carpeta != null && carpeta.isDirectory()){
-            for(File fichero : carpeta.listFiles()){
-                if(fichero.getName().endsWith(".jar")){
-                    serverJar = fichero.getName();
+        if(serverDir != null && !serverDir.isBlank()){ // si la carpeta existe intenta coger la imagen
+            File iconFile = new File(serverDir, "server-icon.png");
+            if (iconFile.exists()){
+                try{
+                    // lo leemos como imagen para comprobar que funciona correctamente
+                    BufferedImage img = ImageIO.read(iconFile);
+                    if(img != null) return new ImageIcon(img);
+                } catch (IOException ignored){
                 }
-                else if(fichero.getName().endsWith(".properties")){
-                    serverProperties = new ServerProperties(this);
-                    serverProperties.leerPropiedades();
-                    serverMotd = serverProperties.getMotd();
-                }
-                else if(fichero.getName().equals("server-icon.png")){
-                    serverImage = new ImageIcon(fichero.getAbsolutePath());
-                }
+                return new ImageIcon(iconFile.getAbsolutePath());
             }
         }
-    }*/
+        // si no se ha encontrado usamos la imagen por defecto
+        File porDefecto = new File("default_image.png");
+        if(porDefecto.exists()){
+            try{
+                BufferedImage img = ImageIO.read(porDefecto);
+                if(img != null) return new ImageIcon(img);
+            } catch (IOException ignored){
+            }
+        }
+        return new ImageIcon("default_image.png");
+    }
 }

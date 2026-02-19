@@ -1,6 +1,7 @@
 package Vista;
 
 import Controlador.GestorServidores;
+import Controlador.Main;
 import Modelo.Server;
 import com.formdev.flatlaf.extras.components.FlatCheckBox;
 
@@ -10,6 +11,7 @@ import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.regex.Matcher;
@@ -21,7 +23,6 @@ public class PanelConsola extends JPanel {
     private static final Pattern LEFT = Pattern.compile("([^\\s]+) left the game");
     private static final Pattern HORA = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
 
-
     private final Color colorConsola = Color.decode("#1D2036");
 
     // Colores por tipo
@@ -31,7 +32,8 @@ public class PanelConsola extends JPanel {
 
     private final int MAX_LINEAS = 5000;
 
-    private JTextPane consolaPane = new JTextPane();
+    private final JTextPane consolaPane = new JTextPane();
+    private JTextPane comandoPane = new JTextPane();
     private final StyledDocument documento = consolaPane.getStyledDocument();
 
     private Style styleInfo;
@@ -43,12 +45,17 @@ public class PanelConsola extends JPanel {
     private final GestorServidores gestorServidores;
     private final FlatCheckBox vistaSimpleCheckbox = new FlatCheckBox();
 
+    private int arc;
+    private RoundedBackgroundPanel scrollWrap;
+    private RoundedBackgroundPanel comandoWrap;
 
     public PanelConsola(GestorServidores gestorServidores) {
-        this.setLayout(new BorderLayout());
+        this.setLayout(new BorderLayout(0, 8));
         this.gestorServidores = gestorServidores;
-
+        this.setMinimumSize(new Dimension(this.getWidth(), 200));
         consolaPane.setEditable(false);
+        this.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        refreshThemeRefs();
 
         // Inicialización de estilo
         consolaPane.setBackground(colorConsola);
@@ -57,14 +64,65 @@ public class PanelConsola extends JPanel {
         inicializarEstilo();
 
         JScrollPane scroll = new JScrollPane(consolaPane);
-        this.add(scroll, BorderLayout.CENTER);
+        scroll.setBorder(null);
+        scroll.getViewport().setOpaque(true);
+        scroll.getViewport().setBackground(colorConsola);
+
+        scrollWrap = new RoundedBackgroundPanel(colorConsola, arc);
+        scrollWrap.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        scrollWrap.add(scroll, BorderLayout.CENTER);
+        this.add(scrollWrap, BorderLayout.CENTER);
 
         vistaSimpleCheckbox.setText("Vista Simple");
         vistaSimpleCheckbox.setSelected(true);
         vistaSimpleCheckbox.addActionListener(e->actualizarConsola());
+        vistaSimpleCheckbox.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
 
         this.add(vistaSimpleCheckbox, BorderLayout.NORTH);
 
+        JPanel panelComandos = new JPanel(new BorderLayout(8, 0));
+        panelComandos.setBackground(colorConsola);
+        panelComandos.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        JLabel pico = new JLabel(">");
+        pico.setForeground(Color.WHITE);
+        pico.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        comandoPane.setEditable(true);
+        comandoPane.setOpaque(false);
+        comandoPane.setForeground(Color.WHITE);
+        comandoPane.setBorder(null);
+        panelComandos.add(pico, BorderLayout.WEST);
+        panelComandos.add(comandoPane, BorderLayout.CENTER);
+        // Interacción con la línea de comandos
+        comandoPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), "enviarComando");
+        comandoPane.getActionMap().put("enviarComando", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                String comando = comandoPane.getText().trim();
+                if(comando.isBlank()) return;
+                Server server = gestorServidores.getServidorSeleccionado();
+                gestorServidores.mandarComando(server, comando);
+                comandoPane.setText("");
+            }
+        });
+        comandoWrap = new RoundedBackgroundPanel(colorConsola, arc);
+        comandoWrap.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+        comandoWrap.add(panelComandos, BorderLayout.CENTER);
+
+        this.add(comandoWrap, BorderLayout.SOUTH);
+
+    }
+
+    @Override
+    public void updateUI(){
+        super.updateUI();
+        refreshThemeRefs();
+        if(scrollWrap != null) scrollWrap.setArc(arc);
+        if(comandoWrap != null) comandoWrap.setArc(arc);
+    }
+
+    private void refreshThemeRefs(){
+        arc = UIManager.getInt("Component.arc");
+        if(arc <= 0) arc = Main.DEFAULT_ARC;
     }
 
     private void inicializarEstilo() {

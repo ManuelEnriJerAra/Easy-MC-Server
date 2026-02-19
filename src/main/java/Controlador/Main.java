@@ -10,22 +10,28 @@
 
 package Controlador;
 
-import Vista.NoServerDialog;
+import Vista.NoServerFrame;
 import Vista.VentanaPrincipal;
 
 import javax.swing.*;
 import java.awt.*;
 
-import com.formdev.flatlaf.*;
-import com.formdev.flatlaf.intellijthemes.*;
-import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTMaterialLighterIJTheme;
 import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTSolarizedLightIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
 
 public class Main {
 
-    public static NoServerDialog noServerDialog;
+    public static NoServerFrame noServerFrame;
     public static VentanaPrincipal ventanaPrincipal;
+
+    public static final int DEFAULT_ARC = 20;
+
+    public static void aplicarPreferenciasUI() {
+        UIManager.put("defaultFont", new Font("SegoeUI", Font.PLAIN, 12));
+        UIManager.put("Button.arc", DEFAULT_ARC); // radio de los botones
+        UIManager.put("Component.arc", DEFAULT_ARC); // radio de los componentes (RoundBorder)
+        UIManager.put("ProgressBar.arc", DEFAULT_ARC);
+    }
 
     static void main(String[] args){
         FlatMTSolarizedLightIJTheme.setup();
@@ -38,20 +44,19 @@ public class Main {
             System.setProperty("flatlaf.uiScale", "1");
             System.setProperty("flatlaf.useWindowDecorations",  "true");
             System.setProperty("flatlaf.MenuBarEmbedded", "true");
-            UIManager.put("defaultFont", new Font("SegoeUI", Font.PLAIN, 12));
-            UIManager.put("Button.arc", 20); // radio de los botones
-            UIManager.put("Component.arc", 20); // radio de los componentes (RoundBorder)
+            aplicarPreferenciasUI();
         });
-
 
         GestorServidores gestorServidores = new GestorServidores();
         if(gestorServidores.getListaServidores().isEmpty()){
-            noServerDialog = new NoServerDialog(gestorServidores);
-            noServerDialog.setVisible(true);
+            noServerFrame = new NoServerFrame(gestorServidores);
+            noServerFrame.setVisible(true);
+            gestorServidores.mostrarAvisoArranqueSiProcede(noServerFrame);
         }
         else{
             ventanaPrincipal = new VentanaPrincipal(gestorServidores);
             ventanaPrincipal.setVisible(true);
+            gestorServidores.mostrarAvisoArranqueSiProcede(ventanaPrincipal);
         }
     }
 }

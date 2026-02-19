@@ -13,24 +13,33 @@ package Vista;
 
 import Controlador.GestorServidores;
 import Modelo.Server;
-import com.formdev.flatlaf.ui.FlatPanelUI;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.net.URL;
+import java.util.List;
 
-public class NoServerDialog extends JDialog {
+public class NoServerFrame extends JFrame {
 
     public static ImageIcon logo;
 
-    public NoServerDialog(GestorServidores gestorServidores) {
+    public NoServerFrame(GestorServidores gestorServidores) {
         // Creo un gestor de servidores que recibirá como argumento la propia ventana, esto es para que
         // cualquier ventana emergente que muestre gestorServidores tenga de padre esta ventana
 
         this.setTitle("Easy MC Server");
         this.setSize(800, 600);
         this.setLocationRelativeTo(null);
-        this.setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+
+        this.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                intentarCerrarAplicacion(gestorServidores);
+            }
+        });
 
         // Gestión del logo
         URL urlImagen = getClass().getResource("/logo.png");
@@ -99,22 +108,70 @@ public class NoServerDialog extends JDialog {
         crearNuevo.addActionListener(e -> {
             Server server = gestorServidores.crearServidor();
             if (server!=null){
-                // servidor creado exitosamente, pasamos a la ventana principal
-                JOptionPane.showMessageDialog(this, "Se ha creado el servidor", "Servidor creado exitosamente", JOptionPane.INFORMATION_MESSAGE);
+                VentanaPrincipal ventanaPrincipal = new VentanaPrincipal(gestorServidores, server);
+                ventanaPrincipal.setVisible(true);
+                gestorServidores.mostrarAvisoArranqueSiProcede(ventanaPrincipal);
+                this.dispose();
             }
         });
         JButton importar = new JButton("Importar");
         importar.addActionListener(e -> {
             Server server = gestorServidores.importarServidor();
             if (server!=null){
-                // servidor creado exitosamente, pasamos a la ventana principal
-                JOptionPane.showMessageDialog(this, "Se ha importado el servidor", "Servidor importado exitosamente", JOptionPane.INFORMATION_MESSAGE);
-                VentanaPrincipal ventanaPrincipal = new VentanaPrincipal(gestorServidores);
+                VentanaPrincipal ventanaPrincipal = new VentanaPrincipal(gestorServidores, server);
                 ventanaPrincipal.setVisible(true);
+                gestorServidores.mostrarAvisoArranqueSiProcede(ventanaPrincipal);
                 this.dispose();
             }
         });
         botonesNuevo.add(importar);
 
+    }
+
+    private void intentarCerrarAplicacion(GestorServidores gestorServidores){
+        List<Server> activos = gestorServidores.getServidoresActivos();
+        if(activos.isEmpty()){
+            this.dispose();
+            System.exit(0);
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Hay servidores activos.\n\n");
+        for(Server s : activos){
+            String nombre = (s.getDisplayName() == null || s.getDisplayName().isBlank()) ? s.getId() : s.getDisplayName();
+            sb.append("- ").append(nombre).append("\n");
+        }
+        sb.append("\n¿Quieres cerrarlos antes de salir?");
+
+        Object[] opciones = {"Cerrar servidores y salir", "Cancelar"};
+        int res = JOptionPane.showOptionDialog(
+                this,
+                sb.toString(),
+                "Servidores activos",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE,
+                null,
+                opciones,
+                opciones[0]
+        );
+        if(res != 0) return;
+
+        this.setEnabled(false);
+        this.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+
+        new Thread(() -> {
+            try{
+                gestorServidores.detenerServidoresActivosParaSalir();
+            } finally{
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        NoServerFrame.this.dispose();
+                    } finally {
+                        System.exit(0);
+                    }
+                });
+            }
+        }, "shutdown-servidores").start();
     }
 }

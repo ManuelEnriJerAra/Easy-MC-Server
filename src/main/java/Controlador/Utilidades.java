@@ -117,4 +117,50 @@ public class Utilidades {
 
     }
 
+    public static void escribirPuertoEnProperties(Path direccion, int puerto){
+        if(direccion == null) return;
+        if(puerto <= 0) return;
+
+        Path propertiesPath = direccion.resolve("server.properties");
+
+        Properties properties = new Properties();
+        if(Files.exists(propertiesPath)){
+            try (FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
+                properties.load(fis);
+            } catch (IOException ignored) {
+            }
+        }
+
+        properties.setProperty("server-port", String.valueOf(puerto));
+
+        try (FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
+            properties.store(fos, null);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void escribirMotdEnProperties(Path direccion, String motd){
+        if(direccion == null) return;
+        if(motd == null) motd = "";
+
+        Path propertiesPath = direccion.resolve("server.properties");
+
+        Properties properties = new Properties();
+        if(Files.exists(propertiesPath)){
+            try (FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
+                properties.load(fis);
+            } catch (IOException ignored) {
+            }
+        }
+
+        properties.setProperty("motd", motd);
+
+        try (FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
+            properties.store(fos, null);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }

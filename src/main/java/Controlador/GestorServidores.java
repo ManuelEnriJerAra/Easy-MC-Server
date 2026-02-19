@@ -2,7 +2,6 @@
  * Fichero: GestorServidores.java
  *
  * Autor: Manuel Enrique Jerónimo Aragón
- * Fecha: 17/01/2026
  *
  * Descripción:
  * Esta clase lleva a cabo toda la gestión de los servidores como conjunto algunas funciones son crear, borrar, listar,
@@ -13,6 +12,7 @@ package Controlador;
 
 import Modelo.Server;
 import Modelo.ServerConfig;
+import com.formdev.flatlaf.extras.components.FlatProgressBar;
 import lombok.Getter;
 import lombok.Setter;
 import tools.jackson.core.JacksonException;
@@ -20,17 +20,26 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 import javax.swing.*;
+import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.*;
 
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.jar.JarFile;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import static Controlador.Utilidades.copiarArchivo;
 import static Controlador.Utilidades.rellenaEULA;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 @Getter
 @Setter
@@ -39,10 +48,14 @@ public class GestorServidores {
     // ===== ATRIBUTOS =====
     private static final MojangAPI MOJANG_API = new MojangAPI();
 
+    // AtomicInteger nos elimina el riesgo de condición de carrera si varios servidores intentan acceder a la vez
+    private static final AtomicInteger NEXT_PORT_SESION = new AtomicInteger(25565);
+
     private static final String JSON_FILE = "ServerList.json";
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    private String avisoServidoresNoCargados;
 
     // Lista Principal (runtime + persistencia)
     private List<Server> listaServidores;
@@ -56,6 +69,7 @@ public class GestorServidores {
     // Constructor por defecto
     public GestorServidores() {
         this.listaServidores = cargarServidores();
+        validarYLimpiarServidoresPersistidos();
     }
 
     // cargamos todos los servidores del JSON
@@ -66,13 +80,111 @@ public class GestorServidores {
             return new ArrayList<>();
         }
         try{
-            return mapper.readValue(
-                    file,
-                    new TypeReference<List<Server>>(){}
-            );
+            return mapper.readValue(file, new TypeReference<>(){});
         } catch (JacksonException e) {
             System.err.println("Error al cargar servidores: " + e.getMessage());
             return new ArrayList<>();
+        }
+    }
+
+    // esta función de encarga de comprobar si los servidores almacenados son correctos, si no lo son se eliminan
+    private void validarYLimpiarServidoresPersistidos() {
+        if (listaServidores == null || listaServidores.isEmpty()) return;
+
+        List<Server> cargables = new ArrayList<>(); // aquí almacenamos los correctos
+        List<Server> noCargables = new ArrayList<>(); // aquí almacenamos los que vamos a borrar
+
+        // si han ocurrido cambios se los notificaremos al usuario
+        boolean cambios = false;
+
+        for (Server server : listaServidores) {
+            // si el servidor no es cargable lo ignoramos y añadimos a noCargables
+            if (esServidorCargable(server)) {
+                try {
+                    String tipoDetectado = DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir()));
+                    // si no tiene ningún tipo lo descartamos, no es un servidor correcto
+                    if (tipoDetectado != null && !tipoDetectado.equals(server.getTipo())) {
+                        // si tiene tipo se lo establecemos
+                        server.setTipo(tipoDetectado);
+                        cambios = true;
+                    }
+                } catch (RuntimeException ignored) {
+                    // si no se puede detectar, no bloqueamos la carga
+                }
+                cargables.add(server);
+            } else {
+                noCargables.add(server);
+            }
+        }
+
+        // si todos los servidores eran cargables ignoramos la revisión y no notificamos nada
+        if (noCargables.isEmpty() && !cambios) return;
+
+        listaServidores = cargables;
+        guardarServidores();
+        notificarCambio();
+
+        if (noCargables.isEmpty()) return;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("No se han podido cargar ")
+                .append(noCargables.size())
+                .append(" servidores guardados (carpeta inexistente o servidor invalido).")
+                .append("\nNo se mostraran y se han eliminado de ServerList.json.");
+
+        // mostramos un máximo de 8 servidores que no se han podido cargar
+        int maxDetalles = 8;
+        int mostrados = 0;
+        for (Server server : noCargables) {
+            if (server == null) continue;
+            if (mostrados >= maxDetalles) break;
+            String nombre = server.getDisplayName() == null ? "(sin nombre)" : server.getDisplayName();
+            String dir = server.getServerDir() == null ? "(sin carpeta)" : server.getServerDir();
+            sb.append("\n- ").append(nombre).append(" [").append(dir).append("]");
+            mostrados++;
+        }
+        if (noCargables.size() > maxDetalles) {
+            sb.append("\n... y ").append(noCargables.size() - maxDetalles).append(" mas.");
+        }
+
+        avisoServidoresNoCargados = sb.toString();
+    }
+
+    // Si hay servidores que no han podido ser cargados se notifica, si no, pasamos directamente al programa
+    public void mostrarAvisoArranqueSiProcede(Component parent) {
+        if (avisoServidoresNoCargados == null || avisoServidoresNoCargados.isBlank()) return;
+        String mensaje = avisoServidoresNoCargados;
+        avisoServidoresNoCargados = null;
+        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+                parent,
+                mensaje,
+                "Servidores no cargados",
+                JOptionPane.WARNING_MESSAGE
+        ));
+    }
+
+    // Consideramos "cargable" si hay exactamente un .jar y parece un server jar de Minecraft
+    private boolean esServidorCargable(Server server) {
+        if (server == null) return false;
+        if (server.getServerDir() == null || server.getServerDir().isBlank()) return false;
+
+        Path dir = Path.of(server.getServerDir());
+        if (!Files.isDirectory(dir)) return false;
+
+        try (Stream<Path> archivos = Files.list(dir)) {
+            List<Path> jars = archivos
+                    .filter(path -> path.toString().toLowerCase().endsWith(".jar"))
+                    .toList();
+            if (jars.size() != 1) return false;
+
+            Path jar = jars.getFirst();
+            try (JarFile jarFile = new JarFile(jar.toFile())) {
+                boolean tieneVersionJson = jarFile.getJarEntry("version.json") != null;
+                boolean tieneMinecraftServerClass = jarFile.getJarEntry("net/minecraft/server/MinecraftServer.class") != null;
+                return tieneVersionJson || tieneMinecraftServerClass;
+            }
+        } catch (IOException | RuntimeException e) {
+            return false;
         }
     }
     // ===== LISTENERS Y CAMBIOS =====
@@ -82,14 +194,30 @@ public class GestorServidores {
         pcs.addPropertyChangeListener(listener);
     }
 
-    // ¿Esto permite que dejen de escuchar????????????????
+
+    // Añade un listener SOLO para una propiedad concreta (ej: "serverState")
+    public void addPropertyChangeListener(String propertyName, PropertyChangeListener listener) {
+        pcs.addPropertyChangeListener(propertyName, listener);
+    }
+
+    // Esto permite que dejen de escuchar
     public void removePropertyChangeListener(PropertyChangeListener listener){
         pcs.removePropertyChangeListener(listener);
     }
 
-    // este método notifica a los oyentes de que ha ocurrido un cambio
+    // Quita el listener de una propiedad concreta
+    public void removePropertyChangeListener(String propertyName, PropertyChangeListener listener) {
+        pcs.removePropertyChangeListener(propertyName, listener);
+    }
+
+    // este método notifica a los oyentes de que ha ocurrido un cambio en la lista de servidores
     private void notificarCambio(){
         pcs.firePropertyChange("listaServidores", null, listaServidores);
+    }
+
+    // este método notifica a los oyentes de que ha ocurrido un cambio en el estado del servidor
+    public void notificarEstadoServidor(Server server){
+        pcs.firePropertyChange("estadoServidor", null, server);
     }
 
     // ===== FUNCIONES Y MÉTODOS =====
@@ -116,15 +244,29 @@ public class GestorServidores {
                     carpetaSeleccionada = newCarpeta;
                     String version = (String) versionesBox.getSelectedItem();
                     File serverFile = new File(carpetaSeleccionada,version+"_server.jar");
-                    MOJANG_API.descargar(MOJANG_API.obtenerUrlServerJar(version), serverFile);
+                    String urlServer = MOJANG_API.obtenerUrlServerJar(version);
+                    if(urlServer == null || urlServer.isBlank()){
+                        JOptionPane.showMessageDialog(
+                                null,
+                                "No se ha podido obtener la URL del servidor para la version " + version,
+                                "Descarga",
+                                JOptionPane.ERROR_MESSAGE
+                        );
+                        return null;
+                    }
+
+                    boolean descargado = descargarConBarra(urlServer, serverFile, "Descargando servidor " + version);
+                    if(!descargado){
+                        return null;
+                    }
                     rellenaEULA(carpetaSeleccionada);
                     File icono = new File(carpetaSeleccionada, "server-icon.png");
                     copiarArchivo(new File("default_image.png"), icono);
                     Server server = new Server();
                     server.setDisplayName("Servidor "+version);
                     server.setVersion(version);
-                    server.setTipo("VANILLA");
                     server.setServerDir(carpetaSeleccionada.getAbsolutePath());
+                    server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
                     guardarServidor(server);
 
                     return server;
@@ -134,12 +276,90 @@ public class GestorServidores {
         return null;
     }
 
+    // esta función descarga de una url a un destino dándole un nombre y mostrando una barra de carga
+    private boolean descargarConBarra(String url, File destino, String titulo){
+        final JDialog dialog = new JDialog((Frame) null, titulo, true);
+        dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+        JPanel contenido = new JPanel(new BorderLayout(10, 10));
+        contenido.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        JLabel label = new JLabel("Descargando...");
+        FlatProgressBar progreso = new FlatProgressBar();
+        progreso.setMinimum(0);
+        progreso.setMaximum(100);
+        progreso.setIndeterminate(true);
+        progreso.setStringPainted(true);
+        progreso.setString("...");
+
+        // texto arriba y barra de progreso abajo
+        contenido.add(label, BorderLayout.NORTH);
+        contenido.add(progreso, BorderLayout.CENTER);
+        dialog.setContentPane(contenido);
+        dialog.setSize(420, 120);
+        dialog.setLocationRelativeTo(null);
+
+        // SwingWorker permite hacer un trabajo pesado y actualizar la interfaz de forma segura
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                final long[] ultimoPorcentaje = { -1 };
+                // ejecutamos la descarga
+                MOJANG_API.descargar(url, destino, (leidos, total) -> {
+                    if(isCancelled()) return;
+                    if(total <= 0) return;
+                    long porcentaje = (leidos * 100L) / total;
+                    if(porcentaje == ultimoPorcentaje[0]) return; // si no se ha actualizado el porcentaje no actualizamos
+                    ultimoPorcentaje[0] = porcentaje;
+                    setProgress((int)max(0, min(100, porcentaje)));
+                });
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                dialog.dispose();
+            }
+        };
+
+        // worker escucha cambios en la propiedad "progress"
+        worker.addPropertyChangeListener(evt -> {
+            if(!"progress".equals(evt.getPropertyName())) return;
+            Object valorPropiedad = evt.getNewValue();
+            if(!(valorPropiedad instanceof Integer p)) return;
+            if(progreso.isIndeterminate()) progreso.setIndeterminate(false);
+            progreso.setValue(p);
+            progreso.setString(p + "%");
+        });
+
+        worker.execute();
+        dialog.setVisible(true);
+
+        try{
+            worker.get(); // bloquea el programa hasta que worker termina
+            return true;
+        } catch (Exception e){
+            try{
+                if(destino.exists()) destino.delete();
+            } catch (RuntimeException ignored){}
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se ha podido descargar el servidor: " + e.getMessage(),
+                    "Descarga",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return false;
+        }
+    }
+
+    // Esta función es la encargada de importar un servidor a partir de una carpeta
     public Server importarServidor(){
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.setAcceptAllFileFilterUsed(false);
         chooser.setDialogTitle("Selecciona el directorio del servidor");
 
+        // pedimos al usuario que indique la carpeta
         if(chooser.showDialog(chooser,"Seleccionar") == JFileChooser.APPROVE_OPTION){
             File directorio = chooser.getSelectedFile();
             for(Server server : listaServidores){
@@ -152,7 +372,7 @@ public class GestorServidores {
             server.setDisplayName("Servidor "+chooser.getSelectedFile().getName());
             server.setServerDir(directorio.getAbsolutePath());
             server.setVersion(DetectorVersionServidor.detectarVersionVanilla(server));
-            server.setTipo("IMPORTADO");
+            server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
 
             guardarServidor(server);
             return server;
@@ -160,6 +380,7 @@ public class GestorServidores {
         return null;
     }
 
+    // Guarda la lista de servidores en el JSON
     public void guardarServidores(){
         try{
             mapper.writerWithDefaultPrettyPrinter().writeValue(new File(JSON_FILE), listaServidores);
@@ -168,6 +389,7 @@ public class GestorServidores {
         }
     }
 
+    // Guarda un sólo servidor en la lista de servidores y luego lo guarda en el JSON
     public void guardarServidor(Server server){
         listaServidores.removeIf(servidor -> servidor.getId().equals(server.getId()));
         listaServidores.add(server);
@@ -175,116 +397,75 @@ public class GestorServidores {
         notificarCambio();
     }
 
-    /*
-    public Server getOrCreateServidor(ServerConfig serverConfig){
-        Path key = serverConfig.;
-        Server server = serverCache.get(key);
-        if(server == null){
-            server = new Server();
-            server.setServerDir(key);
-            server.setServerConfig(serverConfig);
-            serverCache.put(key, server);
+    // Elimina un servidor de la lista de servidores y del JSON, no toca los archivos del servidor
+    public boolean eliminarServidor(Server server){
+        if(server == null) return false;
+        if(server.getServerProcess() != null && server.getServerProcess().isAlive()){
+            return false; // no podemos eliminarlo mientras está en ejecución para no dejar procesos abiertos
         }
-        return server;
+
+        boolean removed = listaServidores.removeIf(s -> s.getId().equals(server.getId()));
+        if(!removed) return false;
+
+        if(servidorSeleccionado != null && servidorSeleccionado.getId().equals(server.getId())){
+            servidorSeleccionado = null;
+        }
+        // Una vez eliminado de la lista de servidores guardamos el JSON
+        guardarServidores();
+        notificarCambio();
+        return true;
     }
 
-    // devuelve una lista de ServerConfig obteniendo los datos del JSON
-    public List<ServerConfig> listarServerConfig(){
-        List<ServerConfig> serverConfigs;
-        File file = new File("ServerList.json");
-        ObjectMapper mapper = new ObjectMapper();
-        try{
-            // leemos todos los servidores y los metemos en la lista servers
-            serverConfigs = mapper.readValue(
-                    file,
-                    new TypeReference<>(){}
-            );
-            System.out.println("Se han detectado servidores guardados.");
-            // se pueden introducir también direcciones que no contengan servidores, aquí no se comprueba
-            return serverConfigs;
+    // Obtener una lista de todos los servidores activos
+    public List<Server> getServidoresActivos() {
+        if (listaServidores == null || listaServidores.isEmpty()) return List.of();
+        return listaServidores.stream()
+                .filter(s -> s != null && s.getServerProcess() != null && s.getServerProcess().isAlive())
+                .toList();
+    }
+
+    // Detener todos los servidores activos para salir del programa
+    public void detenerServidoresActivosParaSalir() {
+        List<Server> activos = getServidoresActivos();
+        if (activos.isEmpty()) return;
+
+        for (Server server : activos) {
+            try {
+                safePararServidor(server); // hacemos una parada segura en cada uno de ellos
+            } catch (RuntimeException ignored) {
+            }
         }
-        catch (Exception e){
-            // si está vacío lo indicamos, pero no es problemático
-            System.out.println("No se han detectado servidores guardados.");
-            serverConfigs = new ArrayList<>();
-            return serverConfigs;
+
+        long cuentaAtras = System.currentTimeMillis() + 7_000;
+        // contamos 7 segundos
+        for (Server server : activos) {
+            Process proceso = server.getServerProcess();
+            if (proceso == null) continue;
+            if (!proceso.isAlive()) continue;
+            // si el proceso está vivo restamos los segundos transcurridos
+            long restante = cuentaAtras - System.currentTimeMillis();
+            if (restante <= 0) break;
+            try {
+                proceso.waitFor(restante, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        // si no se han podido parar los servidores de forma segura forzamos su cierre
+        for (Server server : activos) {
+            Process proceso = server.getServerProcess();
+            if (proceso == null) continue;
+            if (!proceso.isAlive()) continue;
+            try {
+                forzarPararServidor(server);
+            } catch (RuntimeException ignored) {
+            }
         }
     }
 
-
-    private void guardarServidor(Server server){
-        File json = new File("ServerList.json");
-        ObjectMapper mapper = new ObjectMapper();
-
-        if(this.listaConfigs == null){
-            this.listaConfigs = new ArrayList<>();
-        }
-
-        String rutaNueva = server.getServerDir().toString();
-        listaConfigs.removeIf(serverConfig -> serverConfig.equals(rutaNueva));
-        try{
-            // leemos el JSON y hacemos una lista de los serverConfigs que hay
-            if(this.listaServidores != null){ // si hay serverConfigs guardados
-                for(ServerConfig serverConfig: listaServidores){ // comprobamos si ya existe el mismo serverConfig
-                    if(serverConfig.getServerRuta().equals(server.getServerConfig().getServerRuta())){
-                        listaServidores.remove(serverConfig); // quitamos el servidor antiguo para posteriormente poner el nuevo
-                        break;
-                    }
-                }
-            }
-            else{ // si no hay ningún servidor todavía
-                listaServidores = new ArrayList<>(); // creamos una lista vacía
-            }
-            listaServidores.add(server.getServerConfig());
-            // escribimos los servidores en el archivo JSON
-            mapper.writerWithDefaultPrettyPrinter().writeValue(json, listaServidores);
-            System.out.println("Servidor guardado en el JSON.");
-            notificarCambio();
-        } catch (Exception e){
-            throw new RuntimeException(e);
-        }
-    }*/
-
-    // esta función es la encargada de eliminar un servidor del JSON, si lo elimina devuelve 1
-    /*public int quitarServidorDeJSON(ServerConfig serverConfigIn){
-        File json = new File("ServerList.json");
-        ObjectMapper mapper = new ObjectMapper();
-        List<ServerConfig> listaServidoresAux = new ArrayList<>(listaServidores);
-        try{
-            for(ServerConfig serverConfig: listaServidoresAux){
-                if(serverConfig.getServerRuta().equals(serverConfigIn.getServerRuta())){
-                    listaServidores.remove(serverConfig);
-                    return 1;
-                }
-            }
-            return 0;
-        }
-        catch (Exception e){
-            throw new RuntimeException(e);
-        }
-    }*/
-
-    // esta función elimina una lista de servidores del archivo JSON y devuelve cuántos ha borrado
-
-    public int quitarListaServidoresJSON(List<Server> lista){
-
-        int contador = 0;
-        for(Server server: lista){
-            ObjectMapper mapper = new ObjectMapper();
-            List<Server> listaServidoresAux = new ArrayList<>(lista);
-            /*
-            try{
-                for(ServerConfig serverConfigAux: listaServidoresAux){
-                    if(serverConfigAux.getServerRuta().equals(listaServidores.getServerRuta())){}
-                }
-                IMPLEMENTAR--------------------
-
-            }*/
-        }
-        System.out.println("Quitando " + contador + " servidores del JSON.");
-        return contador;
-    }
-
+    // Eliminar la carpeta que contiene el servidor, debe comprobar que sea un servidor cargable
     public int eliminarServidorCompleto(Server server){
         return 0; // POR IMPLEMENTAR
     }
@@ -293,15 +474,40 @@ public class GestorServidores {
 
     public synchronized void iniciarServidor(Server server) throws IOException {
         // Compruebo si está en marcha, si no, prosigo
-        if(server.getServerProcess()!=null&&server.getServerProcess().isAlive()) {
+        if(server.getServerProcess()!=null && server.getServerProcess().isAlive()) {
             server.appendConsoleLinea("[INFO] El servidor ya está iniciado. ");
             return;
         }
         Path dir = Path.of(server.getServerDir());
-        Path jar = Utilidades.encontrarEjecutableJar(dir);
+        Path jar;
+        try {
+            jar = Utilidades.encontrarEjecutableJar(dir);
+        } catch (RuntimeException e) {
+            server.appendConsoleLinea("[ERROR] No se ha podido encontrar el .jar del servidor: " + e.getMessage());
+            return;
+        }
+        if (jar == null) {
+            server.appendConsoleLinea("[ERROR] No se ha podido encontrar el .jar del servidor.");
+            return;
+        }
 
-        // Creo un proceso con la dirección del servidor y la RAM elegida
+        // Creo un proceso con la dirección del servidor y la RAM elegida y en el primer puerto que esté libre desde 25565
         ServerConfig serverConfig = server.getServerConfig();
+        int puerto = elegirPuertoParaServidor(server);
+        if(puerto != serverConfig.getPuerto()){
+            // si el puerto no está libre pasamos al siguiente
+            serverConfig.setPuerto(puerto);
+            try{
+                guardarServidor(server);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        try{
+            // escribimos el puerto nuevo en las propiedades del servidor
+            Utilidades.escribirPuertoEnProperties(dir, puerto);
+        } catch (RuntimeException e) {
+            server.appendConsoleLinea("[ERROR] No se ha podido escribir el puerto en server.properties: " + e.getMessage());
+        }
 
         ProcessBuilder pb = new ProcessBuilder("java",
                 "-Xms"+serverConfig.getRamInit()+"M",
@@ -319,13 +525,25 @@ public class GestorServidores {
             // creo el proceso y se lo asigno al servidor
             Process proceso = pb.start();
             server.setServerProcess(proceso);
+            notificarEstadoServidor(server);
 
             // comienzo a leer la consola
             startLogReader(server);
+            notificarEstadoServidor(server);
 
             // detecto cuando el proceso finaliza
             proceso.onExit().thenRun(()->{
                server.appendConsoleLinea("[INFO] El servidor se ha detenido.");
+               notificarEstadoServidor(server);
+               // si el usuario ha pedido un reinicio y hemos parado el servidor entonces lo iniciamos de nuevo
+               if(server.getRestartPending()){
+                   server.setRestartPending(false);
+                   try {
+                       iniciarServidor(server);
+                   } catch (IOException e) {
+                       server.appendConsoleLinea("[ERROR] Error al reiniciar el servidor: " + e.getMessage());
+                   }
+               }
             });
 
         } catch (IOException e) {
@@ -334,12 +552,14 @@ public class GestorServidores {
         }
     }
 
+    // Eliminar el proceso de servidor, a evitar, puede provocar corrupción de mundos
     public void forzarPararServidor(Server server){
         Process proceso = server.getServerProcess();
 
         if(proceso==null || !proceso.isAlive()) {
             server.appendConsoleLinea("[INFO] El servidor no está en ejecución");
             server.setServerProcess(null);
+            notificarEstadoServidor(server);
             return;
         }
         server.appendConsoleLinea("[INFO] Forzando cierre del servidor...");
@@ -365,10 +585,23 @@ public class GestorServidores {
         } finally{
             // Si no está vivo limpiamos referencia
             if(!proceso.isAlive()) server.setServerProcess(null);
+            notificarEstadoServidor(server);
         }
     }
 
     public void safePararServidor(Server server){
+        mandarComando(server, "stop");
+    }
+
+    public Server getServerById(String id){
+        return listaServidores.stream().filter(servidor -> servidor.getId().equals(id)).findFirst().orElse(null);
+    }
+
+    public void mandarComando(Server server, String comando){
+        mandarComando(server, comando, true);
+    }
+
+    public void mandarComando(Server server, String comando, boolean mostrarEnConsola){
         if(server.getServerProcess()==null || !server.getServerProcess().isAlive()) {
             server.appendConsoleLinea("[INFO] No has iniciado el servidor.");
             return;
@@ -376,28 +609,13 @@ public class GestorServidores {
         try{
             OutputStream os = server.getServerProcess().getOutputStream();
             PrintWriter pw = new PrintWriter(os, true);
-            pw.println("stop");
-            server.appendConsoleLinea("[INFO] Enviado comando: 'stop'.");
-
-            /* Esperamos el fin del proceso
-            Thread monitor = new Thread(()->{
-                try{
-                    int code = server.getServerProcess().waitFor();
-                    server.appendConsoleLinea("[INFO] Servidor detenido exitosamente.");
-                } catch (InterruptedException e) {
-                    server.appendConsoleLinea("[ERROR] Error en la espera: "+e.getMessage());
-                }
-            }, "wait-exit-" + server.getServerDir());
-            monitor.setDaemon(true);
-            monitor.start();
-            */
+            pw.println(comando);
+            if(mostrarEnConsola){
+                server.appendConsoleLinea("[INFO] Enviado comando: '"+comando+"'.");
+            }
         } catch (Exception e) {
-            server.appendConsoleLinea("[ERROR] Error mandando 'stop': "+e.getMessage());
+            server.appendConsoleLinea("[ERROR] Error mandando '"+comando+"' "+e.getMessage());
         }
-    }
-
-    public Server getServerById(String id){
-        return listaServidores.stream().filter(servidor -> servidor.getId().equals(id)).findFirst().orElse(null);
     }
 
     // ===== LECTURA DE LOGS =====
@@ -417,5 +635,46 @@ public class GestorServidores {
         );
         lector.setDaemon(true);
         lector.start();
+    }
+
+    private int elegirPuertoParaServidor(Server server){
+        if(server == null) return 25565; // por defecto usamos el 25565
+        ServerConfig serverConfig = server.getServerConfig();
+        if(serverConfig == null){
+            serverConfig = new ServerConfig();
+            server.setServerConfig(serverConfig);
+        }
+
+        // Política: siempre intentar 25565, luego 25566, 25567...
+        for(int p = 25565; p <= 65535; p++){
+            if(isPortAvailable(p)){
+                probarSiguientePuerto(p);
+                return p;
+            }
+        }
+
+        throw new RuntimeException("No hay puertos disponibles entre 25565 y 65535");
+    }
+
+    // comprobamos si hay libre un puerto
+    private static boolean isPortAvailable(int port){
+        if(port <= 0 || port > 65535) return false;
+        try(ServerSocket socket = new ServerSocket()){
+            socket.setReuseAddress(false);
+            socket.bind(new InetSocketAddress("0.0.0.0", port)); // escucho en 0.0.0.0, si conecto está libre
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    // Usar siguiente puerto
+    private static void probarSiguientePuerto(int puertoUsado){
+        int objetivo = puertoUsado + 1;
+        while(true){
+            int actual = NEXT_PORT_SESION.get();
+            if(actual >= objetivo) return;
+            if(NEXT_PORT_SESION.compareAndSet(actual, objetivo)) return;
+        }
     }
 }

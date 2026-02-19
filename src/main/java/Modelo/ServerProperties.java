@@ -22,7 +22,7 @@ import java.lang.reflect.Field;
 @Setter
 @AllArgsConstructor
 
-public class ServerProperties {
+public class ServerProperties{
     private Server server;
 
     private Boolean accepts_transfers;
