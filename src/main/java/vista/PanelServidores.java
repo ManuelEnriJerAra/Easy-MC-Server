@@ -22,6 +22,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,10 +51,21 @@ public class PanelServidores extends FlatScrollPane {
     public interface ServidorSeleccionadoListener{
         void servidorSeleccionado(Server server);
     }
+
+    public interface ServidorContextMenuListener{
+        void abrirConfiguracion(Server server);
+        void abrirMundos(Server server);
+    }
+
     private ServidorSeleccionadoListener listener;
+    private ServidorContextMenuListener contextMenuListener;
 
     public void setServidorSeleccionadoListener(ServidorSeleccionadoListener listener){
         this.listener = listener;
+    }
+
+    public void setServidorContextMenuListener(ServidorContextMenuListener contextMenuListener){
+        this.contextMenuListener = contextMenuListener;
     }
 
     public void seleccionarServidor(Server server){
@@ -302,6 +315,12 @@ public class PanelServidores extends FlatScrollPane {
         fila.putClientProperty("estadoLabel", estado);
         fila.putClientProperty("panelIcono", panelIcono);
         MouseAdapter filaMouse = new MouseAdapter() {
+            private void maybeShow(MouseEvent e){
+                if(!e.isPopupTrigger()) return;
+                        JPopupMenu menu = crearMenuServidor(servidor);
+                menu.show(e.getComponent(), e.getX(), e.getY());
+            }
+
             private boolean contiene(MouseEvent e){
                 Point p = SwingUtilities.convertPoint((Component) e.getSource(), e.getPoint(), fila);
                 return fila.contains(p);
@@ -309,6 +328,9 @@ public class PanelServidores extends FlatScrollPane {
 
             @Override
             public void mousePressed(MouseEvent e){
+                maybeShow(e);
+                if(e.isPopupTrigger() || !SwingUtilities.isLeftMouseButton(e)) return;
+
                 refrescarTema(false);
                 fila.setBackground(bgPresionado);
                 syncIconBg(fila);
@@ -317,8 +339,10 @@ public class PanelServidores extends FlatScrollPane {
 
             @Override
             public void mouseReleased(MouseEvent e){
+                maybeShow(e);
+                if(e.isPopupTrigger() || !SwingUtilities.isLeftMouseButton(e)) return;
+
                 refrescarTema(false);
-                // nos aseguramos de que suelte dentro de la caja
                 boolean dentro = contiene(e);
                 if(!dentro){
                     if(fila == filaSeleccionada) fila.setBackground(bgSelected);
@@ -328,12 +352,7 @@ public class PanelServidores extends FlatScrollPane {
                     return;
                 }
 
-                Server serverSeleccionado = (Server) fila.getClientProperty("server");
-                marcarFilaSeleccionada(fila);
-
-                if(listener != null){
-                    listener.servidorSeleccionado(serverSeleccionado);
-                }
+                seleccionarFila(fila, true);
             }
 
             @Override
@@ -369,6 +388,108 @@ public class PanelServidores extends FlatScrollPane {
         hacerFilaClickable(fila, filaMouse);
         fila.setBorder(bordeRedondo);
         return fila;
+    }
+
+    private void seleccionarFila(JPanel fila, boolean notificarSiYaEstabaSeleccionada){
+        if(fila == null) return;
+
+        Object serverObj = fila.getClientProperty("server");
+        if(!(serverObj instanceof Server serverSeleccionado)) return;
+
+        boolean yaEstabaSeleccionada = fila == filaSeleccionada;
+        marcarFilaSeleccionada(fila);
+
+        if(listener != null && (!yaEstabaSeleccionada || notificarSiYaEstabaSeleccionada)){
+            listener.servidorSeleccionado(serverSeleccionado);
+        }
+    }
+
+    private JPopupMenu crearMenuServidor(Server server){
+        JPopupMenu menu = new JPopupMenu();
+
+        boolean activo = server != null && server.getServerProcess() != null && server.getServerProcess().isAlive();
+        String serverDir = server == null ? null : server.getServerDir();
+        boolean carpetaDisponible = serverDir != null && !serverDir.isBlank() && new File(serverDir).isDirectory();
+
+        JMenuItem iniciar = new JMenuItem("Iniciar");
+        iniciar.setEnabled(!activo);
+        iniciar.addActionListener(e -> {
+            try {
+                gestorServidores.iniciarServidor(server);
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        menu.add(iniciar);
+
+        JMenuItem parar = new JMenuItem("Parar");
+        parar.setEnabled(activo);
+        parar.addActionListener(e -> gestorServidores.safePararServidor(server));
+        menu.add(parar);
+
+        JMenuItem reiniciar = new JMenuItem("Reiniciar");
+        reiniciar.setEnabled(activo);
+        reiniciar.addActionListener(e -> {
+            server.setRestartPending(true);
+            gestorServidores.safePararServidor(server);
+        });
+        menu.add(reiniciar);
+
+        menu.addSeparator();
+
+        JMenuItem configuracion = new JMenuItem("Configuración");
+        configuracion.addActionListener(e -> {
+            if(contextMenuListener != null){
+                contextMenuListener.abrirConfiguracion(server);
+            }
+        });
+        menu.add(configuracion);
+
+        JMenuItem mundos = new JMenuItem("Mundos");
+        mundos.addActionListener(e -> {
+            if(contextMenuListener != null){
+                contextMenuListener.abrirMundos(server);
+            }
+        });
+        menu.add(mundos);
+
+        JMenuItem explorador = new JMenuItem("Abrir en explorador de archivos");
+        explorador.setEnabled(carpetaDisponible);
+        explorador.addActionListener(e -> abrirEnExplorador(server));
+        menu.add(explorador);
+
+        menu.addSeparator();
+
+        JMenuItem favorito = new JMenuItem("\u2605 Favorito (Por implementar)");
+        favorito.addActionListener(e -> {
+            // Placeholder: todavía sin comportamiento.
+        });
+        menu.add(favorito);
+
+        return menu;
+    }
+
+    private void abrirEnExplorador(Server server){
+        if(server == null) return;
+        String serverDir = server.getServerDir();
+        if(serverDir == null || serverDir.isBlank()){
+            JOptionPane.showMessageDialog(this, "El servidor seleccionado no tiene una carpeta v?lida.", "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        File carpeta = new File(serverDir);
+        if(!carpeta.isDirectory()){
+            JOptionPane.showMessageDialog(this, "El servidor seleccionado no tiene una carpeta v?lida.", "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        try{
+            Desktop.getDesktop().open(carpeta);
+        } catch (IOException ex){
+            JOptionPane.showMessageDialog(this, "No se ha podido abrir la carpeta: " + ex.getMessage(), "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
+        } catch (UnsupportedOperationException ex){
+            JOptionPane.showMessageDialog(this, "Este sistema no soporta abrir carpetas desde Java.", "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void hacerFilaClickable(Component c, MouseAdapter adapter){

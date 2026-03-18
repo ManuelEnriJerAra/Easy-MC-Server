@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Fichero: VentanaPrincipal.java
  *
  * Autor: Manuel Enrique Jerónimo Aragón
@@ -872,7 +872,54 @@ public class VentanaPrincipal extends JFrame {
                 }
             }
         });
+        listaServidoresPanel.setServidorContextMenuListener(new PanelServidores.ServidorContextMenuListener() {
+            @Override
+            public void abrirConfiguracion(Server server) {
+                abrirPaginaServidor(server, PaginaDerecha.CONFIG);
+            }
+
+            @Override
+            public void abrirMundos(Server server) {
+                abrirPaginaServidor(server, PaginaDerecha.MUNDO);
+            }
+        });
         return listaServidoresPanel;
+    }
+
+    private void abrirPaginaServidor(Server server, PaginaDerecha pagina){
+        if(server == null || pagina == null) return;
+
+        Server serverSeleccionado = gestorServidores.getServidorSeleccionado();
+        boolean mismoServidor = esMismoServidor(serverSeleccionado, server);
+
+        if(!mismoServidor){
+            seleccionarServidor(server);
+        } else {
+            gestorServidores.setServidorSeleccionado(server);
+            if(abrirCarpetaServerButton != null) abrirCarpetaServerButton.setEnabled(true);
+            if(borrarServerButton != null) borrarServerButton.setEnabled(true);
+            boolean panelDesincronizado = !esMismoServidor(serverMostrado, server);
+            if(panelDerecho != null && panelDesincronizado) {
+                mostrarPanelDerecho(server, gestorServidores);
+            }
+        }
+
+        setPaginaDerecha(pagina);
+    }
+
+    private boolean esMismoServidor(Server a, Server b){
+        if(a == null || b == null) return false;
+
+        String idA = a.getId();
+        String idB = b.getId();
+        if(idA != null && idB != null){
+            return idA.equals(idB);
+        }
+
+        String dirA = a.getServerDir();
+        String dirB = b.getServerDir();
+        if(dirA == null || dirB == null) return false;
+        return dirA.equals(dirB);
     }
 
     private void estilizarBoton(JButton button){
