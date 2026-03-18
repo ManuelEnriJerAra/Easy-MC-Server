@@ -53,7 +53,7 @@ public class PanelConsola extends JPanel {
         this.gestorServidores = gestorServidores;
         this.setMinimumSize(new Dimension(this.getWidth(), 200));
         consolaPane.setEditable(false);
-        this.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        this.setBorder(BorderFactory.createEmptyBorder());
         refreshThemeRefs();
 
         // Inicialización de estilo
@@ -64,20 +64,61 @@ public class PanelConsola extends JPanel {
 
         JScrollPane scroll = new JScrollPane(consolaPane);
         scroll.setBorder(null);
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
+        scroll.setWheelScrollingEnabled(true);
         scroll.getViewport().setOpaque(true);
         scroll.getViewport().setBackground(colorConsola);
-
-        scrollWrap = new RoundedBackgroundPanel(colorConsola, arc);
-        scrollWrap.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        scrollWrap.add(scroll, BorderLayout.CENTER);
-        this.add(scrollWrap, BorderLayout.CENTER);
 
         vistaSimpleCheckbox.setText("Vista Simple");
         vistaSimpleCheckbox.setSelected(true);
         vistaSimpleCheckbox.addActionListener(e->actualizarConsola());
-        vistaSimpleCheckbox.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+        vistaSimpleCheckbox.setOpaque(false);
+        vistaSimpleCheckbox.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        vistaSimpleCheckbox.setHorizontalTextPosition(SwingConstants.LEFT);
+        vistaSimpleCheckbox.setForeground(AppTheme.getConsoleForeground());
 
-        this.add(vistaSimpleCheckbox, BorderLayout.NORTH);
+        scrollWrap = new RoundedBackgroundPanel(colorConsola, arc);
+        scrollWrap.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        scrollWrap.add(scroll, BorderLayout.CENTER);
+
+        JPanel overlayBadge = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(AppTheme.withAlpha(AppTheme.getSelectionBackground(), 110));
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+                } finally {
+                    g2.dispose();
+                }
+                super.paintComponent(g);
+            }
+        };
+        overlayBadge.setOpaque(false);
+        overlayBadge.add(vistaSimpleCheckbox, BorderLayout.CENTER);
+
+        JPanel overlayHeader = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
+        overlayHeader.setOpaque(false);
+        overlayHeader.add(overlayBadge);
+
+        JLayeredPane layeredConsole = new JLayeredPane(){
+            @Override
+            public void doLayout(){
+                int w = getWidth();
+                int h = getHeight();
+                scrollWrap.setBounds(0, 0, w, h);
+
+                Dimension pref = overlayHeader.getPreferredSize();
+                int x = Math.max(0, w - pref.width);
+                overlayHeader.setBounds(x, 0, pref.width, pref.height);
+            }
+        };
+        layeredConsole.setOpaque(false);
+        layeredConsole.add(scrollWrap, JLayeredPane.DEFAULT_LAYER);
+        layeredConsole.add(overlayHeader, JLayeredPane.PALETTE_LAYER);
+        this.add(layeredConsole, BorderLayout.CENTER);
 
         JPanel panelComandos = new JPanel(new BorderLayout(8, 0));
         panelComandos.setBackground(colorConsola);
@@ -86,6 +127,7 @@ public class PanelConsola extends JPanel {
         pico.setForeground(AppTheme.getConsoleForeground());
         pico.setFont(new Font("Monospaced", Font.PLAIN, 12));
         comandoPane.setEditable(true);
+        comandoPane.setFont(new Font("Monospaced", Font.PLAIN, 12));
         comandoPane.setOpaque(false);
         comandoPane.setForeground(AppTheme.getConsoleForeground());
         comandoPane.setBorder(null);

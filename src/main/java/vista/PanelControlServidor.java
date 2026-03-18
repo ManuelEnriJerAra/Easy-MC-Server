@@ -137,21 +137,32 @@ public class PanelControlServidor extends JPanel {
     private void actualizarBotonesSegunEstado(Server server){
         panelBotones.removeAll();
         if(server.getServerProcess() != null && server.getServerProcess().isAlive()){
-            // el servidor está vivo
+            // el servidor est? vivo
             panelBotones.add(panelBotonesIniciado, BorderLayout.CENTER);
         }
         else{
-            // el servidor no está vivo
+            // el servidor no est? vivo
             panelBotones.add(btnIniciarServidor, BorderLayout.CENTER);
         }
         panelBotones.revalidate();
         panelBotones.repaint();
+        revalidate();
+        repaint();
 
-        // Recalcular ellipsize tras cambiar el layout
+        // Recalcular ellipsize tras cambiar el layout y forzar un repintado completo,
+        // porque los paneles transparentes/redondeados vecinos pueden dejar artefactos
+        // hasta el siguiente repaint global de la ventana.
         SwingUtilities.invokeLater(() -> {
             ellipsizeButtonText(btnIniciarServidor);
             ellipsizeButtonText(btnPararServidor);
             ellipsizeButtonText(btnReiniciarServidor);
+
+            JRootPane root = SwingUtilities.getRootPane(PanelControlServidor.this);
+            if(root != null){
+                RepaintManager.currentManager(root).markCompletelyDirty(root);
+                root.revalidate();
+                root.repaint();
+            }
         });
     }
 
