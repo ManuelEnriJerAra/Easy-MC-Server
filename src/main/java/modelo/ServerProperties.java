@@ -192,12 +192,11 @@ public class ServerProperties{
                 int caracter; // vamos a leer caracter a caracter
                 String propiedad; // aqui almaceno la propiedad
                 String valor; // aqui almaceno el valor
-                String aux; // lo uso para ignorar comentarios
                 StringBuilder builder = new StringBuilder(); // aqui construyo las palabras
                 while ((caracter = br.read())!=-1) {
                     // si es un comentario muestro la línea entera y pasamos
                     if(caracter=='#') {
-                        aux = br.readLine();
+                        br.readLine();
                         //System.out.println("Comentario: "+aux);
                     }
                     // si es un = el caracter significa que hasta ahora hemos estado leyendo una propiedad
