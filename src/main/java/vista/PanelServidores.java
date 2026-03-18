@@ -34,6 +34,7 @@ public class PanelServidores extends FlatScrollPane {
     int arc;
     Color acento;
     Color base;
+    Color bgLista;
     Color bgNormal;
     Color bgHover;
     Color bgPresionado;
@@ -123,11 +124,11 @@ public class PanelServidores extends FlatScrollPane {
         this.setMinimumSize(MIN_SIZE);
         refrescarTema(true);
         this.setOpaque(true);
-        this.setBackground(bgNormal);
+        this.setBackground(bgLista);
         if(this.getViewport() != null){
             this.getViewport().setMinimumSize(MIN_SIZE);
             this.getViewport().setOpaque(true);
-            this.getViewport().setBackground(bgNormal);
+            this.getViewport().setBackground(bgLista);
             // BACKINGSTORE fuerza repintado completo del área expuesta, evitando artefactos al cambiar tamaño/selección
             this.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
         }
@@ -148,7 +149,7 @@ public class PanelServidores extends FlatScrollPane {
                 refrescarTema(true);
                 if(getViewport() != null){
                     getViewport().setOpaque(true);
-                    getViewport().setBackground(bgNormal);
+                    getViewport().setBackground(bgLista);
                     // mantener el mismo modo al cambiar L&F
                     getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
                 }
@@ -167,7 +168,7 @@ public class PanelServidores extends FlatScrollPane {
 
         JPanel panelContenedor = new JPanel(); // panel que engloba todas las filas
         panelContenedor.setOpaque(true);
-        panelContenedor.setBackground(bgNormal);
+        panelContenedor.setBackground(bgLista);
         panelContenedor.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6)); // deja aire para que se vea el radio
         panelContenedor.setLayout(new BoxLayout(panelContenedor, BoxLayout.Y_AXIS));
         List<Server> servidores = gestorServidores.getListaServidores(); // hacemos una lista de ServerConfig donde se guardarán los servidores
@@ -191,7 +192,7 @@ public class PanelServidores extends FlatScrollPane {
         refrescarTema(true);
         JPanel panelContenedor = new JPanel();
         panelContenedor.setOpaque(true);
-        panelContenedor.setBackground(bgNormal);
+        panelContenedor.setBackground(bgLista);
         panelContenedor.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6)); // deja aire para que se vea el radio
         panelContenedor.setLayout(new BoxLayout(panelContenedor, BoxLayout.Y_AXIS));
 
@@ -632,18 +633,28 @@ public class PanelServidores extends FlatScrollPane {
         acento = AppTheme.getMainAccent();
         base = AppTheme.getBorderColor();
 
-        bgNormal = AppTheme.getPanelBackground();
-        bgHover = AppTheme.getHoverBackground();
-        bgPresionado = AppTheme.getPressedBackground();
-        bgSelected = AppTheme.getSelectionBackground();
+        bgLista = AppTheme.getPanelBackground();
+        bgNormal = AppTheme.getBackground();
+        bgHover = AppTheme.tint(bgNormal, acento, 0.08f);
+        bgPresionado = AppTheme.tint(bgNormal, acento, 0.14f);
+        bgSelected = AppTheme.tint(bgNormal, acento, 0.18f);
 
         bordeRedondo = AppTheme.createRoundedBorder(insets, 1f);
         bordeHover = AppTheme.createAccentBorder(insets, 1f);
         bordeSeleccionado = AppTheme.createAccentBorder(insets, 3f);
 
+        setBackground(bgLista);
+        if(getViewport() != null){
+            getViewport().setOpaque(true);
+            getViewport().setBackground(bgLista);
+        }
+
         if(!aplicarEnFilas) return;
         Component vista = getViewport().getView();
         if(!(vista instanceof JPanel panelContenedor)) return;
+
+        panelContenedor.setOpaque(true);
+        panelContenedor.setBackground(bgLista);
 
         for(Component componente : panelContenedor.getComponents()){
             if(!(componente instanceof JPanel fila)) continue;
@@ -658,6 +669,9 @@ public class PanelServidores extends FlatScrollPane {
             syncIconBg(fila); // sincroniza el panel del icono con el fondo nuevo del tema
             fila.repaint();
         }
+
+        panelContenedor.repaint();
+        repaint();
     }
 
 }

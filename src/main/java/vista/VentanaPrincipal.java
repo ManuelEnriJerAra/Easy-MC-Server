@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Fichero: VentanaPrincipal.java
  *
  * Autor: Manuel Enrique Jerónimo Aragón
@@ -49,6 +49,9 @@ public class VentanaPrincipal extends JFrame {
     private Consumer<String> consoleListenerActual;
     private JButton abrirCarpetaServerButton;
     private JButton borrarServerButton;
+    private JButton nuevoServerButton;
+    private JButton importarServerButton;
+    private JPanel botonesServidoresPanel;
     private final PanelServidores listaServidoresPanel;
     private boolean cambiandoANoServerDialog = false;
     private JSplitPane splitPrincipal;
@@ -72,6 +75,7 @@ public class VentanaPrincipal extends JFrame {
         this.setLocationRelativeTo(null);
         JPanel ventanaPrincipalPanel = new JPanel(new BorderLayout()); // el panel principal, donde se aloja todo
         Color bgApp = AppTheme.getBackground();
+        Color panelBg = AppTheme.getPanelBackground();
         ventanaPrincipalPanel.setBackground(bgApp);
         this.setContentPane(ventanaPrincipalPanel);
 
@@ -87,14 +91,14 @@ public class VentanaPrincipal extends JFrame {
         // PANEL DE SERVIDORES (card con borde redondeado)
         servidoresCard = new JPanel(new BorderLayout());
         servidoresCard.setOpaque(true); // pinta el fondo del "card" para evitar artefactos al redimensionar
-        servidoresCard.setBackground(bgApp);
+        servidoresCard.setBackground(panelBg);
         servidoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
         setBordeRedondoGestionado(servidoresCard, true);
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
         JPanel servidoresPanel = new JPanel(new BorderLayout());
         servidoresPanel.setOpaque(true); // rellena el fondo bajo el listado para evitar "ghosting"
-        servidoresPanel.setBackground(bgApp);
+        servidoresPanel.setBackground(panelBg);
         servidoresCard.add(servidoresPanel, BorderLayout.CENTER);
 
         // PANEL DE LISTADO DE SERVIDORES
@@ -102,14 +106,15 @@ public class VentanaPrincipal extends JFrame {
         servidoresPanel.add(listaServidoresPanel, BorderLayout.CENTER);
 
         // PANEL DE BOTONES DE SERVIDORES
-        JPanel botonesServidores = new JPanel(new GridLayout(1,4));
-        botonesServidores.setOpaque(false);
-        servidoresPanel.add(botonesServidores, BorderLayout.SOUTH);
+        botonesServidoresPanel = new JPanel(new GridLayout(1,4));
+        botonesServidoresPanel.setOpaque(true);
+        botonesServidoresPanel.setBackground(panelBg);
+        servidoresPanel.add(botonesServidoresPanel, BorderLayout.SOUTH);
 
-        JButton nuevoServerButton = new JButton("+");
-        JButton importarServerButton = new JButton("↓");
+        nuevoServerButton = new JButton("+");
+        importarServerButton = new JButton("↓");
         importarServerButton.setToolTipText("Importar servidor");
-        borrarServerButton = new JButton("🗑");
+        borrarServerButton = new JButton("-");
         borrarServerButton.setToolTipText("Eliminar servidor");
         abrirCarpetaServerButton = new JButton("📁");
         abrirCarpetaServerButton.setToolTipText("Abrir carpeta del servidor");
@@ -122,10 +127,10 @@ public class VentanaPrincipal extends JFrame {
         estilizarBoton(borrarServerButton);
         estilizarBoton(abrirCarpetaServerButton);
 
-        botonesServidores.add(nuevoServerButton);
-        botonesServidores.add(importarServerButton);
-        botonesServidores.add(borrarServerButton);
-        botonesServidores.add(abrirCarpetaServerButton);
+        botonesServidoresPanel.add(nuevoServerButton);
+        botonesServidoresPanel.add(importarServerButton);
+        botonesServidoresPanel.add(borrarServerButton);
+        botonesServidoresPanel.add(abrirCarpetaServerButton);
 
         nuevoServerButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -285,7 +290,8 @@ public class VentanaPrincipal extends JFrame {
         // Cards (contenido del panel derecho)
         cardDerecho = new CardLayout();
         panelDerechoCards = new JPanel(cardDerecho);
-        panelDerechoCards.setOpaque(false);
+        panelDerechoCards.setOpaque(true);
+        panelDerechoCards.setBackground(bgApp);
         panelDerecho.add(panelDerechoCards, BorderLayout.CENTER);
 
         // Barra vertical de navegación (va a la IZQUIERDA de la ventana, fuera del split)
@@ -367,9 +373,11 @@ public class VentanaPrincipal extends JFrame {
         panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
 
         // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
-        JPanel headerCard = new JPanel(new BorderLayout());
+        JPanel headerCard = new RoundedBackgroundPanel(AppTheme.getPanelBackground(), AppTheme.getArc());
+        headerCard.setLayout(new BorderLayout());
         headerCard.setOpaque(false);
-        headerCard.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        headerCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
+        setBordeRedondoGestionado(headerCard, true);
         headerCard.add(panelTotalServidor, BorderLayout.CENTER);
 
         home.add(headerCard, BorderLayout.NORTH);
@@ -377,7 +385,7 @@ public class VentanaPrincipal extends JFrame {
         // Jugadores y consola con splitpane y bordes redondeados
         jugadoresCard = new JPanel(new BorderLayout());
         jugadoresCard.setOpaque(true);
-        jugadoresCard.setBackground(AppTheme.getBackground());
+        jugadoresCard.setBackground(AppTheme.getPanelBackground());
         jugadoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
         setBordeRedondoGestionado(jugadoresCard, true);
         jugadoresCard.add(panelJugadores, BorderLayout.CENTER);
@@ -430,7 +438,7 @@ public class VentanaPrincipal extends JFrame {
 
         JPanel barra = new JPanel(new BorderLayout());
         barra.setOpaque(true); // pinta el fondo de la barra para evitar "ghosting" al redimensionar
-        barra.setBackground(AppTheme.getBackground());
+        barra.setBackground(AppTheme.getPanelBackground());
         barra.setPreferredSize(new Dimension(56, 0)); // más estrecha
         barra.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f)); // padding reducido
         setBordeRedondoGestionado(barra, true);
@@ -469,7 +477,7 @@ public class VentanaPrincipal extends JFrame {
                 b.setOpaque(true);
                 b.setContentAreaFilled(true);
                 b.setBackground(hoverSeleccion);
-                b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), hoverSeleccion, 1f, AppTheme.getArc()));
+                b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getMainAccent(), 1f, AppTheme.getArc()));
                 b.repaint();
             }
             @Override public void mouseExited(MouseEvent e) {
@@ -488,14 +496,14 @@ public class VentanaPrincipal extends JFrame {
                 temas.setOpaque(true);
                 temas.setContentAreaFilled(true);
                 temas.setBackground(hoverSeleccion);
-                temas.setBorder(new FlatLineBorder(new Insets(6,6,6,6), hoverSeleccion, 1f, AppTheme.getArc()));
+                temas.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getMainAccent(), 1f, AppTheme.getArc()));
                 temas.repaint();
             }
             @Override public void mouseExited(MouseEvent e) {
                 temas.setOpaque(false);
                 temas.setContentAreaFilled(false);
                 temas.setBackground(null);
-                temas.setBorder(BorderFactory.createEmptyBorder(6,6,6,6));
+                temas.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc()));
                 temas.repaint();
             }
         };
@@ -512,10 +520,10 @@ public class VentanaPrincipal extends JFrame {
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         b.setToolTipText(tooltip);
         b.setFont(b.getFont().deriveFont(Font.PLAIN, 18f));
-        b.setBorderPainted(false); // sin borde visible
+        b.setBorderPainted(true); // permitimos dibujar el borde en hover/seleccion
         b.setContentAreaFilled(false); // sin color de fondo por defecto
         b.setOpaque(false); // se pintará sólo cuando esté seleccionado
-        b.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6)); // padding interno
+        b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc())); // mantiene tama?o estable y permite mostrar borde en hover
         b.putClientProperty("JButton.buttonType", "roundRect"); // mantener esquinas redondeadas con FlatLaf
         b.addActionListener(e -> setPaginaDerecha(pagina));
         navButtons.put(pagina, b);
@@ -532,7 +540,7 @@ public class VentanaPrincipal extends JFrame {
         b.setBorderPainted(false); // sin borde
         b.setContentAreaFilled(false); // fondo transparente
         b.setOpaque(false);
-        b.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+        b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc()));
         b.putClientProperty("JButton.buttonType", "roundRect"); // borde redondeado al seleccionar
         b.addActionListener(e -> {
             if(action != null) action.run();
@@ -560,7 +568,7 @@ public class VentanaPrincipal extends JFrame {
             // conservar borde redondeado al seleccionar
             b.setBorder(sel
                     ? new FlatLineBorder(new Insets(6,6,6,6), acento, 1f, arc)
-                    : BorderFactory.createEmptyBorder(6,6,6,6));
+                    : new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, arc));
         }
     }
 
@@ -714,21 +722,33 @@ public class VentanaPrincipal extends JFrame {
 
     private void refreshThemeStyles() {
         Color bgApp = AppTheme.getBackground();
+        Color panelBg = AppTheme.getPanelBackground();
 
         Container cp = getContentPane();
         if (cp != null) cp.setBackground(bgApp);
         if (panelIzquierdo != null) panelIzquierdo.setBackground(bgApp);
         if (panelDerecho != null) panelDerecho.setBackground(bgApp);
+        if (panelDerechoCards != null) {
+            panelDerechoCards.setOpaque(true);
+            panelDerechoCards.setBackground(bgApp);
+        }
 
         int arc = AppTheme.getArc();
         Color borderColor = AppTheme.getBorderColor();
 
         if (servidoresCard != null) {
-            servidoresCard.setBackground(bgApp);
+            servidoresCard.setBackground(panelBg);
             aplicarBordeRedondoGestionado(servidoresCard, new Insets(8, 8, 8, 8), borderColor, 1f, arc);
         }
+        if (botonesServidoresPanel != null) {
+            botonesServidoresPanel.setBackground(panelBg);
+        }
+        if (nuevoServerButton != null) nuevoServerButton.setBackground(bgApp);
+        if (importarServerButton != null) importarServerButton.setBackground(bgApp);
+        if (borrarServerButton != null) borrarServerButton.setBackground(bgApp);
+        if (abrirCarpetaServerButton != null) abrirCarpetaServerButton.setBackground(bgApp);
         if (panelBarraVertical != null) {
-            panelBarraVertical.setBackground(bgApp);
+            panelBarraVertical.setBackground(panelBg);
             aplicarBordeRedondoGestionado(panelBarraVertical, new Insets(6, 6, 6, 6), borderColor, 1f, arc);
         }
         if (jugadoresCard != null) {
@@ -927,6 +947,24 @@ public class VentanaPrincipal extends JFrame {
         button.setFont(base.deriveFont(Font.BOLD, Math.max(14f, base.getSize2D() + 2f)));
         button.setMargin(new Insets(10, 14, 10, 14));
         button.setFocusPainted(false);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setBackground(AppTheme.getBackground());
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if(!button.isEnabled()) return;
+                button.setBackground(colorSeleccionPanelServidores());
+                button.repaint();
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(AppTheme.getBackground());
+                button.repaint();
+            }
+        });
     }
 }
 

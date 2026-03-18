@@ -13,7 +13,9 @@ import java.beans.PropertyChangeListener;
 public class PanelTotalServidor extends JPanel {
     PanelTotalServidor(GestorServidores gestorServidores){
         this.setLayout(new BorderLayout(10, 0));
-        refreshBorder();
+        this.setOpaque(true);
+        this.setBackground(AppTheme.getPanelBackground());
+        this.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         // Previsualización e información a la izquierda
         JPanel panelInfo = new JPanel(new BorderLayout());
@@ -122,11 +124,8 @@ public class PanelTotalServidor extends JPanel {
     @Override
     public void updateUI(){
         super.updateUI();
-        refreshBorder();
-    }
-
-    private void refreshBorder(){
-        this.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
+        this.setBackground(AppTheme.getPanelBackground());
+        this.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     }
 
     private void aplicarEllipsisLabel(JLabel label, int maxWidth){

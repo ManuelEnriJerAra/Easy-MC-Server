@@ -53,16 +53,21 @@ public class PanelJugadores extends JPanel {
     public PanelJugadores(GestorServidores gestorServidores) {
         this.gestorServidores = gestorServidores;
         this.setLayout(new BorderLayout());
+        this.setOpaque(true);
+        this.setBackground(AppTheme.getPanelBackground());
 
         JLabel titulo = new JLabel("Jugadores");
         titulo.setFont(titulo.getFont().deriveFont(Font.BOLD));
         this.add(titulo, BorderLayout.NORTH);
 
-        contenedorJugadores.setOpaque(false);
+        contenedorJugadores.setOpaque(true);
+        contenedorJugadores.setBackground(AppTheme.getPanelBackground());
         scrollJugadores = new JScrollPane(contenedorJugadores);
         scrollJugadores.setBorder(null);
-        scrollJugadores.setOpaque(false);
-        scrollJugadores.getViewport().setOpaque(false);
+        scrollJugadores.setOpaque(true);
+        scrollJugadores.setBackground(AppTheme.getPanelBackground());
+        scrollJugadores.getViewport().setOpaque(true);
+        scrollJugadores.getViewport().setBackground(AppTheme.getPanelBackground());
         // Queremos que el panel ocupe el espacio y se adapte al ancho (varias filas). Si no cabe: scroll vertical.
         scrollJugadores.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollJugadores.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -88,11 +93,12 @@ public class PanelJugadores extends JPanel {
 
         // Barra inferior integrada en el borde inferior del panel
         JPanel barraInferior = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        barraInferior.setOpaque(false);
+        barraInferior.setOpaque(true);
+        barraInferior.setBackground(AppTheme.getPanelBackground());
         barraInferior.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
 
         JButton btnRecargar = new JButton("Recargar");
-        btnRecargar.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        estilizarBotonBarra(btnRecargar);
         btnRecargar.addActionListener(e -> recargarContadores());
 
         barraInferior.add(btnWhitelist);
@@ -150,12 +156,17 @@ public class PanelJugadores extends JPanel {
 
     private void aplicarEstiloScrollJugadores(){
         if(scrollJugadores == null) return;
+        Color panelBg = AppTheme.getPanelBackground();
+        setBackground(panelBg);
+        contenedorJugadores.setOpaque(true);
+        contenedorJugadores.setBackground(panelBg);
         scrollJugadores.setBorder(null);
         scrollJugadores.setViewportBorder(null);
-        scrollJugadores.setOpaque(false);
+        scrollJugadores.setOpaque(true);
+        scrollJugadores.setBackground(panelBg);
         if(scrollJugadores.getViewport() != null){
-            scrollJugadores.getViewport().setOpaque(false);
-            scrollJugadores.getViewport().setBackground(AppTheme.getTransparentColor());
+            scrollJugadores.getViewport().setOpaque(true);
+            scrollJugadores.getViewport().setBackground(panelBg);
         }
     }
 
@@ -173,11 +184,38 @@ public class PanelJugadores extends JPanel {
 
     private void configurarBotonLista(JButton btn, String titulo, Runnable onClick){
         btn.setHorizontalAlignment(SwingConstants.LEFT);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btn.setToolTipText("Abrir " + titulo);
-        btn.addActionListener(e -> onClick.run());
         btn.putClientProperty("baseText", titulo);
         btn.setText(titulo);
+        estilizarBotonBarra(btn);
+        btn.addActionListener(e -> onClick.run());
+    }
+
+    private void estilizarBotonBarra(JButton btn){
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setFocusPainted(false);
+        btn.setOpaque(true);
+        btn.setContentAreaFilled(true);
+        btn.setBackground(AppTheme.getBackground());
+
+        Font base = btn.getFont();
+        btn.setFont(base.deriveFont(Font.BOLD, Math.max(12f, base.getSize2D())));
+        btn.setMargin(new Insets(6, 10, 6, 10));
+
+        btn.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if(!btn.isEnabled()) return;
+                btn.setBackground(AppTheme.getSelectionBackground());
+                btn.repaint();
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                btn.setBackground(AppTheme.getBackground());
+                btn.repaint();
+            }
+        });
     }
 
     private void procesarLinea(String raw) {

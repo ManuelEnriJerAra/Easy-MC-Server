@@ -21,6 +21,7 @@ public class PanelPrevisualizacion extends JPanel {
     PanelPrevisualizacion(GestorServidores gestorServidores){
         this.server = gestorServidores.getServidorSeleccionado();
         this.setLayout(new BorderLayout());
+        this.setOpaque(false);
         // Imagen a la izquierda
         ImageIcon icono = server.getServerIconOrUseDefault();
         ImagenRedondaLabel iconoRedondo = new ImagenRedondaLabel(icono, 10, 96, 96);

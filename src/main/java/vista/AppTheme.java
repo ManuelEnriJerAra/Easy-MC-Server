@@ -37,7 +37,11 @@ public final class AppTheme {
     }
 
     public static Color getPanelBackground() {
-        return getBackground();
+        Color bg = getBackground();
+        float luminance = (0.299f * bg.getRed() + 0.587f * bg.getGreen() + 0.114f * bg.getBlue()) / 255f;
+        return luminance >= 0.5f
+                ? darken(bg, 0.045f)
+                : tint(bg, Color.WHITE, 0.07f);
     }
 
     public static Color getMainAccent() {

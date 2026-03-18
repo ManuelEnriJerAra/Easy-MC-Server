@@ -40,8 +40,10 @@ public class PanelControlServidor extends JPanel {
 
         Server server = gestorServidores.getServidorSeleccionado();
         this.setLayout(new BorderLayout());
+        this.setOpaque(false);
         this.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, RIGHT_PADDING_PX));
         panelBotones = new JPanel(new BorderLayout());
+        panelBotones.setOpaque(false);
         btnIniciarServidor = new JButton("Iniciar Servidor");
         btnIniciarServidor.putClientProperty("fullText", "Iniciar Servidor");
         btnIniciarServidor.setBackground(colorVerde);
@@ -57,6 +59,7 @@ public class PanelControlServidor extends JPanel {
         btnForzarCierreServidor.setBackground(AppTheme.getDestructiveColor());
 
         panelBotonesIniciado = new JPanel(new GridBagLayout());
+        panelBotonesIniciado.setOpaque(false);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
         gbc.fill = GridBagConstraints.BOTH;
