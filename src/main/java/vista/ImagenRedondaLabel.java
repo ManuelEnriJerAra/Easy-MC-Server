@@ -30,7 +30,7 @@ public class ImagenRedondaLabel extends JComponent {
 
         // Transparente por defecto: si la imagen tiene alpha, no se "rellena" con un gris de fondo.
         setOpaque(false);
-        setBackground(new Color(0, 0, 0, 0));
+        setBackground(AppTheme.getTransparentColor());
 
         addMouseListener(new MouseAdapter() {
             @Override
@@ -123,11 +123,11 @@ public class ImagenRedondaLabel extends JComponent {
         if (rounded != null) g2.drawImage(rounded, 0, 0, null);
 
         if(hoverOverlayEnabled && hovered){
-            g2.setColor(new Color(0, 0, 0, 90));
+            g2.setColor(AppTheme.getImageHoverOverlayColor());
             g2.fillRoundRect(0, 0, w, h, radio * 2, radio * 2);
 
             if(hoverText != null && !hoverText.isBlank()){
-                g2.setColor(new Color(255, 255, 255, 230));
+                g2.setColor(AppTheme.getImageHoverTextColor());
                 Font base = getFont();
                 if(base == null) base = UIManager.getFont("Label.font");
                 if(base == null) base = new Font("Dialog", Font.PLAIN, 12);

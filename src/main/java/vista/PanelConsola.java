@@ -1,7 +1,6 @@
 package vista;
 
 import controlador.GestorServidores;
-import controlador.Main;
 import modelo.Server;
 import com.formdev.flatlaf.extras.components.FlatCheckBox;
 
@@ -23,12 +22,12 @@ public class PanelConsola extends JPanel {
     private static final Pattern LEFT = Pattern.compile("([^\\s]+) left the game");
     private static final Pattern HORA = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
 
-    private final Color colorConsola = Color.decode("#1D2036");
+    private final Color colorConsola = AppTheme.getConsoleBackground();
 
     // Colores por tipo
-    private static final Color COLOR_INFO = Color.WHITE;
-    private static final Color COLOR_CHAT = Color.CYAN;
-    private static final Color COLOR_ERROR = Color.RED;
+    private static final Color COLOR_INFO = AppTheme.getConsoleInfoForeground();
+    private static final Color COLOR_CHAT = AppTheme.getConsoleChatForeground();
+    private static final Color COLOR_ERROR = AppTheme.getConsoleErrorForeground();
 
     private final int MAX_LINEAS = 5000;
 
@@ -84,11 +83,11 @@ public class PanelConsola extends JPanel {
         panelComandos.setBackground(colorConsola);
         panelComandos.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         JLabel pico = new JLabel(">");
-        pico.setForeground(Color.WHITE);
+        pico.setForeground(AppTheme.getConsoleForeground());
         pico.setFont(new Font("Monospaced", Font.PLAIN, 12));
         comandoPane.setEditable(true);
         comandoPane.setOpaque(false);
-        comandoPane.setForeground(Color.WHITE);
+        comandoPane.setForeground(AppTheme.getConsoleForeground());
         comandoPane.setBorder(null);
         panelComandos.add(pico, BorderLayout.WEST);
         panelComandos.add(comandoPane, BorderLayout.CENTER);
@@ -121,8 +120,7 @@ public class PanelConsola extends JPanel {
     }
 
     private void refreshThemeRefs(){
-        arc = UIManager.getInt("Component.arc");
-        if(arc <= 0) arc = Main.DEFAULT_ARC;
+        arc = AppTheme.getArc();
     }
 
     private void inicializarEstilo() {

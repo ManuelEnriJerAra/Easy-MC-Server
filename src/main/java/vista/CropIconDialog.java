@@ -177,7 +177,7 @@ public class CropIconDialog {
         CropPanel(BufferedImage image) {
             this.image = image;
             setOpaque(true);
-            setBackground(Color.DARK_GRAY);
+            setBackground(AppTheme.getCropBackground());
             setPreferredSize(new Dimension(620, 460));
 
             // Selección inicial: cuadrado centrado que cabe en la imagen.
@@ -597,7 +597,7 @@ public class CropIconDialog {
                 int sh = (int) Math.round(s.height * t.scale);
 
                 // Oscurecemos todo EXCEPTO el recorte (sin usar AlphaComposite.Clear para evitar artefactos)
-                g2.setColor(new Color(0, 0, 0, 120));
+                g2.setColor(AppTheme.getCropOverlayColor());
                 // arriba
                 g2.fillRect(t.offsetX, t.offsetY, t.drawW, max(0, sy - t.offsetY));
                 // abajo
@@ -609,13 +609,13 @@ public class CropIconDialog {
                 int rightX = sx + sw;
                 g2.fillRect(rightX, sy, max(0, (t.offsetX + t.drawW) - rightX), sh);
 
-                g2.setColor(new Color(255, 255, 255, 220));
+                g2.setColor(AppTheme.getCropSelectionBorderColor());
                 g2.setStroke(new BasicStroke(2f));
                 g2.drawRect(sx, sy, sw, sh);
 
                 // Handles
                 int hs = 8;
-                g2.setColor(new Color(255, 255, 255, 240));
+                g2.setColor(AppTheme.getCropHandleColor());
                 g2.fillRect(sx - hs/2, sy - hs/2, hs, hs);
                 g2.fillRect(sx + sw - hs/2, sy - hs/2, hs, hs);
                 g2.fillRect(sx - hs/2, sy + sh - hs/2, hs, hs);

@@ -67,6 +67,7 @@ public class PanelJugadores extends JPanel {
         scrollJugadores.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollJugadores.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         this.add(scrollJugadores, BorderLayout.CENTER);
+        aplicarEstiloScrollJugadores();
 
         configurarBotonLista(btnWhitelist, "Whitelist", () -> abrirDialogoLista(
                 "Whitelist",
@@ -139,6 +140,23 @@ public class PanelJugadores extends JPanel {
                 gestorServidores.removePropertyChangeListener("estadoServidor", listenerEstadoServidor);
             }
         });
+    }
+
+    @Override
+    public void updateUI(){
+        super.updateUI();
+        aplicarEstiloScrollJugadores();
+    }
+
+    private void aplicarEstiloScrollJugadores(){
+        if(scrollJugadores == null) return;
+        scrollJugadores.setBorder(null);
+        scrollJugadores.setViewportBorder(null);
+        scrollJugadores.setOpaque(false);
+        if(scrollJugadores.getViewport() != null){
+            scrollJugadores.getViewport().setOpaque(false);
+            scrollJugadores.getViewport().setBackground(AppTheme.getTransparentColor());
+        }
     }
 
     private enum TipoLista {
@@ -365,7 +383,7 @@ public class PanelJugadores extends JPanel {
 
         if(!serverActivo){
             JLabel aviso = new JLabel("Inicia el servidor para modificar esta lista (solo lectura).");
-            aviso.setForeground(Color.GRAY);
+            aviso.setForeground(AppTheme.getMutedForeground());
             panel.add(aviso, BorderLayout.NORTH);
         }
 
@@ -495,15 +513,10 @@ public class PanelJugadores extends JPanel {
             this.setToolTipText("Click derecho para acciones");
             this.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-            bgNormal = UIManager.getColor("Panel.background");
-            bgHover = tintar(bgNormal, UIManager.getColor("Component.focusColor"), 0.10f);
+            bgNormal = AppTheme.getPanelBackground();
+            bgHover = AppTheme.getSoftSelectionBackground();
             borderNormal = this.getBorder();
-            Color focus = UIManager.getColor("Component.focusColor");
-            if(focus == null) focus = new Color(120, 160, 255);
-            borderHover = BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(focus, 1, true),
-                    BorderFactory.createEmptyBorder(5, 7, 5, 9)
-            );
+            borderHover = AppTheme.createAccentBorder(new Insets(5, 7, 5, 9), 1f);
 
             icon.setPreferredSize(new Dimension(32, 32));
             icon.setMinimumSize(new Dimension(32, 32));
@@ -663,13 +676,4 @@ public class PanelJugadores extends JPanel {
         }
     }
 
-    private static Color tintar(Color base, Color accent, float t) {
-        if(base == null) base = Color.DARK_GRAY;
-        if(accent == null) accent = new Color(120, 160, 255);
-        t = Math.max(0f, Math.min(1f, t));
-        int r = (int) (base.getRed()   + (accent.getRed()   - base.getRed())   * t);
-        int g = (int) (base.getGreen() + (accent.getGreen() - base.getGreen()) * t);
-        int b = (int) (base.getBlue()  + (accent.getBlue()  - base.getBlue())  * t);
-        return new Color(r, g, b);
-    }
 }

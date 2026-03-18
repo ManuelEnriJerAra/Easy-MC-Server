@@ -129,7 +129,7 @@ public class MotdEditorDialog {
         b.setMaximumSize(new Dimension(18, 18));
         b.setBackground(color);
         b.setOpaque(true);
-        b.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 1, true));
+        b.setBorder(BorderFactory.createLineBorder(AppTheme.getMutedForeground().darker(), 1, true));
         b.setToolTipText(code);
         b.addActionListener(e -> applyColorToSelection(pane, color));
         bar.add(b);
@@ -213,7 +213,7 @@ public class MotdEditorDialog {
         StyleConstants.setUnderline(reset, false);
         StyleConstants.setStrikeThrough(reset, false);
         reset.addAttribute(ObfuscatedEditorKit.OBFUSCATED, false);
-        StyleConstants.setForeground(reset, UIManager.getColor("Label.foreground"));
+        StyleConstants.setForeground(reset, AppTheme.getForeground());
 
         if (start == end) {
             pane.setCharacterAttributes(reset, true);
@@ -236,7 +236,7 @@ public class MotdEditorDialog {
         String raw = initial == null ? "" : initial.replace('&', SECTION);
 
         MutableAttributeSet current = new SimpleAttributeSet();
-        StyleConstants.setForeground(current, UIManager.getColor("Label.foreground"));
+        StyleConstants.setForeground(current, AppTheme.getForeground());
 
         StringBuilder text = new StringBuilder();
 
@@ -299,7 +299,7 @@ public class MotdEditorDialog {
                 StyleConstants.setUnderline(a, false);
                 StyleConstants.setStrikeThrough(a, false);
                 a.addAttribute(ObfuscatedEditorKit.OBFUSCATED, false);
-                StyleConstants.setForeground(a, UIManager.getColor("Label.foreground"));
+                StyleConstants.setForeground(a, AppTheme.getForeground());
             }
             default -> {
             }

@@ -57,7 +57,7 @@ public class NoServerFrame extends JFrame {
         // PANEL IZQUIERDO ---------------------------------------------------------------------------------------------
         JPanel panelIzquierdo = new JPanel(new BorderLayout());
         panelPrincipal.add(panelIzquierdo, BorderLayout.WEST);
-        panelIzquierdo.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+        panelIzquierdo.setBorder(BorderFactory.createLineBorder(AppTheme.getDialogBorderColor()));
 
         JLabel logoLabel = new JLabel(logo);
         panelIzquierdo.add(logoLabel, BorderLayout.NORTH);
@@ -91,7 +91,7 @@ public class NoServerFrame extends JFrame {
         c2.gridwidth = 2;
         c2.insets = new Insets(10, 10, 20, 10);
 
-        panelDerecho.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+        panelDerecho.setBorder(BorderFactory.createLineBorder(AppTheme.getDialogBorderColor()));
 
         JLabel avisoLabel = new JLabel("<html><div style=text-align:center>No hay ningún servidor configurado,<br> importa o crea uno para empezar.</html>");
         avisoLabel.setFont(new Font("Tahoma", Font.BOLD, 16));

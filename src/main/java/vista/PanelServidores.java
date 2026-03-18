@@ -266,7 +266,7 @@ public class PanelServidores extends FlatScrollPane {
         estado.setFont(estado.getFont().deriveFont(Font.BOLD, 14f)); // que esté bien grande
         boolean vivo = servidor.getServerProcess() != null && servidor.getServerProcess().isAlive();
         // El texto no cambia de color: solo el punto.
-        estado.setForeground(UIManager.getColor("Label.foreground"));
+        estado.setForeground(AppTheme.getForeground());
         actualizarEstadoLabel(estado, vivo);
         estado.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -498,49 +498,27 @@ public class PanelServidores extends FlatScrollPane {
     }
 
     private Color oscurecer(Color c, float amount) {
-        if(c == null) c = UIManager.getColor("Panel.background");
-        if(c == null) c = Color.LIGHT_GRAY;
-        amount = Math.max(0f, Math.min(1f, amount));
-        int r = (int) (c.getRed()   * (1f - amount));
-        int g = (int) (c.getGreen() * (1f - amount));
-        int b = (int) (c.getBlue()  * (1f - amount));
-        return new Color(r, g, b);
+        return AppTheme.darken(c, amount);
     }
 
     private Color tintar(Color accent, Color base, float t) {
-        if(base == null) base = UIManager.getColor("Panel.background");
-        if(base == null) base = Color.LIGHT_GRAY;
-        if(accent == null) accent = UIManager.getColor("Component.focusColor");
-        if(accent == null) accent = new Color(0, 120, 215);
-        t = Math.max(0f, Math.min(1f, t));
-        int r = (int) (base.getRed()   + (accent.getRed()   - base.getRed())   * t);
-        int g = (int) (base.getGreen() + (accent.getGreen() - base.getGreen()) * t);
-        int b = (int) (base.getBlue()  + (accent.getBlue()  - base.getBlue())  * t);
-        return new Color(r, g, b);
+        return AppTheme.tint(base, accent, t);
     }
 
     private void refrescarTema(boolean aplicarEnFilas){
-        arc = UIManager.getInt("Component.arc");
-        if(arc <= 0) arc = Main.DEFAULT_ARC;
+        arc = AppTheme.getArc();
 
-        acento = UIManager.getColor("Component.focusColor");
-        if(acento == null) acento = new Color(0, 120, 215);
+        acento = AppTheme.getMainAccent();
+        base = AppTheme.getBorderColor();
 
-        base = UIManager.getColor("Component.borderColor");
-        if(base == null) base = UIManager.getColor("Separator.foreground");
-        if(base == null) base = new Color(0, 0, 0, 60);
+        bgNormal = AppTheme.getPanelBackground();
+        bgHover = AppTheme.getHoverBackground();
+        bgPresionado = AppTheme.getPressedBackground();
+        bgSelected = AppTheme.getSelectionBackground();
 
-        bgNormal = UIManager.getColor("Panel.background");
-        if(bgNormal == null) bgNormal = getBackground();
-        if(bgNormal == null) bgNormal = Color.LIGHT_GRAY;
-
-        bgHover = oscurecer(bgNormal, 0.06f);
-        bgPresionado = oscurecer(bgNormal, 0.12f);
-        bgSelected = tintar(acento, bgNormal, 0.18f);
-
-        bordeRedondo = new FlatLineBorder(insets, base, 1f, arc);
-        bordeHover = new FlatLineBorder(insets, acento, 1f, arc);
-        bordeSeleccionado = new FlatLineBorder(insets, acento, 3f, arc);
+        bordeRedondo = AppTheme.createRoundedBorder(insets, 1f);
+        bordeHover = AppTheme.createAccentBorder(insets, 1f);
+        bordeSeleccionado = AppTheme.createAccentBorder(insets, 3f);
 
         if(!aplicarEnFilas) return;
         Component vista = getViewport().getView();

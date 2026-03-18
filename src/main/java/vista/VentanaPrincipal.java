@@ -18,7 +18,6 @@ import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.ui.FlatLineBorder;
 
 import javax.swing.*;
-import javax.swing.RepaintManager;
 import javax.swing.border.Border;
 import javax.swing.plaf.UIResource;
 import java.awt.*;
@@ -70,8 +69,7 @@ public class VentanaPrincipal extends JFrame {
         this.setTitle("Easy-MC-Server");
         this.setLocationRelativeTo(null);
         JPanel ventanaPrincipalPanel = new JPanel(new BorderLayout()); // el panel principal, donde se aloja todo
-        Color bgApp = UIManager.getColor("Panel.background");
-        if(bgApp == null) bgApp = Color.LIGHT_GRAY;
+        Color bgApp = AppTheme.getBackground();
         ventanaPrincipalPanel.setBackground(bgApp);
         this.setContentPane(ventanaPrincipalPanel);
 
@@ -85,15 +83,10 @@ public class VentanaPrincipal extends JFrame {
         panelIzquierdo.add(rendimientoPanel, BorderLayout.NORTH);
 
         // PANEL DE SERVIDORES (card con borde redondeado)
-        int arcLeft = UIManager.getInt("Component.arc");
-        if(arcLeft <= 0) arcLeft = Main.DEFAULT_ARC;
-        Color borderColorLeft = UIManager.getColor("Component.borderColor");
-        if(borderColorLeft == null) borderColorLeft = UIManager.getColor("Separator.foreground");
-        if(borderColorLeft == null) borderColorLeft = new Color(0, 0, 0, 60);
         servidoresCard = new JPanel(new BorderLayout());
         servidoresCard.setOpaque(true); // pinta el fondo del "card" para evitar artefactos al redimensionar
         servidoresCard.setBackground(bgApp);
-        servidoresCard.setBorder(new FlatLineBorder(new Insets(8, 8, 8, 8), borderColorLeft, 1f, arcLeft));
+        servidoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
         setBordeRedondoGestionado(servidoresCard, true);
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
@@ -372,11 +365,6 @@ public class VentanaPrincipal extends JFrame {
         panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
 
         // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
-        int arc = UIManager.getInt("Component.arc");
-        if(arc <= 0) arc = Main.DEFAULT_ARC;
-        Color borderColor = UIManager.getColor("Component.borderColor");
-        if(borderColor == null) borderColor = UIManager.getColor("Separator.foreground");
-        if(borderColor == null) borderColor = new Color(0, 0, 0, 60);
         JPanel headerCard = new JPanel(new BorderLayout());
         headerCard.setOpaque(false);
         headerCard.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
@@ -386,9 +374,10 @@ public class VentanaPrincipal extends JFrame {
 
         // Jugadores y consola con splitpane y bordes redondeados
         jugadoresCard = new JPanel(new BorderLayout());
-        jugadoresCard.setOpaque(false);
-        jugadoresCard.setBorder(null); // normalmente sin borde
-        setBordeRedondoGestionado(jugadoresCard, false);
+        jugadoresCard.setOpaque(true);
+        jugadoresCard.setBackground(AppTheme.getBackground());
+        jugadoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
+        setBordeRedondoGestionado(jugadoresCard, true);
         jugadoresCard.add(panelJugadores, BorderLayout.CENTER);
 
         consolaCard = new JPanel(new BorderLayout());
@@ -435,18 +424,12 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private JPanel crearBarraVertical(){
-        int arc = UIManager.getInt("Component.arc");
-        if(arc <= 0) arc = Main.DEFAULT_ARC;
-        Color borderColor = UIManager.getColor("Component.borderColor");
-        if(borderColor == null) borderColor = UIManager.getColor("Separator.foreground");
-        if(borderColor == null) borderColor = new Color(0, 0, 0, 60);
 
         JPanel barra = new JPanel(new BorderLayout());
         barra.setOpaque(true); // pinta el fondo de la barra para evitar "ghosting" al redimensionar
-        Color bg = UIManager.getColor("Panel.background");
-        if(bg != null) barra.setBackground(bg);
+        barra.setBackground(AppTheme.getBackground());
         barra.setPreferredSize(new Dimension(56, 0)); // más estrecha
-        barra.setBorder(new FlatLineBorder(new Insets(6, 6, 6, 6), borderColor, 1f, arc)); // padding reducido
+        barra.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f)); // padding reducido
         setBordeRedondoGestionado(barra, true);
 
         JPanel botones = new JPanel();
@@ -456,7 +439,7 @@ public class VentanaPrincipal extends JFrame {
         JButton home = crearNavButton("\uD83C\uDFE0", "HOME", PaginaDerecha.HOME);
         JButton mundo = crearNavButton("\uD83C\uDF0D", "MUNDO", PaginaDerecha.MUNDO);
         JButton config = crearNavButton("\u2699", "CONFIG", PaginaDerecha.CONFIG);
-        JButton mods = crearNavButton("\uD83E\uDDE9", "MODS", PaginaDerecha.MODS);
+        JButton mods = crearNavButton("▣", "MODS", PaginaDerecha.MODS);
         JButton temas = crearActionButton("\uD83D\uDD8C", "TEMAS", this::abrirSelectorTema);
         JButton info = crearNavButton("\u2139", "INFO", PaginaDerecha.INFO);
 
@@ -480,12 +463,10 @@ public class VentanaPrincipal extends JFrame {
                 if(!(src instanceof JButton b)) return;
                 if(b.getBackground() != null && b.isOpaque()) return; // ya seleccionado: no alterar
                 Color hoverSeleccion = colorSeleccionPanelServidores();
-                int arcHover = UIManager.getInt("Component.arc");
-                if(arcHover <= 0) arcHover = Main.DEFAULT_ARC;
                 b.setOpaque(true);
                 b.setContentAreaFilled(true);
                 b.setBackground(hoverSeleccion);
-                b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), hoverSeleccion, 1f, arcHover));
+                b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), hoverSeleccion, 1f, AppTheme.getArc()));
                 b.repaint();
             }
             @Override public void mouseExited(MouseEvent e) {
@@ -501,12 +482,10 @@ public class VentanaPrincipal extends JFrame {
         MouseAdapter temasHover = new MouseAdapter() {
             @Override public void mouseEntered(MouseEvent e) {
                 Color hoverSeleccion = colorSeleccionPanelServidores();
-                int arcHover = UIManager.getInt("Component.arc");
-                if(arcHover <= 0) arcHover = Main.DEFAULT_ARC;
                 temas.setOpaque(true);
                 temas.setContentAreaFilled(true);
                 temas.setBackground(hoverSeleccion);
-                temas.setBorder(new FlatLineBorder(new Insets(6,6,6,6), hoverSeleccion, 1f, arcHover));
+                temas.setBorder(new FlatLineBorder(new Insets(6,6,6,6), hoverSeleccion, 1f, AppTheme.getArc()));
                 temas.repaint();
             }
             @Override public void mouseExited(MouseEvent e) {
@@ -563,14 +542,10 @@ public class VentanaPrincipal extends JFrame {
         paginaDerechaActual = pagina;
         cardDerecho.show(panelDerechoCards, pagina.name());
 
-        Color acento = UIManager.getColor("Component.focusColor"); // color de selección "antiguo"
-        if(acento == null) acento = new Color(0, 120, 215);
-        Color bg = UIManager.getColor("Panel.background");
-        if(bg == null) bg = Color.LIGHT_GRAY;
-        Color fg = UIManager.getColor("Label.foreground");
-        if(fg == null) fg = Color.BLACK;
-        int arc = UIManager.getInt("Component.arc");
-        if(arc <= 0) arc = Main.DEFAULT_ARC;
+        Color acento = AppTheme.getMainAccent();
+        Color bg = AppTheme.getPanelBackground();
+        Color fg = AppTheme.getForeground();
+        int arc = AppTheme.getArc();
 
         for(Map.Entry<PaginaDerecha, JButton> e : navButtons.entrySet()){
             JButton b = e.getValue();
@@ -588,15 +563,7 @@ public class VentanaPrincipal extends JFrame {
 
     // Calcula el mismo color de selección usado en PanelServidores (tinte del acento sobre el fondo)
     private Color colorSeleccionPanelServidores(){
-        Color bg = UIManager.getColor("Panel.background");
-        if(bg == null) bg = Color.LIGHT_GRAY;
-        Color accent = UIManager.getColor("Component.focusColor");
-        if(accent == null) accent = new Color(0, 120, 215);
-        float t = 0.18f;
-        int r = (int)(bg.getRed()   + (accent.getRed()   - bg.getRed())   * t);
-        int g = (int)(bg.getGreen() + (accent.getGreen() - bg.getGreen()) * t);
-        int b = (int)(bg.getBlue()  + (accent.getBlue()  - bg.getBlue())  * t);
-        return new Color(r, g, b);
+        return AppTheme.getSelectionBackground();
     }
 
     private void abrirSelectorTema(){
@@ -743,19 +710,15 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private void refreshThemeStyles() {
-        Color bgApp = UIManager.getColor("Panel.background");
-        if (bgApp == null) bgApp = Color.LIGHT_GRAY;
+        Color bgApp = AppTheme.getBackground();
 
         Container cp = getContentPane();
         if (cp != null) cp.setBackground(bgApp);
         if (panelIzquierdo != null) panelIzquierdo.setBackground(bgApp);
         if (panelDerecho != null) panelDerecho.setBackground(bgApp);
 
-        int arc = UIManager.getInt("Component.arc");
-        if (arc <= 0) arc = Main.DEFAULT_ARC;
-        Color borderColor = UIManager.getColor("Component.borderColor");
-        if (borderColor == null) borderColor = UIManager.getColor("Separator.foreground");
-        if (borderColor == null) borderColor = new Color(0, 0, 0, 60);
+        int arc = AppTheme.getArc();
+        Color borderColor = AppTheme.getBorderColor();
 
         if (servidoresCard != null) {
             servidoresCard.setBackground(bgApp);
@@ -789,7 +752,7 @@ public class VentanaPrincipal extends JFrame {
         split.setBorder(null);
         split.setDividerSize(dividerSize);
         split.setUI(new NoGripSplitPaneUI());
-        Color bg = UIManager.getColor("Panel.background");
+        Color bg = AppTheme.getBackground();
         if(bg != null) split.setBackground(bg);
 
         // Forzar repintado completo cuando se mueve el divisor (evita artefactos de blit)

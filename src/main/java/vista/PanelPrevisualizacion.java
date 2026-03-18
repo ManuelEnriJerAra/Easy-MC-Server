@@ -163,7 +163,7 @@ public class PanelPrevisualizacion extends JPanel {
         motdLabel.setToolTipText("Click para editar MOTD");
         motdLabel.putClientProperty("fullText", motd == null ? "" : motd);
         motdLabel.setToolTipText(motd);
-        motdLabel.setForeground(Color.WHITE);
+        motdLabel.setForeground(AppTheme.getConsoleForeground());
         motdLabelRef[0] = motdLabel;
 
         Font motdFontNormal = motdLabel.getFont();
@@ -214,9 +214,9 @@ public class PanelPrevisualizacion extends JPanel {
         // MOTD en recuadro oscuro (2 líneas)
         JPanel motdBox = new JPanel(new BorderLayout());
         motdBox.setOpaque(true);
-        motdBox.setBackground(new Color(29, 32, 54));
+        motdBox.setBackground(AppTheme.getConsoleBackground());
         motdBox.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(255, 255, 255, 25), 1, true),
+                BorderFactory.createLineBorder(AppTheme.getConsoleOutlineColor(), 1, true),
                 BorderFactory.createEmptyBorder(6, 8, 6, 8)
         ));
         motdBox.add(motdLabel, BorderLayout.CENTER);

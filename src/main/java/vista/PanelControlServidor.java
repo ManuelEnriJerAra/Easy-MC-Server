@@ -34,9 +34,9 @@ public class PanelControlServidor extends JPanel {
     private JPanel panelBotonesIniciado;
 
     PanelControlServidor(GestorServidores gestorServidores) {
-        Color colorVerde = new Color(129, 247, 135);
-        Color colorRojo = new Color(255, 87, 87);
-        Color colorAmarillo = new Color(255, 214, 99);
+        Color colorVerde = AppTheme.getSuccessColor();
+        Color colorRojo = AppTheme.getDangerColor();
+        Color colorAmarillo = AppTheme.getWarningColor();
 
         Server server = gestorServidores.getServidorSeleccionado();
         this.setLayout(new BorderLayout());
@@ -54,7 +54,7 @@ public class PanelControlServidor extends JPanel {
         btnForzarCierreServidor = new FlatButton();
         btnForzarCierreServidor.setText("Forzar Cierre Servidor");
         btnForzarCierreServidor.setOutline(true);
-        btnForzarCierreServidor.setBackground(Color.RED);
+        btnForzarCierreServidor.setBackground(AppTheme.getDestructiveColor());
 
         panelBotonesIniciado = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();

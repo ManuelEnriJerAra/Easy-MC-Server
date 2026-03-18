@@ -13,15 +13,15 @@ public class NoGripSplitPaneUI extends BasicSplitPaneUI {
             public void paint(Graphics g) {
                 // Divisor invisible (sin grip/lineas) pero limpia el fondo para evitar artefactos.
                 Color bg = getBackground();
-                if(bg == null) bg = UIManager.getColor("Panel.background");
-                if(bg == null) bg = new Color(0, 0, 0, 0);
+                if(bg == null) bg = AppTheme.getBackground();
+                if(bg == null) bg = AppTheme.getTransparentColor();
                 g.setColor(bg);
                 g.fillRect(0, 0, getWidth(), getHeight());
             }
         };
         divider.setBorder(null);
-        Color bg = UIManager.getColor("Panel.background");
-        if(bg == null) bg = new Color(0, 0, 0, 0);
+        Color bg = AppTheme.getBackground();
+        if(bg == null) bg = AppTheme.getTransparentColor();
         divider.setBackground(bg);
         return divider;
     }

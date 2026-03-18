@@ -11,7 +11,17 @@ public final class AppTheme {
     private static final Color FALLBACK_ACCENT = new Color(0, 120, 215);
     private static final Color FALLBACK_BORDER = new Color(0, 0, 0, 60);
     private static final Color FALLBACK_FOREGROUND = Color.BLACK;
+    private static final Color FALLBACK_MUTED_FOREGROUND = Color.GRAY;
+    private static final Color FALLBACK_LINK = new Color(20, 90, 180);
+    private static final Color FALLBACK_DIALOG_BORDER = Color.LIGHT_GRAY;
+    private static final Color FALLBACK_SUBTLE_BORDER = new Color(0, 0, 0, 30);
     private static final Color DEFAULT_CONSOLE_BACKGROUND = Color.decode("#1D2036");
+    private static final Color DEFAULT_CONSOLE_FOREGROUND = Color.WHITE;
+    private static final Color DEFAULT_CONSOLE_CHAT = Color.CYAN;
+    private static final Color DEFAULT_CONSOLE_ERROR = Color.RED;
+    private static final Color DEFAULT_SUCCESS = new Color(129, 247, 135);
+    private static final Color DEFAULT_DANGER = new Color(255, 87, 87);
+    private static final Color DEFAULT_WARNING = new Color(255, 214, 99);
 
     private AppTheme() {
     }
@@ -46,12 +56,90 @@ public final class AppTheme {
         return fg != null ? fg : FALLBACK_FOREGROUND;
     }
 
+    public static Color getMutedForeground() {
+        Color fg = UIManager.getColor("Label.disabledForeground");
+        return fg != null ? fg : FALLBACK_MUTED_FOREGROUND;
+    }
+
+    public static Color getLinkForeground() {
+        Color link = UIManager.getColor("Component.linkColor");
+        return link != null ? link : FALLBACK_LINK;
+    }
+
+    public static Color getDialogBorderColor() {
+        return FALLBACK_DIALOG_BORDER;
+    }
+
+    public static Color getSubtleBorderColor() {
+        return FALLBACK_SUBTLE_BORDER;
+    }
+
     public static Color getConsoleBackground() {
         return DEFAULT_CONSOLE_BACKGROUND;
     }
 
-    public static Color getConsoleBorderColor() {
-        return getConsoleBackground();
+    public static Color getConsoleForeground() {
+        return DEFAULT_CONSOLE_FOREGROUND;
+    }
+
+    public static Color getConsoleInfoForeground() {
+        return DEFAULT_CONSOLE_FOREGROUND;
+    }
+
+    public static Color getConsoleChatForeground() {
+        return DEFAULT_CONSOLE_CHAT;
+    }
+
+    public static Color getConsoleErrorForeground() {
+        return DEFAULT_CONSOLE_ERROR;
+    }
+
+    public static Color getConsoleOutlineColor() {
+        return withAlpha(Color.WHITE, 25);
+    }
+
+    public static Color getSuccessColor() {
+        return DEFAULT_SUCCESS;
+    }
+
+    public static Color getDangerColor() {
+        return DEFAULT_DANGER;
+    }
+
+    public static Color getWarningColor() {
+        return DEFAULT_WARNING;
+    }
+
+    public static Color getDestructiveColor() {
+        return Color.RED;
+    }
+
+    public static Color getTransparentColor() {
+        return new Color(0, 0, 0, 0);
+    }
+
+    public static Color getImageHoverOverlayColor() {
+        return withAlpha(Color.BLACK, 90);
+    }
+
+    public static Color getImageHoverTextColor() {
+        return withAlpha(Color.WHITE, 230);
+    }
+
+    public static Color getCropBackground() {
+        return Color.DARK_GRAY;
+    }
+
+    public static Color getCropOverlayColor() {
+        return withAlpha(Color.BLACK, 120);
+    }
+
+    public static Color getCropSelectionBorderColor() {
+        return withAlpha(Color.WHITE, 220);
+    }
+
+    public static Color getCropHandleColor() {
+        return withAlpha(Color.WHITE, 240);
     }
 
     public static Color getHoverBackground() {
@@ -64,6 +152,10 @@ public final class AppTheme {
 
     public static Color getSelectionBackground() {
         return tint(getPanelBackground(), getMainAccent(), 0.18f);
+    }
+
+    public static Color getSoftSelectionBackground() {
+        return tint(getPanelBackground(), getMainAccent(), 0.10f);
     }
 
     public static Color tint(Color base, Color accent, float t) {
@@ -85,11 +177,21 @@ public final class AppTheme {
         return new Color(r, g, b);
     }
 
+    public static Color withAlpha(Color color, int alpha) {
+        Color base = color != null ? color : getForeground();
+        int a = Math.max(0, Math.min(255, alpha));
+        return new Color(base.getRed(), base.getGreen(), base.getBlue(), a);
+    }
+
     public static FlatLineBorder createRoundedBorder(Insets insets, float thickness) {
         return new FlatLineBorder(insets, getBorderColor(), thickness, getArc());
     }
 
+    public static FlatLineBorder createRoundedBorder(Insets insets, Color color, float thickness) {
+        return new FlatLineBorder(insets, color, thickness, getArc());
+    }
+
     public static FlatLineBorder createAccentBorder(Insets insets, float thickness) {
-        return new FlatLineBorder(insets, getMainAccent(), thickness, getArc());
+        return createRoundedBorder(insets, getMainAccent(), thickness);
     }
 }

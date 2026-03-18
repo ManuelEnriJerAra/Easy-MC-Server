@@ -1,10 +1,8 @@
 package vista;
 
 import controlador.GestorServidores;
-import controlador.Main;
 import controlador.IPPublica;
 import modelo.Server;
-import com.formdev.flatlaf.ui.FlatLineBorder;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
@@ -32,7 +30,7 @@ public class PanelTotalServidor extends JPanel {
         JLabel ipServidor = new JLabel("IP: (cargando...)");
         ipServidor.putClientProperty("fullText", "IP: (cargando...)");
         ipServidor.setFont(ipServidor.getFont().deriveFont(Font.BOLD, 16f));
-        ipServidor.setForeground(new Color(20, 90, 180));
+        ipServidor.setForeground(AppTheme.getLinkForeground());
         ipServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         Runnable actualizarTexto = () -> {
@@ -128,12 +126,7 @@ public class PanelTotalServidor extends JPanel {
     }
 
     private void refreshBorder(){
-        int arc = UIManager.getInt("Component.arc");
-        Color borderColor = UIManager.getColor("Component.borderColor");
-        if(borderColor == null) borderColor = UIManager.getColor("Separator.foreground");
-        if(borderColor == null) borderColor = new Color(0, 0, 0, 60);
-        if(arc <= 0) arc = Main.DEFAULT_ARC;
-        this.setBorder(new FlatLineBorder(new Insets(8, 8, 8, 8), borderColor, 1f, arc));
+        this.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
     }
 
     private void aplicarEllipsisLabel(JLabel label, int maxWidth){
