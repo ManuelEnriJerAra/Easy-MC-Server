@@ -420,7 +420,8 @@ public class VentanaPrincipal extends JFrame {
         panelDerechoCards.add(mods, PaginaDerecha.MODS.name());
         panelDerechoCards.add(info, PaginaDerecha.INFO.name());
 
-        setPaginaDerecha(PaginaDerecha.HOME);
+        PaginaDerecha paginaAMostrar = paginaDerechaActual != null ? paginaDerechaActual : PaginaDerecha.HOME;
+        setPaginaDerecha(paginaAMostrar);
         panelDerechoCards.revalidate();
         panelDerechoCards.repaint();
     }
@@ -881,3 +882,4 @@ public class VentanaPrincipal extends JFrame {
         button.setFocusPainted(false);
     }
 }
+
