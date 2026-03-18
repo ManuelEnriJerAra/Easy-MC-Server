@@ -49,8 +49,8 @@ public class MojangAPI {
             List<String> listaVersiones = new ArrayList<>();
 
             for(JsonNode node : manifest.get("versions")){
-                if(node.get("type").asText().equals("release"))
-                    listaVersiones.add(node.get("id").asText());
+                if(node.get("type").asString().equals("release"))
+                    listaVersiones.add(node.get("id").asString());
             }
 
             return listaVersiones;
@@ -63,8 +63,8 @@ public class MojangAPI {
         try{
             JsonNode manifest = getManifest();
             for(JsonNode node : manifest.get("versions")){
-                if(node.get("id").asText().equals(versionId))
-                    return node.get("url").asText();
+                if(node.get("id").asString().equals(versionId))
+                    return node.get("url").asString();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -81,7 +81,7 @@ public class MojangAPI {
 
             JsonNode serverNode = versionJson.get("downloads").get("server");
 
-            return serverNode.get("url").asText();
+            return serverNode.get("url").asString();
 
         } catch (Exception e){
             throw new RuntimeException(e);
@@ -152,7 +152,7 @@ public class MojangAPI {
             JsonNode node = mapper.readTree(new URL(UUID_BY_USERNAME_URL + username).openStream());
             JsonNode idNode = node.get("id");
             if(idNode == null) return null;
-            String id = idNode.asText();
+            String id = idNode.asString();
             return (id == null || id.isBlank()) ? null : id;
         } catch (Exception e){
             return null;
@@ -167,14 +167,14 @@ public class MojangAPI {
 
             for(JsonNode prop : props){
                 if(prop == null) continue;
-                if(!"textures".equals(prop.path("name").asText())) continue;
-                String value = prop.path("value").asText();
+                if(!"textures".equals(prop.path("name").asString())) continue;
+                String value = prop.path("value").asString();
                 if(value == null || value.isBlank()) continue;
 
                 byte[] decoded = Base64.getDecoder().decode(value);
                 JsonNode texturesJson = mapper.readTree(decoded);
                 JsonNode skinUrl = texturesJson.path("textures").path("SKIN").path("url");
-                String url = skinUrl.asText();
+                String url = skinUrl.asString();
                 return (url == null || url.isBlank()) ? null : url;
             }
             return null;

@@ -236,7 +236,8 @@ public class GestorServidores {
                     carpetaSeleccionada = carpetaSeleccionada.getParentFile();
                 }
                 // listado y selección de versión
-                JComboBox versionesBox = new JComboBox(MOJANG_API.obtenerListaVersiones().toArray());
+                JComboBox<String> versionesBox = new JComboBox<>(MOJANG_API.obtenerListaVersiones().toArray(new String[0]));
+
                 int versionSeleccionada = JOptionPane.showConfirmDialog(null, versionesBox, "Selecciona una versión", JOptionPane.OK_CANCEL_OPTION);
                 if (versionSeleccionada == JOptionPane.OK_OPTION) {
                     File newCarpeta = new File (carpetaSeleccionada.getAbsoluteFile(), versionesBox.getSelectedItem().toString()+"_server");

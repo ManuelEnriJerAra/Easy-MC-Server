@@ -312,9 +312,9 @@ public class PanelJugadores extends JPanel {
                 if(n == null) continue;
                 String v;
                 if(tipo == TipoLista.BANNED_IPS){
-                    v = n.path("ip").asText();
+                    v = n.path("ip").asString();
                 } else {
-                    v = n.path("name").asText();
+                    v = n.path("name").asString();
                 }
                 if(v == null) continue;
                 v = v.strip();
