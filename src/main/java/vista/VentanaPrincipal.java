@@ -101,6 +101,11 @@ public class VentanaPrincipal extends JFrame {
         servidoresPanel.setBackground(panelBg);
         servidoresCard.add(servidoresPanel, BorderLayout.CENTER);
 
+        JLabel tituloListaServidores = new JLabel("Lista de servidores");
+        tituloListaServidores.setFont(tituloListaServidores.getFont().deriveFont(Font.BOLD));
+        tituloListaServidores.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        servidoresPanel.add(tituloListaServidores, BorderLayout.NORTH);
+
         // PANEL DE LISTADO DE SERVIDORES
         listaServidoresPanel = getPanelServidores(gestorServidores);
         servidoresPanel.add(listaServidoresPanel, BorderLayout.CENTER);
@@ -378,6 +383,11 @@ public class VentanaPrincipal extends JFrame {
         headerCard.setOpaque(false);
         headerCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
         setBordeRedondoGestionado(headerCard, true);
+
+        JLabel tituloServidorSeleccionado = new JLabel("Servidor seleccionado");
+        tituloServidorSeleccionado.setFont(tituloServidorSeleccionado.getFont().deriveFont(Font.BOLD));
+        tituloServidorSeleccionado.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 10));
+        headerCard.add(tituloServidorSeleccionado, BorderLayout.NORTH);
         headerCard.add(panelTotalServidor, BorderLayout.CENTER);
 
         home.add(headerCard, BorderLayout.NORTH);

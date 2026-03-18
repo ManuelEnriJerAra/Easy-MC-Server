@@ -15,7 +15,7 @@ public class PanelTotalServidor extends JPanel {
         this.setLayout(new BorderLayout(10, 0));
         this.setOpaque(true);
         this.setBackground(AppTheme.getPanelBackground());
-        this.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        this.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
 
         // Previsualización e información a la izquierda
         JPanel panelInfo = new JPanel(new BorderLayout());

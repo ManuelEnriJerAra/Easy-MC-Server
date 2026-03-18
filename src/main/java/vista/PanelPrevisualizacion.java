@@ -22,6 +22,11 @@ public class PanelPrevisualizacion extends JPanel {
         this.server = gestorServidores.getServidorSeleccionado();
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
+
+        JPanel contenido = new JPanel(new BorderLayout());
+        contenido.setOpaque(false);
+        this.add(contenido, BorderLayout.CENTER);
+
         // Imagen a la izquierda
         ImageIcon icono = server.getServerIconOrUseDefault();
         ImagenRedondaLabel iconoRedondo = new ImagenRedondaLabel(icono, 10, 96, 96);
@@ -39,14 +44,14 @@ public class PanelPrevisualizacion extends JPanel {
         // En BorderLayout.WEST el componente se estira en altura; lo envolvemos para respetar 96x96.
         JPanel iconWrap = new JPanel(new GridBagLayout());
         iconWrap.setOpaque(false);
-        iconWrap.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        iconWrap.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
         iconWrap.add(iconoRedondo);
-        this.add(iconWrap, BorderLayout.WEST);
+        contenido.add(iconWrap, BorderLayout.WEST);
 
         // Texto a la derecha
         JPanel panelDatos = new JPanel();
         panelDatos.setOpaque(false);
-        panelDatos.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        panelDatos.setBorder(BorderFactory.createEmptyBorder(0, 10, 8, 10));
         panelDatos.setLayout(new BoxLayout(panelDatos, BoxLayout.Y_AXIS));
 
         String nombre = server.getDisplayName();
@@ -233,7 +238,7 @@ public class PanelPrevisualizacion extends JPanel {
         JPanel panelDatosWrap = new JPanel(new BorderLayout());
         panelDatosWrap.setOpaque(false);
         panelDatosWrap.add(panelDatos, BorderLayout.NORTH);
-        this.add(panelDatosWrap, BorderLayout.CENTER);
+        contenido.add(panelDatosWrap, BorderLayout.CENTER);
 
         // Ellipsize para que nombre/MOTD no rompan layout
         Runnable ajustar = () -> aplicarEllipsisTextos(nombreField, motdLabel);
