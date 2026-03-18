@@ -43,6 +43,7 @@ public class VentanaPrincipal extends JFrame {
     private static final String PROP_ROUNDED_BORDER_ENABLED = "easy-mc-server.roundedBorderEnabled";
 
     private final JPanel panelIzquierdo, panelDerecho;
+    private final GestorServidores gestorServidores;
     private JPanel servidoresCard; // card de la izquierda con borde redondeado
     private Server serverMostrado;
     private Consumer<String> consoleListenerActual;
@@ -64,6 +65,7 @@ public class VentanaPrincipal extends JFrame {
     private final Map<PaginaDerecha, JButton> navButtons = new EnumMap<>(PaginaDerecha.class);
 
     public VentanaPrincipal(GestorServidores gestorServidores) {
+        this.gestorServidores = gestorServidores;
         this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         this.setSize(1280, 720);
         this.setTitle("Easy-MC-Server");
@@ -737,11 +739,19 @@ public class VentanaPrincipal extends JFrame {
 
         // Recalcula colores y bordes de los botones de navegación según el tema actual.
         setPaginaDerecha(paginaDerechaActual);
-
-        // Fuerza a que el listado recalcule bordes/colores (también lo hace en updateUI()).
+        // Fuerza a que el listado recalcule bordes/colores (tambi?n lo hace en updateUI()).
         if (listaServidoresPanel != null) {
             listaServidoresPanel.updateUI();
             listaServidoresPanel.repaint();
+        }
+
+        // El HOME se construye con varios componentes y scrolls personalizados. Si el tema cambia,
+        // reconstruimos esa zona igual que cuando el usuario cambia de servidor, que es justo cuando
+        // el borde rectangular desaparece.
+        if (serverMostrado != null && this.gestorServidores != null && panelDerechoCards != null) {
+            PaginaDerecha paginaActual = paginaDerechaActual;
+            mostrarPanelDerecho(serverMostrado, this.gestorServidores);
+            setPaginaDerecha(paginaActual);
         }
     }
 
