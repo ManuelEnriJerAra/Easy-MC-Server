@@ -157,7 +157,7 @@ public class PanelConfigServidor extends JPanel {
             sp.setBorder(BorderFactory.createLineBorder(new Color(0, 0, 0, 30), 1, true));
             sp.setPreferredSize(new Dimension(200, 56));
             editor = sp;
-            // guardamos el textarea como editor lÃ³gico, pero mostramos el scroll
+            // guardamos el textarea como editor lógico, pero mostramos el scroll
             editors.put(key, ta);
             row.add(editor, BorderLayout.CENTER);
             return row;

@@ -108,10 +108,10 @@ public class PanelControlServidor extends JPanel {
         gestorServidores.addPropertyChangeListener("estadoServidor", listenerEstadoServidor);
         this.add(panelBotones, BorderLayout.CENTER);
 
-        // Sincroniza el estado inicial (si el servidor ya estaba iniciado, no llega ningÃºn evento)
+        // Sincroniza el estado inicial (si el servidor ya estaba iniciado, no llega ningún evento)
         actualizarBotonesSegunEstado(server);
 
-        // Ellipsize del texto cuando el panel sea pequeÃ±o
+        // Ellipsize del texto cuando el panel sea pequeño
         panelBotones.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {

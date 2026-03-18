@@ -101,7 +101,7 @@ public class PanelTotalServidor extends JPanel {
 
         panelInfo.add(panelPrevisualizacion, BorderLayout.NORTH);
         panelInfo.add(panelIPyTipo, BorderLayout.SOUTH);
-        // Va en CENTER para que se adapte/recorte y no invada el espacio del botÃ³n
+        // Va en CENTER para que se adapte/recorte y no invada el espacio del botón
         this.add(panelInfo, BorderLayout.CENTER);
 
         // Controles a la derecha

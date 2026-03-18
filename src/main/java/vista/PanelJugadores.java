@@ -223,7 +223,7 @@ public class PanelJugadores extends JPanel {
             }
         }
 
-        // Eliminar los que ya no estÃ¡n
+        // Eliminar los que ya no están
         Iterator<Map.Entry<String, PlayerPanel>> it = panelsPorJugador.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, PlayerPanel> entry = it.next();
@@ -232,7 +232,7 @@ public class PanelJugadores extends JPanel {
             it.remove();
         }
 
-        // AÃ±adir nuevos manteniendo orden
+        // Añadir nuevos manteniendo orden
         for (String name : target) {
             if (name == null || name.isBlank()) continue;
             if (panelsPorJugador.containsKey(name)) continue;

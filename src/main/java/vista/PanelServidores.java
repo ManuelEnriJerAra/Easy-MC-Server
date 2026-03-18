@@ -119,7 +119,7 @@ public class PanelServidores extends FlatScrollPane {
             this.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
         }
 
-        // Scroll mÃ¡s rÃ¡pido con la rueda del ratÃ³n
+        // Scroll más rápido con la rueda del ratón
         try{
             JScrollBar v = this.getVerticalScrollBar();
             if(v != null){
@@ -356,7 +356,7 @@ public class PanelServidores extends FlatScrollPane {
                     SwingUtilities.convertPointFromScreen(p, fila);
                     if(fila.contains(p)) return;
                 } catch (IllegalComponentStateException ignored){
-                    // si no estÃ¡ en pantalla, dejamos que resetee
+                    // si no está en pantalla, dejamos que resetee
                 }
                 if (fila != filaSeleccionada){
                     fila.setBorder(bordeRedondo);

@@ -96,7 +96,7 @@ public class MotdEditorDialog {
         dialog.setLocationRelativeTo(parent);
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
-        // Animar ofuscado (repintado periÃ³dico)
+        // Animar ofuscado (repintado periódico)
         Timer obfTimer = new Timer(140, e -> pane.repaint());
         obfTimerRef[0] = obfTimer;
         obfTimerRef[0].start();

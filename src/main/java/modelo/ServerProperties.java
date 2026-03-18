@@ -232,6 +232,7 @@ public class ServerProperties{
                         builder.append((char)caracter);
                     }
                 }
+                br.close();
             } catch (IOException e) {
                 System.out.println("Error al leer el archivo propiedades.");
             } catch (IllegalAccessException e) {

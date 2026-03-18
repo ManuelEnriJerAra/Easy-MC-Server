@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Fichero: GestorServidores.java
  *
  * Autor: Manuel Enrique Jerónimo Aragón
@@ -177,7 +177,7 @@ public class GestorServidores {
                     .toList();
             if (jars.size() != 1) return false;
 
-            Path jar = jars.getFirst();
+            Path jar = jars.get(0);
             try (JarFile jarFile = new JarFile(jar.toFile())) {
                 boolean tieneVersionJson = jarFile.getJarEntry("version.json") != null;
                 boolean tieneMinecraftServerClass = jarFile.getJarEntry("net/minecraft/server/MinecraftServer.class") != null;

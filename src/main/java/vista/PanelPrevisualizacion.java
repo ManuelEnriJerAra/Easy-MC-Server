@@ -74,7 +74,7 @@ public class PanelPrevisualizacion extends JPanel {
         nombreField.putClientProperty("fullText", nombre == null ? "" : nombre);
         nombreField.setToolTipText(nombre);
 
-        // EdiciÃ³n inline: click para editar, Enter o perder foco para guardar
+        // Edición inline: click para editar, Enter o perder foco para guardar
         nombreField.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         nombreField.setToolTipText("Click para editar (Enter o fuera para guardar)");
         nombreField.addMouseListener(new MouseAdapter() {
@@ -130,7 +130,7 @@ public class PanelPrevisualizacion extends JPanel {
                 } catch (RuntimeException ignored){
                 }
             } else {
-                // Si queda vacÃ­o, revertimos a lo anterior
+                // Si queda vacío, revertimos a lo anterior
                 String actual = server.getDisplayName();
                 nombreField.setText(actual == null ? "" : actual);
                 nombreField.putClientProperty("fullText", actual == null ? "" : actual);
@@ -250,7 +250,7 @@ public class PanelPrevisualizacion extends JPanel {
         String dir = server.getServerDir();
         if(dir == null || dir.isBlank()) return;
 
-        // File chooser nativo (Windows/Linux segÃºn toolkit): mÃ¡s rÃ¡pido que generar thumbnails en Swing
+        // File chooser nativo (Windows/Linux según toolkit): más rápido que generar thumbnails en Swing
         File selected = elegirImagenNativa();
         if(selected == null || !selected.exists()) return;
 
@@ -272,7 +272,7 @@ public class PanelPrevisualizacion extends JPanel {
             Files.createDirectories(outPath.getParent());
             ImageIO.write(icon64, "png", outPath.toFile());
 
-            // Usamos el BufferedImage directamente para evitar cachÃ© por ruta/ToolKit
+            // Usamos el BufferedImage directamente para evitar caché por ruta/ToolKit
             iconoRedondo.setImageIcon(new ImageIcon(icon64));
             iconoRedondo.revalidate();
             iconoRedondo.repaint();

@@ -78,7 +78,7 @@ public class Utilidades {
             if(jars.size()>1){ // más de un jar
                 throw new IllegalStateException("Se ha encontrado más de un jar en la dirección "+direccion);
             }
-            return jars.getFirst();
+            return jars.get(0);
         } catch (IOException e){
             System.out.println("No se ha podido encontrar el jar: "+e.getMessage());
             return null;
@@ -162,3 +162,4 @@ public class Utilidades {
     }
 
 }
+

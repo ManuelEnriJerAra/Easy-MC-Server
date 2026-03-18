@@ -343,7 +343,7 @@ public class VentanaPrincipal extends JFrame {
 
         //ventanaPrincipalPanel.add(panelDerecho, BorderLayout.EAST);
 
-        // Seleccion inicial (cuando ya estÃ¡n creados botones y panel derecho)
+        // Seleccion inicial (cuando ya están creados botones y panel derecho)
         SwingUtilities.invokeLater(() -> {
             if(gestorServidores.getServidorSeleccionado() == null
                     && gestorServidores.getListaServidores() != null
@@ -371,7 +371,7 @@ public class VentanaPrincipal extends JFrame {
         PanelConsola panelConsola = new PanelConsola(gestorServidores);
         panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
 
-        // Todo lo que estÃ¡ encima de los jugadores en un "card" con borde redondeado (FlatLaf)
+        // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
         int arc = UIManager.getInt("Component.arc");
         if(arc <= 0) arc = Main.DEFAULT_ARC;
         Color borderColor = UIManager.getColor("Component.borderColor");
@@ -603,7 +603,7 @@ public class VentanaPrincipal extends JFrame {
         SwingUtilities.invokeLater(() -> {
             java.util.List<TemaInfo> disponibles = new ArrayList<>();
 
-            // 1) Preferimos la lista completa de temas de FlatLaf (vÃ­a reflexiÃ³n para evitar dependencias de mÃ©todo)
+            // 1) Preferimos la lista completa de temas de FlatLaf (vía reflexión para evitar dependencias de método)
             try{
                 Class<?> all = Class.forName("com.formdev.flatlaf.intellijthemes.FlatAllIJThemes");
                 java.lang.reflect.Field infosField = all.getField("INFOS");

@@ -60,6 +60,7 @@ public class DetectorVersionServidor {
                 // buscamos si tiene un archivo version.json
 
                 JarEntry jarEntry = jar.getJarEntry("version.json");
+                jar.close();
                 if(jarEntry != null){
                     InputStream in = jar.getInputStream(jarEntry);
                     String version = leerVersionJSON(in);

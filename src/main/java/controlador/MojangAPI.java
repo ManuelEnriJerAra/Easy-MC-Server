@@ -184,7 +184,7 @@ public class MojangAPI {
     }
 
     private BufferedImage extraerCabezaDesdeSkin(BufferedImage skin){
-        // Formato skin clÃ¡sico: cara en (8,8) 8x8; capa (sombrero) en (40,8) 8x8
+        // Formato skin clásico: cara en (8,8) 8x8; capa (sombrero) en (40,8) 8x8
         BufferedImage base = skin.getSubimage(8, 8, 8, 8);
         BufferedImage overlay = skin.getSubimage(40, 8, 8, 8);
 

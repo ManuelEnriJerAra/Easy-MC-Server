@@ -110,7 +110,7 @@ public class Server {
 
         // límite para no sobrecargar memoria
         if(rawLogLines.size()>5000){
-            rawLogLines.removeFirst();
+            rawLogLines.remove(0);
         }
     }
 
