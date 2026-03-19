@@ -2,7 +2,7 @@
 
 Easy MC Server is a Java desktop application for managing Minecraft servers from a single graphical interface. It focuses on everyday administration tasks such as creating or importing servers, starting and stopping them, reading live console output, editing server settings, and managing connected players.
 
-![Application screenshot](screenshot.png)
+<img width="1589" height="895" alt="image" src="https://github.com/user-attachments/assets/b08dac19-d6c6-4766-9cd2-10a840552329" />
 
 ## Features
 
