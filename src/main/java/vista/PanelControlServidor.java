@@ -47,16 +47,20 @@ public class PanelControlServidor extends JPanel {
         btnIniciarServidor = new JButton("Iniciar Servidor");
         btnIniciarServidor.putClientProperty("fullText", "Iniciar Servidor");
         btnIniciarServidor.setBackground(colorVerde);
+        btnIniciarServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btnPararServidor = new JButton("Parar Servidor");
         btnPararServidor.putClientProperty("fullText", "Parar Servidor");
         btnPararServidor.setBackground(colorRojo);
+        btnPararServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btnReiniciarServidor = new JButton("Reiniciar Servidor");
         btnReiniciarServidor.putClientProperty("fullText", "Reiniciar Servidor");
         btnReiniciarServidor.setBackground(colorAmarillo);
+        btnReiniciarServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btnForzarCierreServidor = new FlatButton();
         btnForzarCierreServidor.setText("Forzar Cierre Servidor");
         btnForzarCierreServidor.setOutline(true);
         btnForzarCierreServidor.setBackground(AppTheme.getDestructiveColor());
+        btnForzarCierreServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         panelBotonesIniciado = new JPanel(new GridBagLayout());
         panelBotonesIniciado.setOpaque(false);

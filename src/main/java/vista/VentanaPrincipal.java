@@ -530,6 +530,7 @@ public class VentanaPrincipal extends JFrame {
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         b.setToolTipText(tooltip);
         b.setFont(b.getFont().deriveFont(Font.PLAIN, 18f));
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         b.setBorderPainted(true); // permitimos dibujar el borde en hover/seleccion
         b.setContentAreaFilled(false); // sin color de fondo por defecto
         b.setOpaque(false); // se pintará sólo cuando esté seleccionado
@@ -547,6 +548,7 @@ public class VentanaPrincipal extends JFrame {
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         b.setToolTipText(tooltip);
         b.setFont(b.getFont().deriveFont(Font.PLAIN, 18f));
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         b.setBorderPainted(false); // sin borde
         b.setContentAreaFilled(false); // fondo transparente
         b.setOpaque(false);
@@ -960,6 +962,7 @@ public class VentanaPrincipal extends JFrame {
         button.setOpaque(true);
         button.setContentAreaFilled(true);
         button.setBackground(AppTheme.getBackground());
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         button.addMouseListener(new MouseAdapter() {
             @Override
