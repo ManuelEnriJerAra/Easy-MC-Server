@@ -10,15 +10,14 @@ public class PanelMundo extends JPanel {
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
 
-        JLabel titulo = new JLabel("MUNDO");
-        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 18f));
-        titulo.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-        this.add(titulo, BorderLayout.NORTH);
+        SectionPanel section = new SectionPanel("Mundos");
+        section.setBorder(BorderFactory.createEmptyBorder());
+        this.add(section, BorderLayout.CENTER);
 
         JPanel body = new JPanel();
         body.setOpaque(false);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        body.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
 
         JButton cambiar = new JButton("Cambiar mundo (pendiente)");
         JButton importar = new JButton("Importar mundo (pendiente)");
@@ -39,7 +38,6 @@ public class PanelMundo extends JPanel {
         body.add(copiar);
         body.add(Box.createVerticalGlue());
 
-        this.add(body, BorderLayout.CENTER);
+        section.getContentPanel().add(body, BorderLayout.CENTER);
     }
 }
-

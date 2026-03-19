@@ -146,6 +146,12 @@ public final class AppTheme {
         return withAlpha(Color.WHITE, 240);
     }
 
+    public static void applyCardTitleStyle(JLabel label) {
+        if (label == null) return;
+        label.setFont(label.getFont().deriveFont(Font.BOLD));
+        label.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+    }
+
     public static Color getHoverBackground() {
         return darken(getPanelBackground(), 0.06f);
     }

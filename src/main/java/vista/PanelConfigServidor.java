@@ -13,6 +13,9 @@ import java.nio.file.Path;
 import java.util.*;
 
 public class PanelConfigServidor extends JPanel {
+    private static final String[] DIFFICULTY_OPTIONS = {"peaceful", "easy", "normal", "hard"};
+    private static final String[] GAMEMODE_OPTIONS = {"survival", "creative", "adventure", "spectator"};
+
     private final GestorServidores gestorServidores;
     private final JPanel formPanel;
     private final Map<String, JComponent> editors = new LinkedHashMap<>();
@@ -23,34 +26,33 @@ public class PanelConfigServidor extends JPanel {
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
 
-        JLabel titulo = new JLabel("CONFIG");
-        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 18f));
+        SectionPanel section = new SectionPanel("Configuración del servidor");
+        section.setBorder(BorderFactory.createEmptyBorder());
+        this.add(section, BorderLayout.CENTER);
 
         JButton recargar = new JButton("Recargar");
         JButton guardar = new JButton("Guardar");
-
-        JPanel top = new JPanel(new BorderLayout());
-        top.setOpaque(false);
-        top.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-        top.add(titulo, BorderLayout.WEST);
-
-        JPanel topBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        topBtns.setOpaque(false);
-        topBtns.add(recargar);
-        topBtns.add(guardar);
-        top.add(topBtns, BorderLayout.EAST);
-        this.add(top, BorderLayout.NORTH);
+        section.getActionsPanel().add(recargar);
+        section.getActionsPanel().add(guardar);
 
         formPanel = new JPanel();
         formPanel.setOpaque(false);
         formPanel.setLayout(new BoxLayout(formPanel, BoxLayout.Y_AXIS));
-        formPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        formPanel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
 
         JScrollPane scroll = new JScrollPane(formPanel);
         scroll.setBorder(null);
         scroll.getViewport().setOpaque(false);
         scroll.setOpaque(false);
-        this.add(scroll, BorderLayout.CENTER);
+        try{
+            JScrollBar v = scroll.getVerticalScrollBar();
+            if(v != null){
+                v.setUnitIncrement(24);
+                v.setBlockIncrement(90);
+            }
+        } catch (Exception ignored){
+        }
+        section.getContentPanel().add(scroll, BorderLayout.CENTER);
 
         recargar.addActionListener(e -> reload());
         guardar.addActionListener(e -> save());
@@ -112,6 +114,9 @@ public class PanelConfigServidor extends JPanel {
             String value;
             if(comp instanceof JCheckBox cb){
                 value = cb.isSelected() ? "true" : "false";
+            } else if(comp instanceof JComboBox<?> combo){
+                Object selected = combo.getSelectedItem();
+                value = selected == null ? "" : String.valueOf(selected);
             } else if(comp instanceof JTextArea ta){
                 value = ta.getText();
             } else if(comp instanceof JTextField tf){
@@ -144,7 +149,15 @@ public class PanelConfigServidor extends JPanel {
         row.add(k, BorderLayout.WEST);
 
         JComponent editor;
-        if("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)){
+        if("difficulty".equalsIgnoreCase(key)){
+            JComboBox<String> combo = new JComboBox<>(DIFFICULTY_OPTIONS);
+            combo.setSelectedItem(normalizeDifficulty(value));
+            editor = combo;
+        } else if("gamemode".equalsIgnoreCase(key)){
+            JComboBox<String> combo = new JComboBox<>(GAMEMODE_OPTIONS);
+            combo.setSelectedItem(normalizeGamemode(value));
+            editor = combo;
+        } else if("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)){
             JCheckBox cb = new JCheckBox();
             cb.setOpaque(false);
             cb.setSelected("true".equalsIgnoreCase(value));
@@ -157,7 +170,6 @@ public class PanelConfigServidor extends JPanel {
             sp.setBorder(BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true));
             sp.setPreferredSize(new Dimension(200, 56));
             editor = sp;
-            // guardamos el textarea como editor lógico, pero mostramos el scroll
             editors.put(key, ta);
             row.add(editor, BorderLayout.CENTER);
             return row;
@@ -169,6 +181,28 @@ public class PanelConfigServidor extends JPanel {
         editors.put(key, editor);
         row.add(editor, BorderLayout.CENTER);
         return row;
+    }
+
+    private static String normalizeDifficulty(String value){
+        if(value == null) return DIFFICULTY_OPTIONS[2];
+        return switch(value.strip().toLowerCase(Locale.ROOT)){
+            case "0", "peaceful" -> "peaceful";
+            case "1", "easy" -> "easy";
+            case "2", "normal" -> "normal";
+            case "3", "hard" -> "hard";
+            default -> "normal";
+        };
+    }
+
+    private static String normalizeGamemode(String value){
+        if(value == null) return GAMEMODE_OPTIONS[0];
+        return switch(value.strip().toLowerCase(Locale.ROOT)){
+            case "0", "survival" -> "survival";
+            case "1", "creative" -> "creative";
+            case "2", "adventure" -> "adventure";
+            case "3", "spectator" -> "spectator";
+            default -> "survival";
+        };
     }
 
     private void mostrarVacio(String msg){

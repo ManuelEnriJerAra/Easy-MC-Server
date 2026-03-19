@@ -62,8 +62,7 @@ public class PanelJugadores extends JPanel {
         this.setBackground(AppTheme.getPanelBackground());
 
         JLabel titulo = new JLabel("Jugadores");
-        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD));
-        titulo.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        AppTheme.applyCardTitleStyle(titulo);
         this.add(titulo, BorderLayout.NORTH);
 
         contenedorJugadores.setOpaque(true);

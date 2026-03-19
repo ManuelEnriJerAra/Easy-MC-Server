@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Fichero: VentanaPrincipal.java
  *
  * Autor: Manuel Enrique Jerónimo Aragón
@@ -89,11 +89,8 @@ public class VentanaPrincipal extends JFrame {
         panelIzquierdo.add(rendimientoPanel, BorderLayout.NORTH);
 
         // PANEL DE SERVIDORES (card con borde redondeado)
-        servidoresCard = new JPanel(new BorderLayout());
-        servidoresCard.setOpaque(true); // pinta el fondo del "card" para evitar artefactos al redimensionar
+        servidoresCard = new CardPanel(new BorderLayout(), new Insets(8, 8, 8, 8));
         servidoresCard.setBackground(panelBg);
-        servidoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
-        setBordeRedondoGestionado(servidoresCard, true);
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
         JPanel servidoresPanel = new JPanel(new BorderLayout());
@@ -102,8 +99,7 @@ public class VentanaPrincipal extends JFrame {
         servidoresCard.add(servidoresPanel, BorderLayout.CENTER);
 
         JLabel tituloListaServidores = new JLabel("Lista de servidores");
-        tituloListaServidores.setFont(tituloListaServidores.getFont().deriveFont(Font.BOLD));
-        tituloListaServidores.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        AppTheme.applyCardTitleStyle(tituloListaServidores);
         servidoresPanel.add(tituloListaServidores, BorderLayout.NORTH);
 
         // PANEL DE LISTADO DE SERVIDORES
@@ -308,16 +304,16 @@ public class VentanaPrincipal extends JFrame {
         wrapperIzquierdo.add(panelIzquierdo, BorderLayout.CENTER);
         wrapperIzquierdo.setOpaque(true);
         wrapperIzquierdo.setBackground(bgApp);
-        wrapperIzquierdo.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 2));
+        wrapperIzquierdo.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
 
         JPanel wrapperDerecho = new JPanel(new BorderLayout());
         wrapperDerecho.add(panelDerecho, BorderLayout.CENTER);
         wrapperDerecho.setOpaque(true);
         wrapperDerecho.setBackground(bgApp);
-        wrapperDerecho.setBorder(BorderFactory.createEmptyBorder(8, 2, 8, 8));
+        wrapperDerecho.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 8));
 
         splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, wrapperIzquierdo, wrapperDerecho);
-        configurarSplitPane(splitPrincipal, 6);
+        configurarSplitPane(splitPrincipal, 8);
         splitPrincipal.setResizeWeight(0.1);
         splitPrincipal.setOpaque(true);
         splitPrincipal.setBackground(bgApp);
@@ -326,7 +322,7 @@ public class VentanaPrincipal extends JFrame {
         JPanel barraWrapper = new JPanel(new BorderLayout());
         barraWrapper.setOpaque(true);
         barraWrapper.setBackground(bgApp);
-        barraWrapper.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 4)); // padding para alinear con el resto
+        barraWrapper.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
         barraWrapper.add(panelBarraVertical, BorderLayout.CENTER);
         ventanaPrincipalPanel.add(barraWrapper, BorderLayout.WEST);
         ventanaPrincipalPanel.add(splitPrincipal, BorderLayout.CENTER);
@@ -378,26 +374,18 @@ public class VentanaPrincipal extends JFrame {
         panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
 
         // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
-        JPanel headerCard = new RoundedBackgroundPanel(AppTheme.getPanelBackground(), AppTheme.getArc());
-        headerCard.setLayout(new BorderLayout());
-        headerCard.setOpaque(false);
-        headerCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
-        setBordeRedondoGestionado(headerCard, true);
+        JPanel headerCard = new CardPanel(new BorderLayout(), new Insets(8, 8, 8, 8));
 
         JLabel tituloServidorSeleccionado = new JLabel("Servidor seleccionado");
-        tituloServidorSeleccionado.setFont(tituloServidorSeleccionado.getFont().deriveFont(Font.BOLD));
-        tituloServidorSeleccionado.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 10));
+        AppTheme.applyCardTitleStyle(tituloServidorSeleccionado);
         headerCard.add(tituloServidorSeleccionado, BorderLayout.NORTH);
         headerCard.add(panelTotalServidor, BorderLayout.CENTER);
 
         home.add(headerCard, BorderLayout.NORTH);
 
         // Jugadores y consola con splitpane y bordes redondeados
-        jugadoresCard = new JPanel(new BorderLayout());
-        jugadoresCard.setOpaque(true);
+        jugadoresCard = new CardPanel(new BorderLayout(), new Insets(8, 8, 8, 8));
         jugadoresCard.setBackground(AppTheme.getPanelBackground());
-        jugadoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
-        setBordeRedondoGestionado(jugadoresCard, true);
         jugadoresCard.add(panelJugadores, BorderLayout.CENTER);
 
         consolaCard = new JPanel(new BorderLayout());
@@ -407,7 +395,7 @@ public class VentanaPrincipal extends JFrame {
         consolaCard.add(panelConsola, BorderLayout.CENTER);
 
         splitHome = new JSplitPane(JSplitPane.VERTICAL_SPLIT, jugadoresCard, consolaCard);
-        configurarSplitPane(splitHome, 6);
+        configurarSplitPane(splitHome, 8);
         splitHome.setResizeWeight(0.7);
 
         home.add(splitHome, BorderLayout.CENTER);
@@ -446,23 +434,20 @@ public class VentanaPrincipal extends JFrame {
 
     private JPanel crearBarraVertical(){
 
-        JPanel barra = new JPanel(new BorderLayout());
-        barra.setOpaque(true); // pinta el fondo de la barra para evitar "ghosting" al redimensionar
+        JPanel barra = new CardPanel(new BorderLayout(), new Insets(6, 6, 6, 6));
         barra.setBackground(AppTheme.getPanelBackground());
-        barra.setPreferredSize(new Dimension(56, 0)); // más estrecha
-        barra.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f)); // padding reducido
-        setBordeRedondoGestionado(barra, true);
+        barra.setPreferredSize(new Dimension(56, 0)); // m??s estrecha
 
         JPanel botones = new JPanel();
         botones.setOpaque(false);
         botones.setLayout(new BoxLayout(botones, BoxLayout.Y_AXIS));
 
-        JButton home = crearNavButton("\uD83C\uDFE0", "HOME", PaginaDerecha.HOME);
-        JButton mundo = crearNavButton("\uD83C\uDF0D", "MUNDO", PaginaDerecha.MUNDO);
-        JButton config = crearNavButton("\u2699", "CONFIG", PaginaDerecha.CONFIG);
-        JButton mods = crearNavButton("▣", "MODS", PaginaDerecha.MODS);
-        JButton temas = crearActionButton("\uD83D\uDD8C", "TEMAS", this::abrirSelectorTema);
-        JButton info = crearNavButton("\u2139", "INFO", PaginaDerecha.INFO);
+        JButton home = crearNavButton("\uD83C\uDFE0", "Home", PaginaDerecha.HOME);
+        JButton mundo = crearNavButton("\uD83C\uDF0D", "Mundos", PaginaDerecha.MUNDO);
+        JButton config = crearNavButton("\u2699", "Configuración del servidor", PaginaDerecha.CONFIG);
+        JButton mods = crearNavButton("▣", "Mods (Sin implementar)", PaginaDerecha.MODS);
+        JButton temas = crearActionButton("\uD83D\uDD8C", "Apariencia", this::abrirSelectorTema);
+        JButton info = crearNavButton("\u2139", "Información", PaginaDerecha.INFO);
 
         botones.add(home);
         botones.add(Box.createVerticalStrut(8));
@@ -812,8 +797,8 @@ public class VentanaPrincipal extends JFrame {
 
     private void reconfigurarSplitPanes(){
         SwingUtilities.invokeLater(() -> {
-            if(splitPrincipal != null) configurarSplitPane(splitPrincipal, 6);
-            if(splitHome != null) configurarSplitPane(splitHome, 6);
+            if(splitPrincipal != null) configurarSplitPane(splitPrincipal, 8);
+            if(splitHome != null) configurarSplitPane(splitHome, 8);
         });
     }
 
