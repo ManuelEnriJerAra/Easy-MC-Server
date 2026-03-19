@@ -36,5 +36,6 @@ public class ServerConfig {
     }
     public void setRamMax(int ramMax) {
         if (ramMax < this.ramInit) throw new IllegalArgumentException("Max RAM no válida");
+        this.ramMax = ramMax;
     }
 }
