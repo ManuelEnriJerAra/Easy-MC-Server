@@ -54,30 +54,27 @@ public class DetectorVersionServidor {
         }
 
         if(jarString != null){ // si lo hemos encontrado
-            try{
-                // convertimos el jarString en un JarFile para trabajar mejor con él
-                JarFile jar = new JarFile(jarString.toFile());
+            try (JarFile jar = new JarFile(jarString.toFile())) {
                 // buscamos si tiene un archivo version.json
-
                 JarEntry jarEntry = jar.getJarEntry("version.json");
-                jar.close();
                 if(jarEntry != null){
-                    InputStream in = jar.getInputStream(jarEntry);
-                    String version = leerVersionJSON(in);
-                    in.close();
-                    System.out.println("EL SERVIDOR "+server.getId()+" tiene version "+version);
-                    if(version != null){
-                        return version;
+                    try (InputStream in = jar.getInputStream(jarEntry)) {
+                        String version = leerVersionJSON(in);
+                        System.out.println("EL SERVIDOR "+server.getId()+" tiene version "+version);
+                        if(version != null){
+                            return version;
+                        }
                     }
                 }
                 /*
-                 * Mojang empezó a añadir el archivo version.json a partir de la versión 1.14, por lo tanto si el servidor
-                 * es de una versión anterior necesitamos leerlo por otro método, que será extrayéndolo de un archivo CLASS
+                 * Mojang empez� a a�adir el archivo version.json a partir de la versi�n 1.14, por lo tanto si el servidor
+                 * es de una versi�n anterior necesitamos leerlo por otro m�todo, que ser� extray�ndolo de un archivo CLASS
                  */
                 JarEntry jarEntry2 = jar.getJarEntry("net/minecraft/server/MinecraftServer.class");
                 if(jarEntry2 != null){
-                    InputStream in2 = jar.getInputStream(jarEntry2);
-                    return leerVersionCLASS(in2);
+                    try (InputStream in2 = jar.getInputStream(jarEntry2)) {
+                        return leerVersionCLASS(in2);
+                    }
                 }
             }
             catch(Exception e){
@@ -111,3 +108,4 @@ public class DetectorVersionServidor {
         }
     }
 }
+

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Fichero: GestorServidores.java
  *
  * Autor: Manuel Enrique Jerónimo Aragón
@@ -76,8 +76,13 @@ public class GestorServidores {
     private List<Server> cargarServidores(){
         File file = new File(JSON_FILE);
         if (!file.exists()) {
-            // el JSON está vacío, empezamos de cero
-            return new ArrayList<>();
+            List<Server> servidores = new ArrayList<>();
+            try{
+                mapper.writerWithDefaultPrettyPrinter().writeValue(file, servidores);
+            } catch (JacksonException e) {
+                System.err.println("Error al inicializar servidores: " + e.getMessage());
+            }
+            return servidores;
         }
         try{
             return mapper.readValue(file, new TypeReference<>(){});
@@ -679,3 +684,4 @@ public class GestorServidores {
         }
     }
 }
+
