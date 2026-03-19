@@ -45,6 +45,7 @@ public class VentanaPrincipal extends JFrame {
     private final JPanel panelIzquierdo, panelDerecho;
     private final GestorServidores gestorServidores;
     private JPanel servidoresCard; // card de la izquierda con borde redondeado
+    private JPanel servidoresPanel;
     private Server serverMostrado;
     private Consumer<String> consoleListenerActual;
     private JButton abrirCarpetaServerButton;
@@ -93,7 +94,7 @@ public class VentanaPrincipal extends JFrame {
         servidoresCard.setBackground(panelBg);
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
-        JPanel servidoresPanel = new JPanel(new BorderLayout());
+        servidoresPanel = new JPanel(new BorderLayout());
         servidoresPanel.setOpaque(true); // rellena el fondo bajo el listado para evitar "ghosting"
         servidoresPanel.setBackground(panelBg);
         servidoresCard.add(servidoresPanel, BorderLayout.CENTER);
@@ -736,6 +737,9 @@ public class VentanaPrincipal extends JFrame {
         if (servidoresCard != null) {
             servidoresCard.setBackground(panelBg);
             aplicarBordeRedondoGestionado(servidoresCard, new Insets(8, 8, 8, 8), borderColor, 1f, arc);
+        }
+        if (servidoresPanel != null) {
+            servidoresPanel.setBackground(panelBg);
         }
         if (botonesServidoresPanel != null) {
             botonesServidoresPanel.setBackground(panelBg);

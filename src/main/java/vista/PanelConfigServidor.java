@@ -42,13 +42,20 @@ public class PanelConfigServidor extends JPanel {
 
         JScrollPane scroll = new JScrollPane(formPanel);
         scroll.setBorder(null);
-        scroll.getViewport().setOpaque(false);
-        scroll.setOpaque(false);
+        scroll.setOpaque(true);
+        scroll.setBackground(AppTheme.getPanelBackground());
+        scroll.getViewport().setOpaque(true);
+        scroll.getViewport().setBackground(AppTheme.getPanelBackground());
         try{
             JScrollBar v = scroll.getVerticalScrollBar();
             if(v != null){
+                v.setBackground(AppTheme.getPanelBackground());
                 v.setUnitIncrement(24);
                 v.setBlockIncrement(90);
+            }
+            JScrollBar h = scroll.getHorizontalScrollBar();
+            if(h != null){
+                h.setBackground(AppTheme.getPanelBackground());
             }
         } catch (Exception ignored){
         }
