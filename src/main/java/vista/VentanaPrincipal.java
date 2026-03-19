@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Fichero: VentanaPrincipal.java
  *
  * Autor: Manuel Enrique Jerónimo Aragón
