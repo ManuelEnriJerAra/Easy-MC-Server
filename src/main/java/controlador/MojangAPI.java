@@ -21,7 +21,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
+import java.net.URI;
 import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -36,7 +36,7 @@ public class MojangAPI {
 
     public JsonNode getManifest() {
         try{
-            return mapper.readTree(new URL(VERSION_MANIFEST_URL).openStream());
+            return mapper.readTree(URI.create(VERSION_MANIFEST_URL).toURL().openStream());
         }
         catch(Exception e){
             throw new  RuntimeException(e);
@@ -77,7 +77,7 @@ public class MojangAPI {
             String versionJsonUrl = obtenerUrlVersionJson(versionId);
             if (versionJsonUrl == null) return null;
 
-            JsonNode versionJson = mapper.readTree(new URL(versionJsonUrl).openStream());
+            JsonNode versionJson = mapper.readTree(URI.create(versionJsonUrl).toURL().openStream());
 
             JsonNode serverNode = versionJson.get("downloads").get("server");
 
@@ -94,7 +94,7 @@ public class MojangAPI {
 
     public void descargar(String url, File destino, DownloadProgressListener listener){
         try{
-            URLConnection conn = new URL(url).openConnection();
+            URLConnection conn = URI.create(url).toURL().openConnection();
             long total = conn.getContentLengthLong();
 
             try(InputStream in = conn.getInputStream();
@@ -127,7 +127,7 @@ public class MojangAPI {
             String skinUrl = obtenerUrlSkinPorUuid(uuid);
             if(skinUrl == null) return null;
 
-            BufferedImage skin = ImageIO.read(new URL(skinUrl));
+            BufferedImage skin = ImageIO.read(URI.create(skinUrl).toURL());
             if(skin == null) return null;
 
             BufferedImage head = extraerCabezaDesdeSkin(skin);
@@ -149,7 +149,7 @@ public class MojangAPI {
 
     private String obtenerUuidPorUsername(String username){
         try{
-            JsonNode node = mapper.readTree(new URL(UUID_BY_USERNAME_URL + username).openStream());
+            JsonNode node = mapper.readTree(URI.create(UUID_BY_USERNAME_URL + username).toURL().openStream());
             JsonNode idNode = node.get("id");
             if(idNode == null) return null;
             String id = idNode.asString();
@@ -161,7 +161,7 @@ public class MojangAPI {
 
     private String obtenerUrlSkinPorUuid(String uuid){
         try{
-            JsonNode profile = mapper.readTree(new URL(SESSION_PROFILE_URL + uuid).openStream());
+            JsonNode profile = mapper.readTree(URI.create(SESSION_PROFILE_URL + uuid).toURL().openStream());
             JsonNode props = profile.get("properties");
             if(props == null || !props.isArray() || props.isEmpty()) return null;
 

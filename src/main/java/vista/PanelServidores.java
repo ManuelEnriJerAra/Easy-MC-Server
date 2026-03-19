@@ -12,7 +12,6 @@
 package vista;
 
 import controlador.GestorServidores;
-import controlador.Main;
 import controlador.Utilidades;
 import modelo.Server;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;

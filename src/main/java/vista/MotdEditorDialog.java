@@ -427,7 +427,7 @@ public class MotdEditorDialog {
         public ViewFactory getViewFactory() {
             return elem -> {
                 View v = defaultFactory.create(elem);
-                if (v instanceof LabelView lv) {
+                if (v instanceof LabelView) {
                     return new ObfuscatedLabelView(elem);
                 }
                 return v;

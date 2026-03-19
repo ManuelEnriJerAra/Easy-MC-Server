@@ -2,7 +2,6 @@ package vista;
 
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
-import javax.swing.*;
 import java.awt.*;
 
 public class NoGripSplitPaneUI extends BasicSplitPaneUI {
