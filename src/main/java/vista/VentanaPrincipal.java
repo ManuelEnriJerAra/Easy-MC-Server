@@ -44,7 +44,7 @@ public class VentanaPrincipal extends JFrame {
 
     private final JPanel panelIzquierdo, panelDerecho;
     private final GestorServidores gestorServidores;
-    private JPanel servidoresCard; // card de la izquierda con borde redondeado
+    private TitledCardPanel servidoresCard; // card de la izquierda con borde redondeado
     private JPanel servidoresPanel;
     private Server serverMostrado;
     private Consumer<String> consoleListenerActual;
@@ -64,7 +64,7 @@ public class VentanaPrincipal extends JFrame {
     private JPanel panelDerechoCards;
     private CardLayout cardDerecho;
     private JPanel panelBarraVertical;
-    private JPanel jugadoresCard; // card dentro del split del HOME
+    private TitledCardPanel jugadoresCard; // card dentro del split del HOME
     private JPanel consolaCard; // card dentro del split del HOME
     private final Map<PaginaDerecha, JButton> navButtons = new EnumMap<>(PaginaDerecha.class);
 
@@ -90,18 +90,14 @@ public class VentanaPrincipal extends JFrame {
         panelIzquierdo.add(rendimientoPanel, BorderLayout.NORTH);
 
         // PANEL DE SERVIDORES (card con borde redondeado)
-        servidoresCard = new CardPanel(new BorderLayout(), new Insets(8, 8, 8, 8));
-        servidoresCard.setBackground(panelBg);
+        servidoresCard = new TitledCardPanel("Lista de servidores", new Insets(8, 8, 8, 8));
+        servidoresCard.setBorder(BorderFactory.createEmptyBorder());
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
         servidoresPanel = new JPanel(new BorderLayout());
         servidoresPanel.setOpaque(true); // rellena el fondo bajo el listado para evitar "ghosting"
         servidoresPanel.setBackground(panelBg);
-        servidoresCard.add(servidoresPanel, BorderLayout.CENTER);
-
-        JLabel tituloListaServidores = new JLabel("Lista de servidores");
-        AppTheme.applyCardTitleStyle(tituloListaServidores);
-        servidoresPanel.add(tituloListaServidores, BorderLayout.NORTH);
+        servidoresCard.getContentPanel().add(servidoresPanel, BorderLayout.CENTER);
 
         // PANEL DE LISTADO DE SERVIDORES
         listaServidoresPanel = getPanelServidores(gestorServidores);
@@ -370,24 +366,21 @@ public class VentanaPrincipal extends JFrame {
         home.setOpaque(false);
 
         PanelTotalServidor panelTotalServidor = new PanelTotalServidor(gestorServidores);
-        PanelJugadores panelJugadores = new PanelJugadores(gestorServidores);
+        PanelJugadores panelJugadores = new PanelJugadores(gestorServidores, false);
         PanelConsola panelConsola = new PanelConsola(gestorServidores);
         panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
 
         // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
-        JPanel headerCard = new CardPanel(new BorderLayout(), new Insets(8, 8, 8, 8));
-
-        JLabel tituloServidorSeleccionado = new JLabel("Servidor seleccionado");
-        AppTheme.applyCardTitleStyle(tituloServidorSeleccionado);
-        headerCard.add(tituloServidorSeleccionado, BorderLayout.NORTH);
-        headerCard.add(panelTotalServidor, BorderLayout.CENTER);
+        TitledCardPanel headerCard = new TitledCardPanel("Servidor seleccionado", new Insets(8, 8, 8, 8));
+        headerCard.setBorder(BorderFactory.createEmptyBorder());
+        headerCard.getContentPanel().add(panelTotalServidor, BorderLayout.CENTER);
 
         home.add(headerCard, BorderLayout.NORTH);
 
         // Jugadores y consola con splitpane y bordes redondeados
-        jugadoresCard = new CardPanel(new BorderLayout(), new Insets(8, 8, 8, 8));
-        jugadoresCard.setBackground(AppTheme.getPanelBackground());
-        jugadoresCard.add(panelJugadores, BorderLayout.CENTER);
+        jugadoresCard = new TitledCardPanel("Jugadores", new Insets(8, 8, 8, 8));
+        jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
+        jugadoresCard.getContentPanel().add(panelJugadores, BorderLayout.CENTER);
 
         consolaCard = new JPanel(new BorderLayout());
         consolaCard.setOpaque(false);
@@ -735,8 +728,8 @@ public class VentanaPrincipal extends JFrame {
         Color borderColor = AppTheme.getBorderColor();
 
         if (servidoresCard != null) {
-            servidoresCard.setBackground(panelBg);
-            aplicarBordeRedondoGestionado(servidoresCard, new Insets(8, 8, 8, 8), borderColor, 1f, arc);
+            servidoresCard.getCard().setBackground(panelBg);
+            servidoresCard.getCard().setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
         }
         if (servidoresPanel != null) {
             servidoresPanel.setBackground(panelBg);
@@ -753,7 +746,8 @@ public class VentanaPrincipal extends JFrame {
             aplicarBordeRedondoGestionado(panelBarraVertical, new Insets(6, 6, 6, 6), borderColor, 1f, arc);
         }
         if (jugadoresCard != null) {
-            aplicarBordeRedondoGestionado(jugadoresCard, new Insets(8, 8, 8, 8), borderColor, 1f, arc);
+            jugadoresCard.getCard().setBackground(panelBg);
+            jugadoresCard.getCard().setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
         }
         if (consolaCard != null) {
             aplicarBordeRedondoGestionado(consolaCard, new Insets(8, 8, 8, 8), borderColor, 1f, arc);

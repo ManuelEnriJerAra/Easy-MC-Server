@@ -26,7 +26,7 @@ public class PanelConfigServidor extends JPanel {
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
 
-        SectionPanel section = new SectionPanel("Configuración del servidor");
+        TitledCardPanel section = new TitledCardPanel("Configuración del servidor");
         section.setBorder(BorderFactory.createEmptyBorder());
         this.add(section, BorderLayout.CENTER);
 

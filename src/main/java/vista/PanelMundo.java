@@ -10,7 +10,7 @@ public class PanelMundo extends JPanel {
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
 
-        SectionPanel section = new SectionPanel("Mundos");
+        TitledCardPanel section = new TitledCardPanel("Mundos");
         section.setBorder(BorderFactory.createEmptyBorder());
         this.add(section, BorderLayout.CENTER);
 

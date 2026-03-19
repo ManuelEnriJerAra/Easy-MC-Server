@@ -56,14 +56,20 @@ public class PanelJugadores extends JPanel {
     private final int maxPlayers;
 
     public PanelJugadores(GestorServidores gestorServidores) {
+        this(gestorServidores, true);
+    }
+
+    public PanelJugadores(GestorServidores gestorServidores, boolean showTitle) {
         this.gestorServidores = gestorServidores;
         this.setLayout(new BorderLayout());
         this.setOpaque(true);
         this.setBackground(AppTheme.getPanelBackground());
 
-        JLabel titulo = new JLabel("Jugadores");
-        AppTheme.applyCardTitleStyle(titulo);
-        this.add(titulo, BorderLayout.NORTH);
+        if(showTitle){
+            JLabel titulo = new JLabel("Jugadores");
+            AppTheme.applyCardTitleStyle(titulo);
+            this.add(titulo, BorderLayout.NORTH);
+        }
 
         contenedorJugadores.setOpaque(true);
         contenedorJugadores.setBackground(AppTheme.getPanelBackground());
