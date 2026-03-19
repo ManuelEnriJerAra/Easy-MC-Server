@@ -36,9 +36,14 @@ public class PanelJugadores extends JPanel {
     private static final Map<String, ImageIcon> CACHE_CABEZAS = new ConcurrentHashMap<>();
     private static final Set<String> CARGANDO = ConcurrentHashMap.newKeySet();
 
+    private static final String CARD_JUGADORES = "jugadores";
+    private static final String CARD_VACIO = "vacio";
+
     private final JPanel contenedorJugadores = new JPanel(new WrapLayout(FlowLayout.LEFT, 10, 8));
     private final Map<String, PlayerPanel> panelsPorJugador = new LinkedHashMap<>();
     private final JScrollPane scrollJugadores;
+    private final JPanel panelCentro = new JPanel(new CardLayout());
+    private final JPanel panelSinJugadores = new JPanel(new GridBagLayout());
 
     private final JButton btnWhitelist = new JButton();
     private final JButton btnOps = new JButton();
@@ -72,7 +77,20 @@ public class PanelJugadores extends JPanel {
         // Queremos que el panel ocupe el espacio y se adapte al ancho (varias filas). Si no cabe: scroll vertical.
         scrollJugadores.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollJugadores.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-        this.add(scrollJugadores, BorderLayout.CENTER);
+
+        JLabel labelSinJugadores = new JLabel("No hay ningun jugador conectado.");
+        labelSinJugadores.setFont(labelSinJugadores.getFont().deriveFont(Font.PLAIN, 15f));
+        labelSinJugadores.setForeground(AppTheme.getMutedForeground());
+        panelSinJugadores.setOpaque(true);
+        panelSinJugadores.setBackground(AppTheme.getPanelBackground());
+        panelSinJugadores.add(labelSinJugadores);
+
+        panelCentro.setOpaque(true);
+        panelCentro.setBackground(AppTheme.getPanelBackground());
+        panelCentro.add(scrollJugadores, CARD_JUGADORES);
+        panelCentro.add(panelSinJugadores, CARD_VACIO);
+
+        this.add(panelCentro, BorderLayout.CENTER);
         aplicarEstiloScrollJugadores();
 
         configurarBotonLista(btnWhitelist, "Whitelist", () -> abrirDialogoLista(
@@ -161,6 +179,10 @@ public class PanelJugadores extends JPanel {
         setBackground(panelBg);
         contenedorJugadores.setOpaque(true);
         contenedorJugadores.setBackground(panelBg);
+        panelCentro.setOpaque(true);
+        panelCentro.setBackground(panelBg);
+        panelSinJugadores.setOpaque(true);
+        panelSinJugadores.setBackground(panelBg);
         scrollJugadores.setBorder(null);
         scrollJugadores.setViewportBorder(null);
         scrollJugadores.setOpaque(true);
@@ -327,8 +349,15 @@ public class PanelJugadores extends JPanel {
     }
 
     private void refrescarUI(){
+        CardLayout cardLayout = (CardLayout) panelCentro.getLayout();
+        cardLayout.show(panelCentro, panelsPorJugador.isEmpty() ? CARD_VACIO : CARD_JUGADORES);
+
         contenedorJugadores.revalidate();
         contenedorJugadores.repaint();
+        panelSinJugadores.revalidate();
+        panelSinJugadores.repaint();
+        panelCentro.revalidate();
+        panelCentro.repaint();
         if(scrollJugadores.getViewport() != null){
             scrollJugadores.getViewport().revalidate();
             scrollJugadores.getViewport().repaint();
