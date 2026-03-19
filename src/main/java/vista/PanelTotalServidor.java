@@ -77,6 +77,17 @@ public class PanelTotalServidor extends JPanel {
             public void mouseClicked(MouseEvent e) {
                 Object copyObj = ipServidor.getClientProperty("copyText");
                 if(!(copyObj instanceof String copyText) || copyText.isBlank()) return;
+                int indexDosPuntos = copyText.indexOf(":");
+                String puerto = copyText.substring(indexDosPuntos+1, copyText.length()-1);
+                Boolean hasPort = false;
+                try{
+                    Integer.parseInt(puerto);
+                    hasPort = true;
+                }
+                catch(Exception error){
+                    System.out.println("No tiene puerto asignado.");
+                }
+                copyText = hasPort ? copyText : copyText.substring(0,indexDosPuntos);
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(copyText), null);
                 JOptionPane.showMessageDialog(
                         SwingUtilities.getWindowAncestor(PanelTotalServidor.this),
