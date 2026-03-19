@@ -136,14 +136,7 @@ public class Server {
             }
         }
         // si no se ha encontrado usamos la imagen por defecto
-        File porDefecto = new File("default_image.png");
-        if(porDefecto.exists()){
-            try{
-                BufferedImage img = ImageIO.read(porDefecto);
-                if(img != null) return new ImageIcon(img);
-            } catch (IOException ignored){
-            }
-        }
-        return new ImageIcon("default_image.png");
+        ImageIcon porDefecto = new ImageIcon(getClass().getResource("/default_image.png"));
+        return porDefecto;
     }
 }
