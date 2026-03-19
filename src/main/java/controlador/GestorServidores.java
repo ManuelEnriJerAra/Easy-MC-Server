@@ -27,6 +27,7 @@ import java.io.*;
 
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -53,6 +54,28 @@ public class GestorServidores {
 
     private static final String JSON_FILE = "ServerList.json";
 
+    private static File getJsonFile() {
+        try {
+            Path baseDir = Path.of(GestorServidores.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            if (Files.isRegularFile(baseDir)) {
+                baseDir = baseDir.getParent();
+            }
+
+            String normalized = baseDir.toString().replace('\\', '/');
+            if (normalized.endsWith("/target/classes")) {
+                baseDir = baseDir.getParent().getParent();
+            } else if (normalized.endsWith("/build/classes/java/main")) {
+                baseDir = baseDir.getParent().getParent().getParent().getParent();
+            } else if (normalized.endsWith("/bin/main")) {
+                baseDir = baseDir.getParent().getParent();
+            }
+
+            return baseDir.resolve(JSON_FILE).toFile();
+        } catch (URISyntaxException | RuntimeException e) {
+            return new File(JSON_FILE);
+        }
+    }
+
     private final ObjectMapper mapper = new ObjectMapper();
 
     private String avisoServidoresNoCargados;
@@ -74,7 +97,7 @@ public class GestorServidores {
 
     // cargamos todos los servidores del JSON
     private List<Server> cargarServidores(){
-        File file = new File(JSON_FILE);
+        File file = getJsonFile();
         if (!file.exists()) {
             List<Server> servidores = new ArrayList<>();
             try{
@@ -389,7 +412,7 @@ public class GestorServidores {
     // Guarda la lista de servidores en el JSON
     public void guardarServidores(){
         try{
-            mapper.writerWithDefaultPrettyPrinter().writeValue(new File(JSON_FILE), listaServidores);
+            mapper.writerWithDefaultPrettyPrinter().writeValue(getJsonFile(), listaServidores);
         } catch (JacksonException e) {
             System.err.println("Error al guardar servidores: " + e.getMessage());
         }
