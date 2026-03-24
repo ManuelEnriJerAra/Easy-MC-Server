@@ -57,6 +57,7 @@ public class VentanaPrincipal extends JFrame {
     private boolean cambiandoANoServerDialog = false;
     private JSplitPane splitPrincipal;
     private JSplitPane splitHome;
+    private PanelConfigServidor panelConfigServidor;
 
     private enum PaginaDerecha { HOME, MUNDO, CONFIG, MODS, INFO }
     private record TemaInfo(String name, String className){}
@@ -408,7 +409,8 @@ public class VentanaPrincipal extends JFrame {
         serverMostrado = server;
 
         JPanel mundo = new PanelMundo(gestorServidores);
-        JPanel config = new PanelConfigServidor(gestorServidores);
+        panelConfigServidor = new PanelConfigServidor(gestorServidores);
+        JPanel config = panelConfigServidor;
         JPanel mods = new JPanel(new BorderLayout());
         mods.setOpaque(false);
         JPanel info = new JPanel(new BorderLayout());
@@ -515,7 +517,7 @@ public class VentanaPrincipal extends JFrame {
         b.setOpaque(false); // se pintará sólo cuando esté seleccionado
         b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc())); // mantiene tama?o estable y permite mostrar borde en hover
         b.putClientProperty("JButton.buttonType", "roundRect"); // mantener esquinas redondeadas con FlatLaf
-        b.addActionListener(e -> setPaginaDerecha(pagina));
+        b.addActionListener(e -> navegarAPaginaDerecha(pagina));
         navButtons.put(pagina, b);
         return b;
     }
@@ -802,12 +804,14 @@ public class VentanaPrincipal extends JFrame {
 
     private void seleccionarServidor(Server server){
         if(server == null) return;
-        listaServidoresPanel.seleccionarServidor(server);
+        if(!aplicarCambioServidor(server, false)) return;
+        listaServidoresPanel.mostrarSeleccionServidor(server);
     }
 
     private void volverANoServerDialog(GestorServidores gestorServidores){
         if(cambiandoANoServerDialog) return;
         if(!isDisplayable()) return;
+        if(!confirmarSalidaConfiguracion(null, null)) return;
         cambiandoANoServerDialog = true;
 
         if(serverMostrado != null && consoleListenerActual != null){
@@ -823,6 +827,8 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private void intentarCerrarAplicacion(GestorServidores gestorServidores){
+        if(!confirmarSalidaConfiguracion(null, null)) return;
+
         List<Server> activos = gestorServidores.getServidoresActivos();
         if(activos.isEmpty()){
             this.dispose();
@@ -871,22 +877,7 @@ public class VentanaPrincipal extends JFrame {
 
     private PanelServidores getPanelServidores(GestorServidores gestorServidores) {
         PanelServidores listaServidoresPanel = new PanelServidores(gestorServidores);
-        listaServidoresPanel.setServidorSeleccionadoListener(server -> {
-            // compruebo si el servidor ya está seleccionado para ahorrar llamadas
-            if(gestorServidores.getServidorSeleccionado() != null && server.getId().equals(gestorServidores.getServidorSeleccionado().getId())) {
-                server.appendConsoleLinea("[INFO] El servidor ya está seleccionado.");
-            }
-            else{
-                // establecemos el servidor como seleccionado
-                gestorServidores.setServidorSeleccionado(server);
-                System.out.println("Servidor seleccionado: " + server.getServerDir());
-                if(abrirCarpetaServerButton != null) abrirCarpetaServerButton.setEnabled(true);
-                if(borrarServerButton != null) borrarServerButton.setEnabled(true);
-                if(panelDerecho != null) {
-                    mostrarPanelDerecho(server, gestorServidores);
-                }
-            }
-        });
+        listaServidoresPanel.setServidorSeleccionadoListener(server -> aplicarCambioServidor(server, true));
         listaServidoresPanel.setServidorContextMenuListener(new PanelServidores.ServidorContextMenuListener() {
             @Override
             public void abrirConfiguracion(Server server) {
@@ -908,8 +899,10 @@ public class VentanaPrincipal extends JFrame {
         boolean mismoServidor = esMismoServidor(serverSeleccionado, server);
 
         if(!mismoServidor){
-            seleccionarServidor(server);
+            if(!aplicarCambioServidor(server, false)) return;
+            listaServidoresPanel.mostrarSeleccionServidor(server);
         } else {
+            if(!confirmarSalidaConfiguracion(server, pagina)) return;
             gestorServidores.setServidorSeleccionado(server);
             if(abrirCarpetaServerButton != null) abrirCarpetaServerButton.setEnabled(true);
             if(borrarServerButton != null) borrarServerButton.setEnabled(true);
@@ -920,6 +913,57 @@ public class VentanaPrincipal extends JFrame {
         }
 
         setPaginaDerecha(pagina);
+    }
+
+    private void navegarAPaginaDerecha(PaginaDerecha pagina){
+        if(pagina == null) pagina = PaginaDerecha.HOME;
+        if(pagina == paginaDerechaActual){
+            setPaginaDerecha(pagina);
+            return;
+        }
+        if(!confirmarSalidaConfiguracion(gestorServidores.getServidorSeleccionado(), pagina)) return;
+        setPaginaDerecha(pagina);
+    }
+
+    private boolean aplicarCambioServidor(Server server, boolean restaurarSeleccionSiCancela){
+        if(server == null) return false;
+
+        Server servidorActual = gestorServidores.getServidorSeleccionado();
+        if(!confirmarSalidaConfiguracion(server, paginaDerechaActual)){
+            if(restaurarSeleccionSiCancela && servidorActual != null){
+                listaServidoresPanel.mostrarSeleccionServidor(servidorActual);
+            }
+            return false;
+        }
+
+        if(esMismoServidor(servidorActual, server)){
+            return true;
+        }
+
+        gestorServidores.setServidorSeleccionado(server);
+        System.out.println("Servidor seleccionado: " + server.getServerDir());
+        if(abrirCarpetaServerButton != null) abrirCarpetaServerButton.setEnabled(true);
+        if(borrarServerButton != null) borrarServerButton.setEnabled(true);
+        if(panelDerecho != null) {
+            mostrarPanelDerecho(server, gestorServidores);
+        }
+        return true;
+    }
+
+    private boolean confirmarSalidaConfiguracion(Server serverDestino, PaginaDerecha paginaDestino){
+        if(paginaDerechaActual != PaginaDerecha.CONFIG || panelConfigServidor == null){
+            return true;
+        }
+
+        Server servidorActual = gestorServidores.getServidorSeleccionado();
+        PaginaDerecha destino = paginaDestino != null ? paginaDestino : paginaDerechaActual;
+        boolean mismoServidor = esMismoServidor(servidorActual, serverDestino);
+        boolean permaneceEnConfiguracion = destino == PaginaDerecha.CONFIG && (serverDestino == null || mismoServidor);
+        if(permaneceEnConfiguracion){
+            return true;
+        }
+
+        return panelConfigServidor.confirmDiscardOrSave(this);
     }
 
     private boolean esMismoServidor(Server a, Server b){

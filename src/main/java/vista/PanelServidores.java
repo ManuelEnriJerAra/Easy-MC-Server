@@ -69,6 +69,14 @@ public class PanelServidores extends FlatScrollPane {
     }
 
     public void seleccionarServidor(Server server){
+        seleccionarServidor(server, true);
+    }
+
+    public void mostrarSeleccionServidor(Server server){
+        seleccionarServidor(server, false);
+    }
+
+    private void seleccionarServidor(Server server, boolean notificar){
         if(server == null) return;
         refrescarTema(true);
 
@@ -90,7 +98,7 @@ public class PanelServidores extends FlatScrollPane {
 
             marcarFilaSeleccionada(fila);
             fila.scrollRectToVisible(new Rectangle(0, 0, fila.getWidth(), fila.getHeight()));
-            if(listener != null){
+            if(notificar && listener != null){
                 listener.servidorSeleccionado(filaServer);
             }
             return;

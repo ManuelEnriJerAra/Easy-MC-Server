@@ -5,7 +5,10 @@ import modelo.Server;
 import modelo.ServerConfig;
 
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import javax.swing.event.ChangeListener;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.io.IOException;
 import java.io.InputStream;
@@ -74,6 +77,10 @@ public class PanelConfigServidor extends JPanel {
     private JLabel xmsValueLabel;
     private JLabel xmxValueLabel;
     private boolean updatingRamControls;
+    private final Map<String, String> persistedValues = new LinkedHashMap<>();
+    private int persistedXms;
+    private int persistedXmx;
+    private final JButton saveButton;
 
     PanelConfigServidor(GestorServidores gestorServidores){
         this.gestorServidores = gestorServidores;
@@ -85,9 +92,11 @@ public class PanelConfigServidor extends JPanel {
         this.add(section, BorderLayout.CENTER);
 
         JButton recargar = new JButton(tr("panel.config.reload", "Recargar"));
-        JButton guardar = new JButton(tr("panel.config.save", "Guardar"));
+        styleActionButton(recargar);
+        saveButton = new JButton(tr("panel.config.save", "Guardar"));
+        applyDefaultSaveButtonStyle();
         section.getActionsPanel().add(recargar);
-        section.getActionsPanel().add(guardar);
+        section.getActionsPanel().add(saveButton);
 
         formPanel = new JPanel();
         formPanel.setOpaque(false);
@@ -115,8 +124,8 @@ public class PanelConfigServidor extends JPanel {
         }
         section.getContentPanel().add(scroll, BorderLayout.CENTER);
 
-        recargar.addActionListener(e -> reload());
-        guardar.addActionListener(e -> save());
+        recargar.addActionListener(e -> reloadWithConfirmation());
+        saveButton.addActionListener(e -> save(false));
 
         SwingUtilities.invokeLater(this::reload);
     }
@@ -185,43 +194,114 @@ public class PanelConfigServidor extends JPanel {
         formPanel.add(Box.createVerticalGlue());
         formPanel.revalidate();
         formPanel.repaint();
+        markCurrentStateAsPersisted();
+        updateSaveButtonState();
     }
 
-    private void save(){
-        if(propertiesPath == null){
-            JOptionPane.showMessageDialog(this, tr("panel.config.save.no_properties", "No hay server.properties cargado."), tr("panel.config.dialog.title", "CONFIG"), JOptionPane.WARNING_MESSAGE);
-            return;
+    boolean hasUnsavedChanges(){
+        if(propertiesPath == null || editors.isEmpty()){
+            return false;
+        }
+        if(!persistedValues.equals(captureCurrentValues())){
+            return true;
+        }
+        return persistedXms != getCurrentXmsValue() || persistedXmx != getCurrentXmxValue();
+    }
+
+    boolean confirmDiscardOrSave(Component parent){
+        if(!hasUnsavedChanges()){
+            return true;
         }
 
+        JOptionPane optionPane = new JOptionPane(
+                "¿Quieres guardar los cambios?",
+                JOptionPane.WARNING_MESSAGE,
+                JOptionPane.DEFAULT_OPTION,
+                null,
+                new Object[0]
+        );
+
+        JButton yesButton = createAccentOptionButton("Sí");
+        JButton noButton = createSecondaryOptionButton("No");
+        JButton cancelButton = createSecondaryOptionButton("Cancelar");
+        optionPane.setOptions(new Object[]{yesButton, noButton, cancelButton});
+        optionPane.setInitialValue(yesButton);
+
+        JDialog dialog = optionPane.createDialog(parent != null ? parent : this, tr("panel.config.dialog.title", "CONFIG"));
+        dialog.setModal(true);
+
+        yesButton.addActionListener(e -> {
+            optionPane.setValue(yesButton);
+            dialog.dispose();
+        });
+        noButton.addActionListener(e -> {
+            optionPane.setValue(noButton);
+            dialog.dispose();
+        });
+        cancelButton.addActionListener(e -> {
+            optionPane.setValue(cancelButton);
+            dialog.dispose();
+        });
+
+        dialog.setVisible(true);
+
+        Object result = optionPane.getValue();
+        if(result == yesButton){
+            return save(false);
+        }
+        if(result == noButton){
+            return true;
+        }
+        return false;
+    }
+
+    private JButton createAccentOptionButton(String text){
+        JButton button = createOptionButton(text);
+        button.setBackground(AppTheme.getMainAccent());
+        button.setForeground(Color.WHITE);
+        return button;
+    }
+
+    private JButton createSecondaryOptionButton(String text){
+        JButton button = createOptionButton(text);
+        button.setBackground(AppTheme.getBackground());
+        button.setForeground(AppTheme.getForeground());
+        return button;
+    }
+
+    private JButton createOptionButton(String text){
+        JButton button = new JButton(text);
+        button.setFocusPainted(false);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return button;
+    }
+
+    private void reloadWithConfirmation(){
+        if(!confirmDiscardOrSave(this)){
+            return;
+        }
+        reload();
+    }
+
+    private boolean save(boolean showSuccessMessage){
+        if(propertiesPath == null){
+            JOptionPane.showMessageDialog(this, tr("panel.config.save.no_properties", "No hay server.properties cargado."), tr("panel.config.dialog.title", "CONFIG"), JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+
+        Map<String, String> currentValues = captureCurrentValues();
         Properties out = new Properties();
-        for(Map.Entry<String, JComponent> e : editors.entrySet()){
-            String key = e.getKey();
-            JComponent comp = e.getValue();
-            String value;
-            if(comp instanceof JCheckBox cb){
-                value = cb.isSelected() ? "true" : "false";
-            } else if(comp instanceof JComboBox<?> combo){
-                Object selected = combo.getSelectedItem();
-                value = selected == null ? "" : String.valueOf(selected);
-            } else if(comp instanceof JSpinner spinner){
-                Object spinnerValue = spinner.getValue();
-                value = spinnerValue == null ? "" : String.valueOf(spinnerValue);
-            } else if(comp instanceof JTextArea ta){
-                value = ta.getText();
-            } else if(comp instanceof JTextField tf){
-                value = tf.getText();
-            } else {
-                value = "";
-            }
-            if(value == null) value = "";
-            out.setProperty(key, value);
+        for(Map.Entry<String, String> entry : currentValues.entrySet()){
+            out.setProperty(entry.getKey(), entry.getValue());
         }
 
         try(OutputStream os = Files.newOutputStream(propertiesPath)){
             out.store(os, "Edited by Easy-MC-Server");
         } catch (IOException ex){
             JOptionPane.showMessageDialog(this, tr("panel.config.save.error", "Error guardando: ") + ex.getMessage(), tr("panel.config.dialog.title", "CONFIG"), JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
 
         Server server = gestorServidores.getServidorSeleccionado();
@@ -231,8 +311,8 @@ public class PanelConfigServidor extends JPanel {
                 config = new ServerConfig();
                 server.setServerConfig(config);
             }
-            int xms = xmsSlider != null ? xmsSlider.getValue() : config.getRamInit();
-            int xmx = xmxSlider != null ? xmxSlider.getValue() : config.getRamMax();
+            int xms = getCurrentXmsValue(config.getRamInit());
+            int xmx = getCurrentXmxValue(config.getRamMax());
             if(xmx < xms){
                 xmx = xms;
             }
@@ -241,7 +321,141 @@ public class PanelConfigServidor extends JPanel {
             gestorServidores.guardarServidor(server);
         }
 
-        JOptionPane.showMessageDialog(this, tr("panel.config.save.success", "Guardado correctamente."), tr("panel.config.dialog.title", "CONFIG"), JOptionPane.INFORMATION_MESSAGE);
+        markCurrentStateAsPersisted();
+        updateSaveButtonState();
+        return true;
+    }
+
+    private Map<String, String> captureCurrentValues(){
+        Map<String, String> values = new LinkedHashMap<>();
+        for(Map.Entry<String, JComponent> entry : editors.entrySet()){
+            values.put(entry.getKey(), readComponentValue(entry.getValue()));
+        }
+        return values;
+    }
+
+    private String readComponentValue(JComponent comp){
+        String value;
+        if(comp instanceof JCheckBox cb){
+            value = cb.isSelected() ? "true" : "false";
+        } else if(comp instanceof JComboBox<?> combo){
+            Object selected = combo.getSelectedItem();
+            value = selected == null ? "" : String.valueOf(selected);
+        } else if(comp instanceof JSpinner spinner){
+            Object spinnerValue = spinner.getValue();
+            value = spinnerValue == null ? "" : String.valueOf(spinnerValue);
+        } else if(comp instanceof JTextArea ta){
+            value = ta.getText();
+        } else if(comp instanceof JTextField tf){
+            value = tf.getText();
+        } else {
+            value = "";
+        }
+        return value == null ? "" : value;
+    }
+
+    private void markCurrentStateAsPersisted(){
+        persistedValues.clear();
+        persistedValues.putAll(captureCurrentValues());
+        persistedXms = getCurrentXmsValue();
+        persistedXmx = getCurrentXmxValue();
+    }
+
+    private void updateSaveButtonState(){
+        if(saveButton == null) return;
+        boolean hasUnsavedChanges = hasUnsavedChanges();
+        applyDefaultSaveButtonStyle();
+        saveButton.setEnabled(hasUnsavedChanges);
+        if(hasUnsavedChanges){
+            saveButton.setBackground(AppTheme.getMainAccent());
+            saveButton.setForeground(Color.WHITE);
+            saveButton.setBorder(AppTheme.createAccentBorder(new Insets(6, 12, 6, 12), 1f));
+        }
+        saveButton.revalidate();
+        saveButton.repaint();
+    }
+
+    private void applyDefaultSaveButtonStyle(){
+        if(saveButton == null) return;
+        styleActionButton(saveButton);
+    }
+
+    private void styleActionButton(JButton button){
+        if(button == null) return;
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setOpaque(false);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(true);
+        button.putClientProperty("JButton.buttonType", "roundRect");
+        button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
+        button.setBackground(AppTheme.getBackground());
+        button.setForeground(AppTheme.getForeground());
+    }
+
+    private void attachDirtyTracking(JCheckBox checkBox){
+        checkBox.addActionListener(e -> updateSaveButtonState());
+    }
+
+    private void attachDirtyTracking(JComboBox<?> combo){
+        combo.addActionListener(e -> updateSaveButtonState());
+        if(combo.isEditable()){
+            Component editor = combo.getEditor().getEditorComponent();
+            if(editor instanceof JTextField textField){
+                attachDirtyTracking(textField);
+            }
+        }
+    }
+
+    private void attachDirtyTracking(JSpinner spinner){
+        spinner.addChangeListener(e -> updateSaveButtonState());
+    }
+
+    private void attachDirtyTracking(JTextComponent textComponent){
+        textComponent.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                updateSaveButtonState();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                updateSaveButtonState();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                updateSaveButtonState();
+            }
+        });
+    }
+
+    private int getCurrentXmsValue(){
+        return getCurrentXmsValue(RAM_MIN_MB);
+    }
+
+    private int getCurrentXmxValue(){
+        return getCurrentXmxValue(RAM_MIN_MB);
+    }
+
+    private int getCurrentXmsValue(int fallback){
+        if(xmsSlider != null){
+            return xmsSlider.getValue();
+        }
+        if(xmsSpinner != null){
+            return normalizeRamValue(((Number) xmsSpinner.getValue()).intValue());
+        }
+        return normalizeRamValue(fallback);
+    }
+
+    private int getCurrentXmxValue(int fallback){
+        if(xmxSlider != null){
+            return xmxSlider.getValue();
+        }
+        if(xmxSpinner != null){
+            return normalizeRamValue(((Number) xmxSpinner.getValue()).intValue());
+        }
+        return normalizeRamValue(fallback);
     }
 
     private JComponent crearSeccion(String title, java.util.List<String> keys, Properties props){
@@ -539,6 +753,7 @@ public class PanelConfigServidor extends JPanel {
         checkBox.setOpaque(false);
         checkBox.setSelected("true".equalsIgnoreCase(spec.value()));
         applyTooltip(checkBox, spec.key());
+        attachDirtyTracking(checkBox);
         editors.put(spec.key(), checkBox);
         card.add(checkBox, BorderLayout.CENTER);
         makeWidthFlexible(card);
@@ -660,6 +875,7 @@ public class PanelConfigServidor extends JPanel {
             xmsSpinner.setValue(xms);
             xmxSpinner.setValue(xmx);
             updateRamLabels();
+            updateSaveButtonState();
         } finally {
             updatingRamControls = false;
         }
@@ -683,6 +899,7 @@ public class PanelConfigServidor extends JPanel {
             xmsSlider.setValue(xms);
             xmxSlider.setValue(xmx);
             updateRamLabels();
+            updateSaveButtonState();
         } finally {
             updatingRamControls = false;
         }
@@ -711,6 +928,7 @@ public class PanelConfigServidor extends JPanel {
         if("difficulty".equalsIgnoreCase(key)){
             JComboBox<String> combo = new JComboBox<>(DIFFICULTY_OPTIONS);
             combo.setSelectedItem(normalizeDifficulty(value));
+            attachDirtyTracking(combo);
             editors.put(key, combo);
             makeWidthFlexible(combo);
             return combo;
@@ -719,6 +937,7 @@ public class PanelConfigServidor extends JPanel {
         if("gamemode".equalsIgnoreCase(key)){
             JComboBox<String> combo = new JComboBox<>(GAMEMODE_OPTIONS);
             combo.setSelectedItem(normalizeGamemode(value));
+            attachDirtyTracking(combo);
             editors.put(key, combo);
             makeWidthFlexible(combo);
             return combo;
@@ -728,6 +947,7 @@ public class PanelConfigServidor extends JPanel {
             JComboBox<String> combo = new JComboBox<>(LEVEL_TYPE_OPTIONS);
             combo.setEditable(true);
             combo.setSelectedItem(normalizeLevelType(value));
+            attachDirtyTracking(combo);
             editors.put(key, combo);
             makeWidthFlexible(combo);
             return combo;
@@ -737,6 +957,7 @@ public class PanelConfigServidor extends JPanel {
             JTextArea ta = new JTextArea(value == null ? "" : value, 2, 20);
             ta.setLineWrap(true);
             ta.setWrapStyleWord(true);
+            attachDirtyTracking(ta);
             JScrollPane sp = new JScrollPane(ta);
             sp.setBorder(BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true));
             sp.setPreferredSize(new Dimension(200, 52));
@@ -749,12 +970,14 @@ public class PanelConfigServidor extends JPanel {
         if(detectFieldKind(key, value) == FieldKind.NUMBER){
             int numericValue = parseIntegerValue(value);
             JSpinner spinner = new JSpinner(new SpinnerNumberModel(numericValue, Integer.MIN_VALUE, Integer.MAX_VALUE, 1));
+            attachDirtyTracking(spinner);
             editors.put(key, spinner);
             makeWidthFlexible(spinner);
             return spinner;
         }
 
         JTextField tf = new JTextField(value == null ? "" : value);
+        attachDirtyTracking(tf);
         editors.put(key, tf);
         makeWidthFlexible(tf);
         return tf;
@@ -887,6 +1110,7 @@ public class PanelConfigServidor extends JPanel {
 
     private void mostrarVacio(String msg){
         editors.clear();
+        persistedValues.clear();
         xmsSlider = null;
         xmxSlider = null;
         xmsSpinner = null;
@@ -894,7 +1118,10 @@ public class PanelConfigServidor extends JPanel {
         xmsValueLabel = null;
         xmxValueLabel = null;
         updatingRamControls = false;
+        persistedXms = 0;
+        persistedXmx = 0;
         formPanel.removeAll();
+        updateSaveButtonState();
         JLabel label = new JLabel(msg);
         label.setBorder(BorderFactory.createEmptyBorder(20, 10, 20, 10));
         formPanel.add(label);
