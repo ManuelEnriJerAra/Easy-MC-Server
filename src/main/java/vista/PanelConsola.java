@@ -13,6 +13,8 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,6 +42,7 @@ public class PanelConsola extends JPanel {
     private Style styleError;
 
     private final Deque<String> rawLineas = new ArrayDeque<>();
+    private final Set<String> jugadoresConectados = new LinkedHashSet<>();
 
     private final GestorServidores gestorServidores;
     private final FlatCheckBox vistaSimpleCheckbox = new FlatCheckBox();
@@ -182,6 +185,7 @@ public class PanelConsola extends JPanel {
 
         rawLineas.clear();
         rawLineas.addAll(server.getRawLogLines());
+        jugadoresConectados.clear();
 
         reconstruirDocumentoCompleto();
     }
@@ -205,6 +209,7 @@ public class PanelConsola extends JPanel {
 
             boolean vistaSimple = vistaSimpleCheckbox.isSelected();
             RenderLine renderLine = render(raw, vistaSimple);
+            actualizarJugadoresConectados(raw);
 
             // si no hay traducción no imprimimos nada
             if(vistaSimple && renderLine.texto==null) return;
@@ -220,8 +225,10 @@ public class PanelConsola extends JPanel {
             throw new RuntimeException(e);
         }
         boolean vistaSimple = vistaSimpleCheckbox.isSelected();
+        jugadoresConectados.clear();
         for(String raw : rawLineas){
             RenderLine renderLine = render(raw, vistaSimple);
+            actualizarJugadoresConectados(raw);
 
             if(vistaSimple && renderLine.texto==null) continue;
 
@@ -286,6 +293,8 @@ public class PanelConsola extends JPanel {
         Matcher mChat = CHAT.matcher(linea);
         if(mChat.find()){
             String user = mChat.group(1);
+            if(user != null) user = user.trim();
+            if(user == null || user.isBlank() || !jugadoresConectados.contains(user)) return null;
             String mensaje = mChat.group(2);
             mensaje = mensaje.replaceAll("§.", "").trim();
             if(mensaje.isBlank()) return null;
@@ -304,6 +313,32 @@ public class PanelConsola extends JPanel {
         return null;
     }
 
+    private void actualizarJugadoresConectados(String linea){
+        if(linea == null || linea.isBlank()) return;
+
+        Matcher mJoin = JOIN.matcher(linea);
+        if(mJoin.find()){
+            String nombre = mJoin.group(1);
+            if(nombre != null){
+                nombre = nombre.trim();
+                if(!nombre.isBlank()){
+                    jugadoresConectados.add(nombre);
+                }
+            }
+            return;
+        }
+
+        Matcher mLeft = LEFT.matcher(linea);
+        if(mLeft.find()){
+            String nombre = mLeft.group(1);
+            if(nombre != null){
+                nombre = nombre.trim();
+                if(!nombre.isBlank()){
+                    jugadoresConectados.remove(nombre);
+                }
+            }
+        }
+    }
     private static class RenderLine {
         final String texto;
         final Style estilo;
@@ -322,3 +357,4 @@ public class PanelConsola extends JPanel {
         return null;
     }
 }
+

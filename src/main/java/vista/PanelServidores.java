@@ -542,29 +542,6 @@ public class PanelServidores extends FlatScrollPane {
         estado.setText("<html><span style='color:" + dotColor + ";'>●</span> " + texto + "</html>");
     }
 
-    // Este método es el encargado de mostrar los errores que han ocurrido durante la inicialización del panel
-    private void mostrarErrores(List<Server> servidoresEliminar){
-        JPanel panelDeError = new JPanel(new BorderLayout());
-        JTextArea errorText = new JTextArea(
-                "Se eliminarán los siguientes servidores de la lista de servidores guardados, " +
-                        "si la ubicación ha cambiado puedes volver a importarlos:"
-        );
-        errorText.setEditable(false);
-        errorText.setLineWrap(true);
-        errorText.setWrapStyleWord(true);
-        errorText.setOpaque(true);
-
-        JScrollPane scrollPaneEliminar = new JScrollPane(
-                new JList<>(servidoresEliminar.toArray(new Server[0]))
-        );
-
-        panelDeError.add(errorText, BorderLayout.NORTH);
-        panelDeError.add(scrollPaneEliminar, BorderLayout.CENTER);
-
-        JOptionPane.showMessageDialog(this, panelDeError, "Servidores incorrectos", JOptionPane.WARNING_MESSAGE);
-    }
-
-
     private void marcarFilaSeleccionada(JPanel fila){
         refrescarTema(true);
         if(filaSeleccionada != null){
