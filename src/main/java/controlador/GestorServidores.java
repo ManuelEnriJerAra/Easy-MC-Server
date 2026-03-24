@@ -31,7 +31,12 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.jar.JarFile;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
@@ -92,7 +97,11 @@ public class GestorServidores {
     // Constructor por defecto
     public GestorServidores() {
         this.listaServidores = cargarServidores();
+        boolean cambiosOrden = normalizarMetadatosOrden(true);
         validarYLimpiarServidoresPersistidos();
+        if (cambiosOrden) {
+            guardarServidores();
+        }
     }
 
     // cargamos todos los servidores del JSON
@@ -113,6 +122,135 @@ public class GestorServidores {
             System.err.println("Error al cargar servidores: " + e.getMessage());
             return new ArrayList<>();
         }
+    }
+
+    private boolean normalizarMetadatosOrden(boolean reordenarListaInterna) {
+        if (listaServidores == null) {
+            listaServidores = new ArrayList<>();
+            return false;
+        }
+
+        boolean cambios = false;
+        List<Server> depurada = new ArrayList<>();
+        for (Server server : listaServidores) {
+            if (server == null) {
+                cambios = true;
+                continue;
+            }
+            if (asegurarMetadatosPersistentes(server)) {
+                cambios = true;
+            }
+            depurada.add(server);
+        }
+        listaServidores = depurada;
+
+        List<Server> porOrdenBase = new ArrayList<>(listaServidores);
+        porOrdenBase.sort(Comparator.comparingInt(this::valorOrdenListaParaNormalizar));
+        for (int i = 0; i < porOrdenBase.size(); i++) {
+            Server server = porOrdenBase.get(i);
+            if (!Objects.equals(server.getOrdenLista(), i)) {
+                server.setOrdenLista(i);
+                cambios = true;
+            }
+        }
+
+        int siguienteOrdenFavorito = obtenerSiguienteOrdenFavorito();
+        for (Server server : listaServidores) {
+            if (!Boolean.TRUE.equals(server.getFavorito())) {
+                continue;
+            }
+            if (server.getOrdenFavorito() != null) {
+                continue;
+            }
+            server.setOrdenFavorito(siguienteOrdenFavorito++);
+            cambios = true;
+        }
+
+        if (reordenarListaInterna) {
+            listaServidores = copiarListaServidoresOrdenada();
+        }
+        return cambios;
+    }
+
+    private boolean asegurarMetadatosPersistentes(Server server) {
+        boolean cambios = false;
+        if (server.getId() == null || server.getId().isBlank()) {
+            server.setId(UUID.randomUUID().toString());
+            cambios = true;
+        }
+        if (server.getServerConfig() == null) {
+            server.setServerConfig(new ServerConfig());
+            cambios = true;
+        }
+        if (server.getFavorito() == null) {
+            server.setFavorito(Boolean.FALSE);
+            cambios = true;
+        }
+        return cambios;
+    }
+
+    private void copiarMetadatosOrdenSiFaltan(Server origen, Server destino) {
+        if (origen == null || destino == null) return;
+        if (destino.getOrdenLista() == null) {
+            destino.setOrdenLista(origen.getOrdenLista());
+        }
+        if (destino.getFavorito() == null) {
+            destino.setFavorito(origen.getFavorito());
+        }
+        if (destino.getOrdenFavorito() == null) {
+            destino.setOrdenFavorito(origen.getOrdenFavorito());
+        }
+    }
+
+    private int valorOrdenListaParaNormalizar(Server server) {
+        if (server == null || server.getOrdenLista() == null) {
+            return Integer.MAX_VALUE;
+        }
+        return server.getOrdenLista();
+    }
+
+    private int valorOrdenVisual(Integer orden) {
+        return orden == null ? Integer.MAX_VALUE : orden;
+    }
+
+    private int obtenerSiguienteOrdenLista() {
+        int maximo = -1;
+        for (Server server : listaServidores) {
+            if (server == null || server.getOrdenLista() == null) continue;
+            maximo = Math.max(maximo, server.getOrdenLista());
+        }
+        return maximo + 1;
+    }
+
+    private int obtenerSiguienteOrdenFavorito() {
+        int maximo = -1;
+        for (Server server : listaServidores) {
+            if (server == null || server.getOrdenFavorito() == null) continue;
+            maximo = Math.max(maximo, server.getOrdenFavorito());
+        }
+        return maximo + 1;
+    }
+
+    private Comparator<Server> comparadorVisualServidores() {
+        return Comparator
+                .comparing((Server server) -> !Boolean.TRUE.equals(server.getFavorito()))
+                .thenComparingInt(server -> Boolean.TRUE.equals(server.getFavorito())
+                        ? valorOrdenVisual(server.getOrdenFavorito())
+                        : Integer.MAX_VALUE)
+                .thenComparingInt(server -> valorOrdenVisual(server.getOrdenLista()))
+                .thenComparing(server -> textoOrdenable(server.getDisplayName()), String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(server -> textoOrdenable(server.getServerDir()), String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(server -> textoOrdenable(server.getId()), String.CASE_INSENSITIVE_ORDER);
+    }
+
+    private List<Server> copiarListaServidoresOrdenada() {
+        List<Server> ordenados = new ArrayList<>(listaServidores);
+        ordenados.sort(comparadorVisualServidores());
+        return ordenados;
+    }
+
+    private String textoOrdenable(String texto) {
+        return texto == null ? "" : texto;
     }
 
     // esta función de encarga de comprobar si los servidores almacenados son correctos, si no lo son se eliminan
@@ -146,9 +284,13 @@ public class GestorServidores {
         }
 
         // si todos los servidores eran cargables ignoramos la revisión y no notificamos nada
+        listaServidores = cargables;
+        if (normalizarMetadatosOrden(true)) {
+            cambios = true;
+        }
+
         if (noCargables.isEmpty() && !cambios) return;
 
-        listaServidores = cargables;
         guardarServidores();
         notificarCambio();
 
@@ -240,7 +382,7 @@ public class GestorServidores {
 
     // este método notifica a los oyentes de que ha ocurrido un cambio en la lista de servidores
     private void notificarCambio(){
-        pcs.firePropertyChange("listaServidores", null, listaServidores);
+        pcs.firePropertyChange("listaServidores", null, getListaServidores());
     }
 
     // este método notifica a los oyentes de que ha ocurrido un cambio en el estado del servidor
@@ -411,17 +553,97 @@ public class GestorServidores {
 
     // Guarda la lista de servidores en el JSON
     public void guardarServidores(){
+        normalizarMetadatosOrden(true);
         try{
-            mapper.writerWithDefaultPrettyPrinter().writeValue(getJsonFile(), listaServidores);
+            mapper.writerWithDefaultPrettyPrinter().writeValue(getJsonFile(), copiarListaServidoresOrdenada());
         } catch (JacksonException e) {
             System.err.println("Error al guardar servidores: " + e.getMessage());
         }
     }
 
-    // Guarda un sólo servidor en la lista de servidores y luego lo guarda en el JSON
+    public List<Server> getListaServidores() {
+        normalizarMetadatosOrden(false);
+        return copiarListaServidoresOrdenada();
+    }
+
+    public void setListaServidores(List<Server> listaServidores) {
+        this.listaServidores = listaServidores == null ? new ArrayList<>() : new ArrayList<>(listaServidores);
+        normalizarMetadatosOrden(true);
+    }
+
+    // Guarda un s?lo servidor en la lista de servidores y luego lo guarda en el JSON
     public void guardarServidor(Server server){
-        listaServidores.removeIf(servidor -> servidor.getId().equals(server.getId()));
-        listaServidores.add(server);
+        if (server == null) return;
+        if (listaServidores == null) {
+            listaServidores = new ArrayList<>();
+        }
+
+        asegurarMetadatosPersistentes(server);
+
+        int indiceExistente = -1;
+        for (int i = 0; i < listaServidores.size(); i++) {
+            Server actual = listaServidores.get(i);
+            if (actual == null) continue;
+            if (Objects.equals(actual.getId(), server.getId())) {
+                indiceExistente = i;
+                copiarMetadatosOrdenSiFaltan(actual, server);
+                break;
+            }
+        }
+
+        if (indiceExistente >= 0) {
+            listaServidores.set(indiceExistente, server);
+        } else {
+            if (server.getOrdenLista() == null) {
+                server.setOrdenLista(obtenerSiguienteOrdenLista());
+            }
+            listaServidores.add(server);
+        }
+
+        if (Boolean.TRUE.equals(server.getFavorito()) && server.getOrdenFavorito() == null) {
+            server.setOrdenFavorito(obtenerSiguienteOrdenFavorito());
+        }
+
+        guardarServidores();
+        notificarCambio();
+    }
+
+    public void establecerFavorito(Server server, boolean favorito) {
+        if (server == null) return;
+
+        Server serverPersistido = getServerById(server.getId());
+        if (serverPersistido == null) return;
+        if (Boolean.valueOf(favorito).equals(serverPersistido.getFavorito())) return;
+
+        serverPersistido.setFavorito(favorito);
+        if (favorito && serverPersistido.getOrdenFavorito() == null) {
+            serverPersistido.setOrdenFavorito(obtenerSiguienteOrdenFavorito());
+        }
+
+        guardarServidor(serverPersistido);
+    }
+
+    public void reordenarServidores(List<String> serverIds) {
+        if (serverIds == null || serverIds.isEmpty()) return;
+        normalizarMetadatosOrden(false);
+
+        Set<String> idsAplicados = new HashSet<>();
+        int orden = 0;
+        for (String id : serverIds) {
+            Server server = getServerById(id);
+            if (server == null) continue;
+            if (!idsAplicados.add(id)) continue;
+            server.setOrdenLista(orden++);
+        }
+
+        List<Server> resto = new ArrayList<>(listaServidores);
+        resto.sort(Comparator.comparingInt(server -> valorOrdenVisual(server.getOrdenLista())));
+        for (Server server : resto) {
+            if (server == null) continue;
+            if (!idsAplicados.add(server.getId())) continue;
+            server.setOrdenLista(orden++);
+        }
+
         guardarServidores();
         notificarCambio();
     }
@@ -430,13 +652,15 @@ public class GestorServidores {
     public boolean eliminarServidor(Server server){
         if(server == null) return false;
         if(server.getServerProcess() != null && server.getServerProcess().isAlive()){
-            return false; // no podemos eliminarlo mientras está en ejecución para no dejar procesos abiertos
+            return false; // no podemos eliminarlo mientras est? en ejecuci?n para no dejar procesos abiertos
         }
 
-        boolean removed = listaServidores.removeIf(s -> s.getId().equals(server.getId()));
+        boolean removed = listaServidores.removeIf(s -> Objects.equals(s.getId(), server.getId()));
         if(!removed) return false;
 
-        if(servidorSeleccionado != null && servidorSeleccionado.getId().equals(server.getId())){
+        normalizarMetadatosOrden(true);
+
+        if(servidorSeleccionado != null && Objects.equals(servidorSeleccionado.getId(), server.getId())){
             servidorSeleccionado = null;
         }
         // Una vez eliminado de la lista de servidores guardamos el JSON
@@ -623,7 +847,12 @@ public class GestorServidores {
     }
 
     public Server getServerById(String id){
-        return listaServidores.stream().filter(servidor -> servidor.getId().equals(id)).findFirst().orElse(null);
+        if (listaServidores == null || id == null) return null;
+        return listaServidores.stream()
+                .filter(Objects::nonNull)
+                .filter(servidor -> Objects.equals(servidor.getId(), id))
+                .findFirst()
+                .orElse(null);
     }
 
     public void mandarComando(Server server, String comando){

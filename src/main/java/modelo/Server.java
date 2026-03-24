@@ -43,6 +43,9 @@ public class Server {
     private String tipo; // tipo del servidor (Vanilla, Forge, Fabric, etc.)
     private String serverDir; // carpeta del servidor
     private ServerConfig serverConfig; // contiene XMS RAM, XMX RAM y el puerto
+    private Integer ordenLista; // orden manual/base de la lista, preparado para drag and drop futuro
+    private Boolean favorito; // indica si el servidor se muestra en el bloque superior de favoritos
+    private Integer ordenFavorito; // orden estable entre favoritos, segun cuando se marcaron por primera vez
 
     // ===== DATOS DE EJECUCIÓN =====
     // lo que sea transient no se va a guardar en el JSON
@@ -140,3 +143,4 @@ public class Server {
         return porDefecto;
     }
 }
+

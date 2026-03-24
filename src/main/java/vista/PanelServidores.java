@@ -173,22 +173,7 @@ public class PanelServidores extends FlatScrollPane {
             SwingUtilities.invokeLater(() -> recargarPanel(servidores, gestorServidores));
         });
 
-        JPanel panelContenedor = new JPanel(); // panel que engloba todas las filas
-        panelContenedor.setOpaque(true);
-        panelContenedor.setBackground(bgLista);
-        panelContenedor.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6)); // deja aire para que se vea el radio
-        panelContenedor.setLayout(new BoxLayout(panelContenedor, BoxLayout.Y_AXIS));
-        List<Server> servidores = gestorServidores.getListaServidores(); // hacemos una lista de ServerConfig donde se guardarán los servidores
-        List<Server> servidoresEliminar = new ArrayList<>();
-        for (Server server : servidores) { // la recorremos y para cada una de ellas
-            // Compruebo la versión lo primero para saber si el servidor es correcto
-            if(server.getVersion()!=null){
-                JPanel fila = crearFila(server, server.getVersion());
-
-                panelContenedor.add(fila);
-            }
-        }
-        this.setViewportView(panelContenedor);
+        this.setViewportView(construirPanelContenedor(gestorServidores.getListaServidores()));
         // Importante: updateUI() puede ser llamado desde el constructor de JScrollPane (super),
         // antes de que se ejecuten los inicializadores de campos. A partir de aquí ya es seguro
         // recalcular bordes/arcos usando UIManager.
@@ -197,27 +182,42 @@ public class PanelServidores extends FlatScrollPane {
 
     private void recargarPanel(List<Server> servidores, GestorServidores gestorServidores){
         refrescarTema(true);
+        Server servidorSeleccionadoActual = obtenerServidorSeleccionadoActual();
+        JPanel panelContenedor = construirPanelContenedor(servidores);
+
+        filaSeleccionada = null;
+        this.setViewportView(panelContenedor);
+        if(servidorSeleccionadoActual != null){
+            mostrarSeleccionServidor(servidorSeleccionadoActual);
+        }
+        this.revalidate();
+        this.repaint();
+    }
+
+    private JPanel construirPanelContenedor(List<Server> servidores){
         JPanel panelContenedor = new JPanel();
         panelContenedor.setOpaque(true);
         panelContenedor.setBackground(bgLista);
         panelContenedor.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6)); // deja aire para que se vea el radio
         panelContenedor.setLayout(new BoxLayout(panelContenedor, BoxLayout.Y_AXIS));
 
-        List<Server> servidoresEliminar = new ArrayList<>();
+        if(servidores == null) return panelContenedor;
 
         for(Server servidor : servidores){
-            if(servidor.getVersion() != null){
-                JPanel fila = crearFila(servidor, servidor.getVersion());
-                panelContenedor.add(fila);
-            } else {
-                servidoresEliminar.add(servidor);
-            }
+            if(servidor == null || servidor.getVersion() == null) continue;
+            JPanel fila = crearFila(servidor, servidor.getVersion());
+            panelContenedor.add(fila);
         }
+        return panelContenedor;
+    }
 
-        // Actualizamos el JScrollPane
-        this.setViewportView(panelContenedor);
-        this.revalidate();
-        this.repaint();
+    private Server obtenerServidorSeleccionadoActual(){
+        if(gestorServidores != null && gestorServidores.getServidorSeleccionado() != null){
+            return gestorServidores.getServidorSeleccionado();
+        }
+        if(filaSeleccionada == null) return null;
+        Object serverObj = filaSeleccionada.getClientProperty("server");
+        return serverObj instanceof Server server ? server : null;
     }
 
     private JPanel crearFila(Server servidor, String version){
@@ -265,7 +265,14 @@ public class PanelServidores extends FlatScrollPane {
         JLabel nombreLabel = new JLabel();
         nombreLabel.setFont(nombreLabel.getFont().deriveFont(Font.BOLD, 16f));
         nombreLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        nombreLabel.putClientProperty("fullText", servidor.getDisplayName());
+        String nombreServidor = servidor.getDisplayName();
+        if(nombreServidor == null || nombreServidor.isBlank()){
+            nombreServidor = "(sin nombre)";
+        }
+        if(Boolean.TRUE.equals(servidor.getFavorito())){
+            nombreServidor = "\u2605 " + nombreServidor;
+        }
+        nombreLabel.putClientProperty("fullText", nombreServidor);
 
         JLabel motdLabel = new JLabel();
         motdLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -468,10 +475,9 @@ public class PanelServidores extends FlatScrollPane {
 
         menu.addSeparator();
 
-        JMenuItem favorito = new JMenuItem("\u2605 Favorito (Por implementar)");
-        favorito.addActionListener(e -> {
-            // Placeholder: todavía sin comportamiento.
-        });
+        boolean esFavorito = Boolean.TRUE.equals(server.getFavorito());
+        JMenuItem favorito = new JMenuItem(esFavorito ? "\u2606 Quitar de favoritos" : "\u2605 Marcar como favorito");
+        favorito.addActionListener(e -> gestorServidores.establecerFavorito(server, !esFavorito));
         menu.add(favorito);
 
         return menu;
