@@ -17,6 +17,8 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Stream;
@@ -38,6 +40,48 @@ public class Utilidades {
             throw new RuntimeException(e);
         }
         System.out.println("Archivo copiado a: "+ destino.getAbsolutePath());
+    }
+
+    public static void copiarDirectorio(Path origen, Path destino) throws IOException {
+        if(origen == null || destino == null) throw new IllegalArgumentException("Las rutas no pueden ser nulas.");
+        if(!Files.isDirectory(origen)) throw new IllegalArgumentException("El origen no es un directorio: " + origen);
+
+        try(Stream<Path> walk = Files.walk(origen)){
+            for(Path source : walk.toList()){
+                Path relative = origen.relativize(source);
+                Path target = destino.resolve(relative);
+                if(Files.isDirectory(source)){
+                    Files.createDirectories(target);
+                } else {
+                    if(target.getParent() != null){
+                        Files.createDirectories(target.getParent());
+                    }
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                }
+            }
+        }
+    }
+
+    public static void eliminarDirectorio(Path directorio) throws IOException {
+        if(directorio == null || !Files.exists(directorio)) return;
+
+        try(Stream<Path> walk = Files.walk(directorio)){
+            for(Path path : walk.sorted(Comparator.reverseOrder()).toList()){
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    public static void moverDirectorio(Path origen, Path destino) throws IOException {
+        if(origen == null || destino == null) throw new IllegalArgumentException("Las rutas no pueden ser nulas.");
+        if(!Files.isDirectory(origen)) throw new IllegalArgumentException("El origen no es un directorio: " + origen);
+
+        try{
+            Files.move(origen, destino, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex){
+            copiarDirectorio(origen, destino);
+            eliminarDirectorio(origen);
+        }
     }
     // genera un archivo llamado eula.txt con el texto eula=true en la dirección indicada
     public static void rellenaEULA(File direccion){

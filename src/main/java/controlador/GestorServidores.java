@@ -99,9 +99,26 @@ public class GestorServidores {
         this.listaServidores = cargarServidores();
         boolean cambiosOrden = normalizarMetadatosOrden(true);
         validarYLimpiarServidoresPersistidos();
-        if (cambiosOrden) {
+        boolean cambiosMundos = sincronizarMundosServidoresCargados();
+        if (cambiosOrden || cambiosMundos) {
             guardarServidores();
         }
+    }
+
+    private boolean sincronizarMundosServidoresCargados() {
+        if (listaServidores == null || listaServidores.isEmpty()) return false;
+
+        boolean cambios = false;
+        for (Server server : listaServidores) {
+            if (server == null) continue;
+            try {
+                if (GestorMundos.sincronizarMundosServidor(server)) {
+                    cambios = true;
+                }
+            } catch (RuntimeException ignored) {
+            }
+        }
+        return cambios;
     }
 
     // cargamos todos los servidores del JSON
@@ -439,6 +456,7 @@ public class GestorServidores {
                     server.setServerDir(carpetaSeleccionada.getAbsolutePath());
                     server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
                     guardarServidor(server);
+                    GestorMundos.sincronizarMundosServidor(server);
 
                     return server;
                 }
@@ -546,6 +564,7 @@ public class GestorServidores {
             server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
 
             guardarServidor(server);
+            GestorMundos.sincronizarMundosServidor(server);
             return server;
         }
         return null;
@@ -732,6 +751,11 @@ public class GestorServidores {
             return;
         }
         Path dir = Path.of(server.getServerDir());
+        try {
+            GestorMundos.sincronizarMundosServidor(server);
+        } catch (RuntimeException e) {
+            server.appendConsoleLinea("[WARN] No se ha podido preparar Easy-MC-Worlds: " + e.getMessage());
+        }
         Path jar;
         try {
             jar = Utilidades.encontrarEjecutableJar(dir);

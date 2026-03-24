@@ -408,8 +408,12 @@ public class VentanaPrincipal extends JFrame {
         server.addConsoleListener(consoleListenerActual);
         serverMostrado = server;
 
-        JPanel mundo = new PanelMundo(gestorServidores);
         panelConfigServidor = new PanelConfigServidor(gestorServidores);
+        JPanel mundo = new PanelMundo(gestorServidores, () -> {
+            if(panelConfigServidor != null){
+                panelConfigServidor.reload();
+            }
+        });
         JPanel config = panelConfigServidor;
         JPanel mods = new JPanel(new BorderLayout());
         mods.setOpaque(false);
