@@ -135,7 +135,7 @@ public class ServerProperties{
         max_players = 20;
         max_tick_time = 60000;
         max_world_size = 29999984;
-        motd = "A Minecraft Modelo.Server";
+        motd = "A Minecraft Server";
         network_compression_threshold = 256;
         online_mode = true;
         op_permission_level = 4;
