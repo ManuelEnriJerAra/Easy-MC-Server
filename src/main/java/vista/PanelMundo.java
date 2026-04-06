@@ -11,7 +11,6 @@ import java.util.List;
 public class PanelMundo extends JPanel {
     private final GestorServidores gestorServidores;
 
-    private final JLabel servidorLabel = new JLabel();
     private final JLabel mundoActivoLabel = new JLabel();
     private final JComboBox<String> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
@@ -38,7 +37,6 @@ public class PanelMundo extends JPanel {
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        servidorLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         mundoActivoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -84,8 +82,6 @@ public class PanelMundo extends JPanel {
         });
         generarButton.addActionListener(e -> abrirDialogoNuevoMundo());
 
-        body.add(servidorLabel);
-        body.add(Box.createVerticalStrut(6));
         body.add(mundoActivoLabel);
         body.add(Box.createVerticalStrut(12));
         body.add(selectorPanel);
@@ -105,7 +101,6 @@ public class PanelMundo extends JPanel {
         mundoActivoActual = null;
 
         if(server == null){
-            servidorLabel.setText("No hay un servidor seleccionado.");
             mundoActivoLabel.setText("Selecciona un servidor para gestionar sus mundos.");
             setControlesActivos(false);
             return;
@@ -116,7 +111,6 @@ public class PanelMundo extends JPanel {
             List<String> mundos = GestorMundos.listarMundos(server);
             mundoActivoActual = GestorMundos.getNombreMundoActivo(server);
 
-            servidorLabel.setText("Servidor: " + obtenerNombreServidor(server));
             mundoActivoLabel.setText("Mundo activo: " + mundoActivoActual);
 
             for(String mundo : mundos){
@@ -131,7 +125,6 @@ public class PanelMundo extends JPanel {
             }
             setControlesActivos(true);
         } catch (RuntimeException ex){
-            servidorLabel.setText("Servidor: " + obtenerNombreServidor(server));
             mundoActivoLabel.setText("Error cargando mundos: " + ex.getMessage());
             setControlesActivos(false);
         }
