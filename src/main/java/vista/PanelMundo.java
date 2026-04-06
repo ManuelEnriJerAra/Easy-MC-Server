@@ -45,19 +45,14 @@ public class PanelMundo extends JPanel {
         selectorPanel.add(new JLabel("Mundos disponibles:"));
         mundosCombo.setPreferredSize(new Dimension(260, 32));
         selectorPanel.add(mundosCombo);
-        selectorPanel.add(refrescarButton);
+        selectorPanel.add(usarEsteMundoButton);
 
         JPanel botones = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         botones.setOpaque(false);
         botones.setAlignmentX(Component.LEFT_ALIGNMENT);
-        botones.add(usarEsteMundoButton);
         botones.add(importarButton);
         botones.add(exportarButton);
         botones.add(generarButton);
-
-        JLabel ayuda = new JLabel("Los mundos se gestionan dentro de la carpeta Easy-MC-Worlds del servidor.");
-        ayuda.setAlignmentX(Component.LEFT_ALIGNMENT);
-        ayuda.setForeground(AppTheme.getMutedForeground());
 
         styleActionButton(refrescarButton);
         styleActionButton(importarButton);
@@ -88,7 +83,6 @@ public class PanelMundo extends JPanel {
         body.add(Box.createVerticalStrut(12));
         body.add(botones);
         body.add(Box.createVerticalStrut(12));
-        body.add(ayuda);
         body.add(Box.createVerticalGlue());
 
         section.getContentPanel().add(body, BorderLayout.CENTER);
@@ -147,13 +141,13 @@ public class PanelMundo extends JPanel {
 
         JTextField nombreField = new JTextField("world-nuevo");
         JTextField semillaField = new JTextField();
-        JComboBox<String> tipoBox = new JComboBox<>(new String[]{"normal", "flat", "large_biomes", "amplified", "single_biome_surface"});
+        JComboBox<String> tipoBox = new JComboBox<>(new String[]{"normal", "flat", "large biomes", "amplified", "single biome surface"});
         JComboBox<String> gamemodeBox = new JComboBox<>(new String[]{"survival", "creative", "adventure", "spectator"});
         JComboBox<String> dificultadBox = new JComboBox<>(new String[]{"peaceful", "easy", "normal", "hard"});
         JCheckBox estructurasBox = new JCheckBox("Generar estructuras", true);
         JCheckBox hardcoreBox = new JCheckBox("Hardcore", false);
         JCheckBox netherBox = new JCheckBox("Permitir Nether", true);
-        JCheckBox activarBox = new JCheckBox("Activarlo al crear", true);
+        JCheckBox activarBox = new JCheckBox("Seleccionar al crear", true);
 
         JPanel panel = new JPanel(new GridLayout(0, 1, 0, 6));
         panel.add(new JLabel("Nombre del mundo"));
