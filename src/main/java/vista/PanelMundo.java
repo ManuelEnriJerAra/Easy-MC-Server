@@ -7,11 +7,16 @@ import modelo.Server;
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
+import java.util.Locale;
 
 public class PanelMundo extends JPanel {
+    private static final int TICKS_REFRESH_MS = 30_000;
+
     private final GestorServidores gestorServidores;
 
     private final JLabel mundoActivoLabel = new JLabel();
+    private final JLabel tiempoRealLabel = new JLabel("Tiempo real transcurrido: -");
+    private final JLabel diasMinecraftLabel = new JLabel("Días de Minecraft transcurridos: -");
     private final JComboBox<String> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
     private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
@@ -21,6 +26,11 @@ public class PanelMundo extends JPanel {
 
     private String mundoActivoActual;
     private final Runnable onWorldChanged;
+    private final Timer ticksRefreshTimer;
+    private String mundoTicksCache = "";
+    private long ticksMostradosCache = 0L;
+    private long ticksArchivoCache = 0L;
+    private long ultimaActualizacionTicksMs = 0L;
 
     PanelMundo(GestorServidores gestorServidores, Runnable onWorldChanged){
         this.gestorServidores = gestorServidores;
@@ -38,6 +48,8 @@ public class PanelMundo extends JPanel {
         body.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
         mundoActivoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tiempoRealLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        diasMinecraftLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         selectorPanel.setOpaque(false);
@@ -60,7 +72,10 @@ public class PanelMundo extends JPanel {
         styleActionButton(generarButton);
         applyDefaultPrimaryButtonStyle();
 
-        mundosCombo.addActionListener(e -> updateUseWorldButtonState());
+        mundosCombo.addActionListener(e -> {
+            updateUseWorldButtonState();
+            actualizarTicksMundoSeleccionado();
+        });
         refrescarButton.addActionListener(e -> refrescarDatos());
         usarEsteMundoButton.addActionListener(e -> cambiarMundoSeleccionado());
         importarButton.addActionListener(e -> {
@@ -78,6 +93,10 @@ public class PanelMundo extends JPanel {
         generarButton.addActionListener(e -> abrirDialogoNuevoMundo());
 
         body.add(mundoActivoLabel);
+        body.add(Box.createVerticalStrut(6));
+        body.add(tiempoRealLabel);
+        body.add(Box.createVerticalStrut(4));
+        body.add(diasMinecraftLabel);
         body.add(Box.createVerticalStrut(12));
         body.add(selectorPanel);
         body.add(Box.createVerticalStrut(12));
@@ -86,16 +105,43 @@ public class PanelMundo extends JPanel {
         body.add(Box.createVerticalGlue());
 
         section.getContentPanel().add(body, BorderLayout.CENTER);
+
+        ticksRefreshTimer = new Timer(TICKS_REFRESH_MS, e -> actualizarTicksMundoSeleccionado());
+        ticksRefreshTimer.setRepeats(true);
+        ticksRefreshTimer.start();
+
         refrescarDatos();
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if(ticksRefreshTimer != null && !ticksRefreshTimer.isRunning()) {
+            ticksRefreshTimer.start();
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        if(ticksRefreshTimer != null && ticksRefreshTimer.isRunning()) {
+            ticksRefreshTimer.stop();
+        }
+        super.removeNotify();
     }
 
     private void refrescarDatos(){
         Server server = gestorServidores.getServidorSeleccionado();
         mundosCombo.removeAllItems();
         mundoActivoActual = null;
+        mundoTicksCache = "";
+        ticksMostradosCache = 0L;
+        ticksArchivoCache = 0L;
+        ultimaActualizacionTicksMs = System.currentTimeMillis();
 
         if(server == null){
             mundoActivoLabel.setText("Selecciona un servidor para gestionar sus mundos.");
+            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            diasMinecraftLabel.setText("Días de Minecraft transcurridos: -");
             setControlesActivos(false);
             return;
         }
@@ -118,10 +164,83 @@ public class PanelMundo extends JPanel {
                 }
             }
             setControlesActivos(true);
+            actualizarTicksMundoSeleccionado();
         } catch (RuntimeException ex){
             mundoActivoLabel.setText("Error cargando mundos: " + ex.getMessage());
+            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            diasMinecraftLabel.setText("Días de Minecraft transcurridos: -");
             setControlesActivos(false);
         }
+    }
+
+    private void actualizarTicksMundoSeleccionado(){
+        Server server = gestorServidores.getServidorSeleccionado();
+        if(server == null){
+            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            diasMinecraftLabel.setText("D?as de Minecraft transcurridos: -");
+            return;
+        }
+
+        String mundo = (String) mundosCombo.getSelectedItem();
+        if(mundo == null || mundo.isBlank()) {
+            mundo = mundoActivoActual;
+        }
+        if(mundo == null || mundo.isBlank()) {
+            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            diasMinecraftLabel.setText("D?as de Minecraft transcurridos: -");
+            return;
+        }
+
+        long ahoraMs = System.currentTimeMillis();
+        long ticksArchivo = GestorMundos.getActiveTicks(server, mundo);
+
+        boolean esMismoMundo = mundo.equals(mundoTicksCache);
+        boolean servidorActivo = server.getServerProcess() != null && server.getServerProcess().isAlive();
+
+        if(!esMismoMundo) {
+            mundoTicksCache = mundo;
+            ticksArchivoCache = ticksArchivo;
+            ticksMostradosCache = ticksArchivo;
+            ultimaActualizacionTicksMs = ahoraMs;
+        } else if(ticksArchivo > ticksArchivoCache) {
+            ticksArchivoCache = ticksArchivo;
+            ticksMostradosCache = ticksArchivo;
+            ultimaActualizacionTicksMs = ahoraMs;
+        } else if(servidorActivo) {
+            long deltaMs = Math.max(0L, ahoraMs - ultimaActualizacionTicksMs);
+            long deltaTicksEstimados = (deltaMs * 20L) / 1000L;
+            if(deltaTicksEstimados > 0L) {
+                ticksMostradosCache += deltaTicksEstimados;
+                ultimaActualizacionTicksMs = ahoraMs;
+            }
+        } else {
+            ticksMostradosCache = ticksArchivo;
+            ticksArchivoCache = ticksArchivo;
+            ultimaActualizacionTicksMs = ahoraMs;
+        }
+
+        long ticksParaMostrar = Math.max(ticksMostradosCache, 0L);
+        tiempoRealLabel.setText("Tiempo real transcurrido: " + formatearTiempoReal(ticksParaMostrar));
+        diasMinecraftLabel.setText("D?as de Minecraft transcurridos: " + formatearDiasMinecraft(ticksParaMostrar));
+    }
+
+    private String formatearTiempoReal(long ticks){
+        if(ticks <= 0) return "0 s";
+
+        long totalSegundos = ticks / 20L;
+        long horas = totalSegundos / 3600L;
+        long minutos = (totalSegundos % 3600L) / 60L;
+        long segundos = totalSegundos % 60L;
+
+        if(horas > 0) return horas + " h " + minutos + " min " + segundos + " s";
+        if(minutos > 0) return minutos + " min " + segundos + " s";
+        return segundos + " s";
+    }
+
+    private String formatearDiasMinecraft(long ticks){
+        if(ticks <= 0) return "0.00";
+        double dias = ticks / 24000.0;
+        return String.format(Locale.ROOT, "%.2f", dias);
     }
 
     private void cambiarMundoSeleccionado(){

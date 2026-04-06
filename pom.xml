@@ -1,4 +1,4 @@
-ï»¿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -59,10 +59,22 @@
             <version>2.13.2</version>
             <scope>compile</scope>
         </dependency>
-    </dependencies>
+        <!-- Source: https://mvnrepository.com/artifact/io.github.jglrxavpok.hephaistos/common -->
+        <dependency>
+            <groupId>io.github.jglrxavpok.hephaistos</groupId>
+            <artifactId>common</artifactId>
+            <version>2.6.1</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib</artifactId>
+            <version>1.5.10</version>
+            <scope>compile</scope>
+        </dependency>    </dependencies>
     <build>
         <plugins>
-            <!-- CompilaciÃ³n -->
+            <!-- Compilación -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -70,7 +82,7 @@
                 <configuration>
                     <release>25</release>
                     <encoding>UTF-8</encoding>
-                    <!-- Lombok en compilaciÃ³n -->
+                    <!-- Lombok en compilación -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -102,7 +114,7 @@
                                 </transformer>
                             </transformers>
 
-                            <!-- evita problemas tÃ­picos al juntar jars -->
+                            <!-- evita problemas típicos al juntar jars -->
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
