@@ -53,15 +53,17 @@ public class PanelServidores extends FlatScrollPane {
     private static final int DRAG_THRESHOLD = 6;
     private JPanel filaArrastreCandidata;
     private JPanel filaArrastrada;
-    private JPanel placeholderFila;
+    private int indiceOriginalArrastre = -1;
+    private int indiceInsercionArrastre = -1;
+    private int alturaArrastre = -1;
     private Point puntoPresionArrastre;
     private Point puntoPresionPantalla;
     private Point offsetArrastre;
     private Point ubicacionArrastre = new Point();
+    private Point ultimoPuntoArrastrePantalla;
     private BufferedImage imagenArrastre;
     private boolean dragActiva;
     private AWTEventListener dragEventListener;
-    private Timer dragUpdateTimer;
     private JComponent glassPaneArrastre;
     private Component glassPaneAnterior;
     private boolean glassPaneAnteriorVisible;
@@ -363,7 +365,7 @@ public class PanelServidores extends FlatScrollPane {
 
                 filaArrastreCandidata = fila;
                 puntoPresionArrastre = SwingUtilities.convertPoint((Component) e.getSource(), e.getPoint(), fila);
-                puntoPresionPantalla = e.getLocationOnScreen();
+                puntoPresionPantalla = obtenerPuntoPantalla(e);
                 refrescarTema(false);
                 fila.setBackground(bgPresionado);
                 syncIconBg(fila);
@@ -374,12 +376,13 @@ public class PanelServidores extends FlatScrollPane {
             @Override
             public void mouseDragged(MouseEvent e){
                 if(dragActiva){
-                    actualizarArrastreDesdePantalla(e.getLocationOnScreen());
+                    actualizarArrastreDesdePantalla(obtenerPuntoPantalla(e));
                     return;
                 }
                 if(filaArrastreCandidata != fila || puntoPresionArrastre == null || puntoPresionPantalla == null) return;
-                if(e.getLocationOnScreen().distance(puntoPresionPantalla) < DRAG_THRESHOLD) return;
-                iniciarArrastreSiProcede(e.getLocationOnScreen());
+                Point screenPoint = obtenerPuntoPantalla(e);
+                if(screenPoint == null || screenPoint.distance(puntoPresionPantalla) < DRAG_THRESHOLD) return;
+                iniciarArrastreSiProcede(screenPoint);
             }
 
             @Override
@@ -404,7 +407,8 @@ public class PanelServidores extends FlatScrollPane {
                 if(dragActiva && fila == filaArrastrada) return;
                 refrescarTema(false);
                 try{
-                    Point p = e.getLocationOnScreen();
+                    Point p = obtenerPuntoPantalla(e);
+                    if(p == null) return;
                     SwingUtilities.convertPointFromScreen(p, fila);
                     if(fila.contains(p)) return;
                 } catch (IllegalComponentStateException ignored){
@@ -449,15 +453,13 @@ public class PanelServidores extends FlatScrollPane {
         if(indiceOriginal < 0) return;
 
         filaArrastrada = filaArrastreCandidata;
+        indiceOriginalArrastre = indiceOriginal;
+        indiceInsercionArrastre = indiceOriginal;
         dragActiva = true;
         offsetArrastre = new Point(puntoPresionArrastre);
+        ultimoPuntoArrastrePantalla = new Point(screenPoint);
+        alturaArrastre = obtenerAlturaArrastre(filaArrastrada);
         imagenArrastre = capturarFila(filaArrastrada);
-        placeholderFila = crearPlaceholderFila(filaArrastrada.getPreferredSize().height);
-
-        filaArrastrada.setVisible(false);
-        panelContenedor.add(placeholderFila, indiceOriginal);
-        panelContenedor.revalidate();
-        panelContenedor.repaint();
 
         instalarGlassPaneArrastre();
         aplicarCursorArrastre(panelContenedor, true);
@@ -466,9 +468,10 @@ public class PanelServidores extends FlatScrollPane {
 
     private void actualizarArrastreDesdePantalla(Point screenPoint){
         if(!dragActiva || screenPoint == null) return;
+        ultimoPuntoArrastrePantalla = new Point(screenPoint);
         actualizarGhost(screenPoint);
-        actualizarPlaceholder(screenPoint);
         autoscrollDuranteArrastre(screenPoint);
+        actualizarIndicadorInsercion(screenPoint);
     }
 
     private void finalizarArrastre(boolean cancelar){
@@ -476,29 +479,26 @@ public class PanelServidores extends FlatScrollPane {
 
         Component vista = getViewport().getView();
         JPanel panelContenedor = vista instanceof JPanel panel ? panel : null;
-        int indicePlaceholder = panelContenedor == null ? -1 : indiceComponente(panelContenedor, placeholderFila);
-        int indiceFilaOculta = panelContenedor == null ? -1 : indiceComponente(panelContenedor, filaArrastrada);
+
+        if(panelContenedor != null && !cancelar && ultimoPuntoArrastrePantalla != null){
+            actualizarIndicadorInsercion(ultimoPuntoArrastrePantalla);
+        }
 
         desinstalarGlassPaneArrastre();
         aplicarCursorArrastre(panelContenedor, false);
 
-        if(panelContenedor != null){
-            if(filaArrastrada != null){
-                if(indiceFilaOculta >= 0 && indicePlaceholder >= 0 && indiceFilaOculta < indicePlaceholder){
-                    indicePlaceholder--;
-                }
-                panelContenedor.remove(filaArrastrada);
-                filaArrastrada.setVisible(true);
+        if(panelContenedor != null && filaArrastrada != null){
+            int indiceInsercionReal = cancelar
+                    ? Math.max(0, Math.min(indiceOriginalArrastre, panelContenedor.getComponentCount() - 1))
+                    : calcularIndiceRealInsercion(panelContenedor, indiceInsercionArrastre);
+
+            panelContenedor.remove(filaArrastrada);
+            if(!cancelar && indiceOriginalArrastre >= 0 && indiceOriginalArrastre < indiceInsercionReal){
+                indiceInsercionReal--;
             }
-            if(placeholderFila != null){
-                panelContenedor.remove(placeholderFila);
-            }
-            if(filaArrastrada != null){
-                int indiceInsercion = indicePlaceholder < 0
-                        ? panelContenedor.getComponentCount()
-                        : Math.min(indicePlaceholder, panelContenedor.getComponentCount());
-                panelContenedor.add(filaArrastrada, indiceInsercion);
-            }
+            indiceInsercionReal = Math.max(0, Math.min(indiceInsercionReal, panelContenedor.getComponentCount()));
+            panelContenedor.add(filaArrastrada, indiceInsercionReal);
+            filaArrastrada.setVisible(true);
             panelContenedor.revalidate();
             panelContenedor.repaint();
 
@@ -511,8 +511,11 @@ public class PanelServidores extends FlatScrollPane {
         }
 
         filaArrastrada = null;
-        placeholderFila = null;
+        indiceOriginalArrastre = -1;
+        indiceInsercionArrastre = -1;
+        alturaArrastre = -1;
         offsetArrastre = null;
+        ultimoPuntoArrastrePantalla = null;
         imagenArrastre = null;
         ubicacionArrastre = new Point();
         dragActiva = false;
@@ -556,6 +559,32 @@ public class PanelServidores extends FlatScrollPane {
         puntoPresionPantalla = null;
     }
 
+    private Point obtenerPuntoPantalla(MouseEvent e){
+        if(e != null){
+            try{
+                return new Point(e.getXOnScreen(), e.getYOnScreen());
+            } catch (IllegalComponentStateException ignored){
+            }
+
+            Component origen = e.getComponent();
+            if(origen != null && origen.isShowing()){
+                Point p = e.getPoint();
+                SwingUtilities.convertPointToScreen(p, origen);
+                return p;
+            }
+        }
+
+        try{
+            PointerInfo pointerInfo = MouseInfo.getPointerInfo();
+            if(pointerInfo != null && pointerInfo.getLocation() != null){
+                return pointerInfo.getLocation();
+            }
+        } catch (IllegalComponentStateException ignored){
+        }
+
+        return ultimoPuntoArrastrePantalla == null ? null : new Point(ultimoPuntoArrastrePantalla);
+    }
+
     private void actualizarGhost(Point screenPoint){
         if(glassPaneArrastre == null || offsetArrastre == null) return;
         Point p = new Point(screenPoint);
@@ -564,36 +593,29 @@ public class PanelServidores extends FlatScrollPane {
         glassPaneArrastre.repaint();
     }
 
-    private void actualizarPlaceholder(Point screenPoint){
+    private void actualizarIndicadorInsercion(Point screenPoint){
         Component vista = getViewport().getView();
-        if(!(vista instanceof JPanel panelContenedor) || placeholderFila == null) return;
+        if(!(vista instanceof JPanel panelContenedor) || filaArrastrada == null || screenPoint == null) return;
 
         Point p = new Point(screenPoint);
         SwingUtilities.convertPointFromScreen(p, panelContenedor);
 
-        int alturaReferencia = filaArrastrada != null
-                ? Math.max(1, filaArrastrada.getHeight())
-                : Math.max(1, placeholderFila.getPreferredSize().height);
-        int yReferencia = p.y - (offsetArrastre == null ? 0 : offsetArrastre.y) + (alturaReferencia / 2);
-
-        int nuevoIndiceVisible = calcularIndiceInsercion(panelContenedor, yReferencia);
-        int nuevoIndiceReal = calcularIndiceRealInsercion(panelContenedor, nuevoIndiceVisible);
-        int indiceActual = indiceComponente(panelContenedor, placeholderFila);
-        if(indiceActual == nuevoIndiceReal) return;
-
-        panelContenedor.remove(placeholderFila);
-        panelContenedor.add(placeholderFila, Math.min(nuevoIndiceReal, panelContenedor.getComponentCount()));
-        panelContenedor.revalidate();
-        panelContenedor.repaint();
+        int centroArrastre = p.y - (offsetArrastre == null ? 0 : offsetArrastre.y) + (Math.max(1, alturaArrastre) / 2);
+        int nuevoIndice = calcularIndiceInsercionVisible(panelContenedor, centroArrastre);
+        if(nuevoIndice == indiceInsercionArrastre) return;
+        indiceInsercionArrastre = nuevoIndice;
+        if(glassPaneArrastre != null){
+            glassPaneArrastre.repaint();
+        }
     }
 
-    private int calcularIndiceInsercion(JPanel panelContenedor, int y){
+    private int calcularIndiceInsercionVisible(JPanel panelContenedor, int centroArrastre){
         int indice = 0;
         for(Component component : panelContenedor.getComponents()){
-            if(component == placeholderFila || component == filaArrastrada) continue;
+            if(component == filaArrastrada) continue;
             Rectangle bounds = component.getBounds();
             int mitad = bounds.y + (bounds.height / 2);
-            if(y < mitad){
+            if(centroArrastre < mitad){
                 return indice;
             }
             indice++;
@@ -602,19 +624,27 @@ public class PanelServidores extends FlatScrollPane {
     }
 
     private int calcularIndiceRealInsercion(JPanel panelContenedor, int indiceVisible){
+        if(indiceVisible <= 0) return 0;
+
         int visiblesRecorridos = 0;
         Component[] components = panelContenedor.getComponents();
-
         for(int i = 0; i < components.length; i++){
             Component component = components[i];
-            if(component == placeholderFila || component == filaArrastrada) continue;
+            if(component == filaArrastrada) continue;
             if(visiblesRecorridos >= indiceVisible){
                 return i;
             }
             visiblesRecorridos++;
         }
-
         return panelContenedor.getComponentCount();
+    }
+
+    private int obtenerAlturaArrastre(JPanel fila){
+        if(fila == null) return 1;
+        int altura = fila.getHeight();
+        if(altura > 0) return altura;
+        Dimension preferred = fila.getPreferredSize();
+        return preferred == null ? 1 : Math.max(1, preferred.height);
     }
 
     private int indiceComponente(Container parent, Component child){
@@ -626,20 +656,6 @@ public class PanelServidores extends FlatScrollPane {
         return -1;
     }
 
-    private JPanel crearPlaceholderFila(int altura){
-        refrescarTema(false);
-        RoundedBackgroundPanel placeholder = new RoundedBackgroundPanel(bgHover, arc);
-        placeholder.setOpaque(false);
-        placeholder.setBorder(AppTheme.createAccentBorder(insets, 2f));
-        placeholder.setBackground(bgHover);
-        placeholder.setPreferredSize(new Dimension(0, altura));
-        placeholder.setMinimumSize(new Dimension(0, altura));
-        placeholder.setMaximumSize(new Dimension(Integer.MAX_VALUE, altura));
-        placeholder.setAlignmentX(Component.LEFT_ALIGNMENT);
-        placeholder.putClientProperty("placeholder", Boolean.TRUE);
-        return placeholder;
-    }
-
     private BufferedImage capturarFila(JPanel fila){
         int width = Math.max(1, fila.getWidth());
         int height = Math.max(1, fila.getHeight());
@@ -648,29 +664,6 @@ public class PanelServidores extends FlatScrollPane {
         fila.paint(g2);
         g2.dispose();
         return image;
-    }
-
-    private void iniciarTemporizadorArrastre(){
-        detenerTemporizadorArrastre();
-        dragUpdateTimer = new Timer(16, e -> {
-            if(!dragActiva) return;
-            try{
-                PointerInfo pointerInfo = MouseInfo.getPointerInfo();
-                if(pointerInfo == null) return;
-                Point screenPoint = pointerInfo.getLocation();
-                if(screenPoint == null) return;
-                actualizarArrastreDesdePantalla(screenPoint);
-            } catch (IllegalComponentStateException ignored){
-            }
-        });
-        dragUpdateTimer.setCoalesce(true);
-        dragUpdateTimer.start();
-    }
-
-    private void detenerTemporizadorArrastre(){
-        if(dragUpdateTimer == null) return;
-        dragUpdateTimer.stop();
-        dragUpdateTimer = null;
     }
 
     private void instalarGlassPaneArrastre(){
@@ -688,6 +681,7 @@ public class PanelServidores extends FlatScrollPane {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.82f));
                 g2.drawImage(imagenArrastre, ubicacionArrastre.x, ubicacionArrastre.y, null);
+                pintarIndicadorInsercion(g2);
                 g2.dispose();
             }
         };
@@ -695,6 +689,10 @@ public class PanelServidores extends FlatScrollPane {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if(dragActiva){
+                    Point screenPoint = obtenerPuntoPantalla(e);
+                    if(screenPoint != null){
+                        actualizarArrastreDesdePantalla(screenPoint);
+                    }
                     finalizarArrastre(false);
                     desinstalarListenerGlobalArrastre();
                 }
@@ -706,6 +704,38 @@ public class PanelServidores extends FlatScrollPane {
         rootPaneArrastre.setGlassPane(glassPaneArrastre);
         glassPaneArrastre.setVisible(true);
         glassPaneArrastre.repaint();
+    }
+
+    private void pintarIndicadorInsercion(Graphics2D g2){
+        if(glassPaneArrastre == null || indiceInsercionArrastre < 0) return;
+        if(indiceInsercionArrastre == indiceOriginalArrastre) return;
+        Component vista = getViewport().getView();
+        if(!(vista instanceof JPanel panelContenedor)) return;
+
+        int yPanel = calcularYInsercionIndicador(panelContenedor, indiceInsercionArrastre);
+        Point inicio = SwingUtilities.convertPoint(panelContenedor, panelContenedor.getInsets().left + 6, yPanel, glassPaneArrastre);
+        Point fin = SwingUtilities.convertPoint(panelContenedor, Math.max(panelContenedor.getInsets().left + 24, panelContenedor.getWidth() - panelContenedor.getInsets().right - 6), yPanel, glassPaneArrastre);
+
+        g2.setColor(acento);
+        g2.fillRoundRect(inicio.x, inicio.y - 2, Math.max(12, fin.x - inicio.x), 4, 4, 4);
+    }
+
+    private int calcularYInsercionIndicador(JPanel panelContenedor, int indiceVisible){
+        int top = panelContenedor.getInsets().top;
+        int visiblesRecorridos = 0;
+        int ultimoBottom = top;
+
+        for(Component component : panelContenedor.getComponents()){
+            if(component == filaArrastrada) continue;
+            Rectangle bounds = component.getBounds();
+            if(visiblesRecorridos >= indiceVisible){
+                return bounds.y;
+            }
+            ultimoBottom = bounds.y + bounds.height;
+            visiblesRecorridos++;
+        }
+
+        return ultimoBottom;
     }
 
     private void desinstalarGlassPaneArrastre(){
@@ -738,10 +768,10 @@ public class PanelServidores extends FlatScrollPane {
             if(!(event instanceof MouseEvent e)) return;
 
             if(e.getID() == MouseEvent.MOUSE_DRAGGED){
-                Point screenPoint = e.getLocationOnScreen();
+                Point screenPoint = obtenerPuntoPantalla(e);
                 if(dragActiva){
                     actualizarArrastreDesdePantalla(screenPoint);
-                } else if(filaArrastreCandidata != null && puntoPresionPantalla != null
+                } else if(filaArrastreCandidata != null && puntoPresionPantalla != null && screenPoint != null
                         && screenPoint.distance(puntoPresionPantalla) >= DRAG_THRESHOLD){
                     iniciarArrastreSiProcede(screenPoint);
                 }
@@ -750,10 +780,14 @@ public class PanelServidores extends FlatScrollPane {
 
             if(e.getID() != MouseEvent.MOUSE_RELEASED) return;
 
+            Point releasePoint = obtenerPuntoPantalla(e);
             if(dragActiva){
+                if(releasePoint != null){
+                    actualizarArrastreDesdePantalla(releasePoint);
+                }
                 finalizarArrastre(false);
             } else if(filaArrastreCandidata != null){
-                gestionarSoltadoSinArrastre(e.getLocationOnScreen());
+                gestionarSoltadoSinArrastre(releasePoint);
                 limpiarEstadoArrastrePendiente();
             }
             desinstalarListenerGlobalArrastre();
