@@ -10,6 +10,7 @@ import net.querz.nbt.tag.LongArrayTag;
 import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -129,6 +130,18 @@ public final class MCARenderer {
      * Despues se recorta el resultado para quitar los bordes de fondo sobrantes.
      */
     public BufferedImage renderWorld(List<Path> regionPaths, RenderOptions options) throws IOException {
+        return renderWorld(regionPaths, options, null);
+    }
+
+    /**
+     * Variante de mosaico que permite marcar un punto especial del mundo, como el spawn.
+     *
+     * La marca se pinta antes del recorte final para que:
+     * - quede en la posicion correcta del mundo,
+     * - siga visible en el PNG final,
+     * - y no haya que recalcular coordenadas en la UI.
+     */
+    public BufferedImage renderWorld(List<Path> regionPaths, RenderOptions options, WorldPoint markerPoint) throws IOException {
         if(regionPaths == null || regionPaths.isEmpty()) {
             throw new IllegalArgumentException("No hay regiones para renderizar");
         }
@@ -172,6 +185,12 @@ public final class MCARenderer {
             g2.dispose();
         }
 
+        if(markerPoint != null) {
+            // El marcador se pinta sobre el mosaico completo, en coordenadas absolutas del mundo.
+            // Asi no depende del recorte posterior ni de como se escale la preview en Swing.
+            paintMarker(image, markerPoint, minRegionX, minRegionZ, normalizedOptions);
+        }
+
         return cropToVisibleArea(image, normalizedOptions.defaultArgb());
     }
 
@@ -205,8 +224,15 @@ public final class MCARenderer {
 
     // Exporta un mosaico de varias regiones a PNG.
     public void renderWorldToPng(List<Path> regionPaths, Path outputFile, RenderOptions options) throws IOException {
+        renderWorldToPng(regionPaths, outputFile, options, null);
+    }
+
+    /**
+     * Exporta un mosaico y, opcionalmente, dibuja una X roja en un punto concreto del mundo.
+     */
+    public void renderWorldToPng(List<Path> regionPaths, Path outputFile, RenderOptions options, WorldPoint markerPoint) throws IOException {
         Objects.requireNonNull(outputFile, "outputFile no puede ser null");
-        BufferedImage image = renderWorld(regionPaths, options);
+        BufferedImage image = renderWorld(regionPaths, options, markerPoint);
         writePng(image, outputFile);
     }
 
@@ -232,6 +258,20 @@ public final class MCARenderer {
      * Si toda la imagen es fondo, se devuelve la imagen original.
      */
     private BufferedImage cropToVisibleArea(BufferedImage image, int backgroundArgb) {
+        Rectangle visibleArea = findVisibleBounds(image, backgroundArgb);
+        if(visibleArea == null) {
+            return image;
+        }
+        return image.getSubimage(visibleArea.x, visibleArea.y, visibleArea.width, visibleArea.height);
+    }
+
+    /**
+     * Busca el rectangulo minimo que contiene informacion real del mapa.
+     *
+     * Se separa de cropToVisibleArea para poder reutilizar la deteccion si en el futuro
+     * necesitamos mas overlays o depuracion visual sobre los bordes del render.
+     */
+    private Rectangle findVisibleBounds(BufferedImage image, int backgroundArgb) {
         int minX = image.getWidth();
         int minY = image.getHeight();
         int maxX = -1;
@@ -250,10 +290,10 @@ public final class MCARenderer {
         }
 
         if(maxX < minX || maxY < minY) {
-            return image;
+            return null;
         }
 
-        return image.getSubimage(minX, minY, (maxX - minX) + 1, (maxY - minY) + 1);
+        return new Rectangle(minX, minY, (maxX - minX) + 1, (maxY - minY) + 1);
     }
 
     // Crea el lienzo base para una sola region.
@@ -827,6 +867,71 @@ public final class MCARenderer {
     }
 
     /**
+     * Dibuja una X roja pequena sobre un punto del mundo.
+     *
+     * Coordenadas:
+     * - markerPoint.x/z estan en bloques globales del mundo,
+     * - minRegionX/minRegionZ indican donde empieza el mosaico generado,
+     * - el resultado final se convierte a pixeles del lienzo.
+     */
+    private void paintMarker(
+            BufferedImage image,
+            WorldPoint markerPoint,
+            int minRegionX,
+            int minRegionZ,
+            RenderOptions options
+    ) {
+        int worldOriginBlockX = minRegionX * REGION_BLOCK_SIDE;
+        int worldOriginBlockZ = minRegionZ * REGION_BLOCK_SIDE;
+        int markerPixelX = (markerPoint.x() - worldOriginBlockX) * options.pixelsPerBlock();
+        int markerPixelY = (markerPoint.z() - worldOriginBlockZ) * options.pixelsPerBlock();
+
+        if(markerPixelX < 0 || markerPixelY < 0 || markerPixelX >= image.getWidth() || markerPixelY >= image.getHeight()) {
+            return;
+        }
+
+        // La marca del spawn se dibuja con una estetica mas "mapa del tesoro":
+        // - base roja oscura para darle cuerpo,
+        // - rojo principal por encima.
+        //
+        // Se evita cualquier color secundario en el centro para que toda la X sea roja.
+        int arm = Math.max(7, options.pixelsPerBlock() * 6);
+        int shadowThickness = Math.max(3, options.pixelsPerBlock() * 3);
+        int mainThickness = Math.max(2, options.pixelsPerBlock() * 2);
+        int shadow = new Color(92, 17, 17).getRGB();
+        int red = new Color(196, 33, 33).getRGB();
+
+        drawMarkerLine(image, markerPixelX, markerPixelY, arm, shadowThickness, shadow, true);
+        drawMarkerLine(image, markerPixelX, markerPixelY, arm, shadowThickness, shadow, false);
+        drawMarkerLine(image, markerPixelX, markerPixelY, arm, mainThickness, red, true);
+        drawMarkerLine(image, markerPixelX, markerPixelY, arm, mainThickness, red, false);
+    }
+
+    // Dibuja una de las dos diagonales de la X.
+    private void drawMarkerLine(BufferedImage image, int centerX, int centerY, int arm, int thickness, int argb, boolean descending) {
+        for(int offset = -arm; offset <= arm; offset++) {
+            int x = centerX + offset;
+            int y = descending ? centerY + offset : centerY - offset;
+            paintMarkerPixel(image, x, y, thickness, argb);
+        }
+    }
+
+    // Pinta un punto grueso para que la X aguante mejor cuando la preview se reduzca.
+    private void paintMarkerPixel(BufferedImage image, int centerX, int centerY, int thickness, int argb) {
+        int radius = Math.max(0, thickness / 2);
+        for(int dy = -radius; dy <= radius; dy++) {
+            for(int dx = -radius; dx <= radius; dx++) {
+                int x = centerX + dx;
+                int y = centerY + dy;
+                if(x < 0 || y < 0 || x >= image.getWidth() || y >= image.getHeight()) {
+                    continue;
+                }
+                image.setRGB(x, y, argb);
+            }
+        }
+    }
+
+    /**
      * Valida una ruta de entrada.
      *
      * Requisitos:
@@ -839,6 +944,17 @@ public final class MCARenderer {
         Path normalizedPath = mcaPath.toAbsolutePath().normalize();
         if(!Files.isRegularFile(normalizedPath)) {
             throw new IllegalArgumentException("No existe el archivo .mca: " + normalizedPath);
+        }
+        // Algunos mundos dejan ficheros region de 0 bytes como huecos o restos.
+        // Querz no los puede deserializar como una region valida, asi que los filtramos
+        // aqui con un mensaje explicito en lugar de dejar que mas tarde falle con errores
+        // poco claros o incluso con mensaje null.
+        try {
+            if(Files.size(normalizedPath) <= 0L) {
+                throw new IllegalArgumentException("El archivo .mca esta vacio: " + normalizedPath.getFileName());
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("No se ha podido comprobar el tamano del .mca: " + normalizedPath.getFileName(), ex);
         }
         if(!normalizedPath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mca")) {
             throw new IllegalArgumentException("El archivo no tiene extension .mca: " + normalizedPath);
@@ -931,6 +1047,9 @@ public final class MCARenderer {
 
     // Coordenadas de una region dentro del mundo. Ejemplo: r.1.-2.mca -> x=1, z=-2.
     private record RegionCoordinates(int x, int z) {}
+
+    // Punto absoluto del mundo en el plano X/Z.
+    public record WorldPoint(int x, int z) {}
 
     /**
      * Resultado de la busqueda del bloque superior de una columna.

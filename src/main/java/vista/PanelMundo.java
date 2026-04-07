@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.concurrent.ExecutionException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -28,6 +29,9 @@ public class PanelMundo extends JPanel {
     private final JLabel tiempoRealLabel = new JLabel("Tiempo activo: -");
     private final JLabel lastPlayedLabel = new JLabel("Nunca");
     private final JLabel previewImageLabel = new JLabel("La preview todavia no existe.", SwingConstants.CENTER);
+    // La seed se muestra en un campo de texto no editable para que el usuario pueda
+    // seleccionarla y copiarla facilmente al compararla con visores externos.
+    private final JTextField seedField = new JTextField("-");
     private final JComboBox<World> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
     private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
@@ -66,6 +70,13 @@ public class PanelMundo extends JPanel {
         previewImageLabel.setHorizontalAlignment(SwingConstants.CENTER);
         previewImageLabel.setVerticalAlignment(SwingConstants.CENTER);
         previewImageLabel.setPreferredSize(new Dimension(320, 320));
+        seedField.setEditable(false);
+        seedField.setFocusable(true);
+        seedField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        seedField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Dejamos el campo habilitado para que se pueda seleccionar el texto,
+        // pero no editable para que no se confunda con un dato modificable.
+        seedField.setToolTipText("Puedes seleccionar y copiar la seed.");
 
         JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         selectorPanel.setOpaque(false);
@@ -115,6 +126,10 @@ public class PanelMundo extends JPanel {
         body.add(Box.createVerticalStrut(6));
         body.add(tiempoRealLabel);
         body.add(Box.createVerticalStrut(12));
+        body.add(new JLabel("Seed:"));
+        body.add(Box.createVerticalStrut(4));
+        body.add(seedField);
+        body.add(Box.createVerticalStrut(12));
         body.add(lastPlayedLabel);
         body.add(Box.createVerticalStrut(12));
         body.add(selectorPanel);
@@ -143,6 +158,7 @@ public class PanelMundo extends JPanel {
         if(server == null){
             mundoActivoLabel.setText("Selecciona un servidor para gestionar sus mundos.");
             tiempoRealLabel.setText("Tiempo activo: -");
+            seedField.setText("-");
             lastPlayedLabel.setText("Jugado por ultima vez: -");
             setControlesActivos(false);
             return;
@@ -170,6 +186,7 @@ public class PanelMundo extends JPanel {
         } catch (RuntimeException ex){
             mundoActivoLabel.setText("Error cargando mundos: " + ex.getMessage());
             tiempoRealLabel.setText("Tiempo activo: -");
+            seedField.setText("-");
             lastPlayedLabel.setText("Jugado por ultima vez: -");
             setControlesActivos(false);
         } finally {
@@ -189,6 +206,7 @@ public class PanelMundo extends JPanel {
         if(server == null){
             mundoActivoLabel.setText("Selecciona un servidor para gestionar sus mundos.");
             tiempoRealLabel.setText("Tiempo activo: -");
+            seedField.setText("-");
             lastPlayedLabel.setText("Jugado por ultima vez: -");
             return;
         }
@@ -199,6 +217,7 @@ public class PanelMundo extends JPanel {
 
         if(mundo == null) {
             tiempoRealLabel.setText("Tiempo activo: -");
+            seedField.setText("-");
             lastPlayedLabel.setText("Jugado por ultima vez: -");
             return;
         }
@@ -233,6 +252,10 @@ public class PanelMundo extends JPanel {
         }
 
         long ticksParaMostrar = Math.max(ticksMostradosCache, 0L);
+        // La seed se lee desde level.dat para poder compararla facilmente con visores externos.
+        // La mostramos tal cual, sin transformar, porque para depurar previews interesa ver el
+        // valor real exacto que Minecraft guarda en el mundo.
+        seedField.setText(WorldDataReader.getSeed(mundo));
         lastPlayedLabel.setText("Jugado por última vez: " + WorldDataReader.getLastPlayed(mundo));
         tiempoRealLabel.setText("Tiempo activo: " + formatearTiempo(ticksParaMostrar));
     }
@@ -382,10 +405,16 @@ public class PanelMundo extends JPanel {
         previewImageLabel.setText("Generando preview...");
         generarPreviewButton.setEnabled(false);
         MCARenderer renderer = new MCARenderer();
+        // Leemos el spawn una sola vez antes de lanzar el worker para que la preview
+        // quede ligada al mundo actualmente seleccionado y no a un cambio posterior del combo.
+        WorldDataReader.SpawnPoint spawnPoint = WorldDataReader.getSpawnPoint(mundo);
         SwingWorker<Path, Void> worker = new SwingWorker<>() {
             @Override
             protected Path doInBackground() throws Exception {
-                renderer.renderWorldToPng(regionesPreview, outputPath);
+                MCARenderer.WorldPoint markerPoint = spawnPoint == null
+                        ? null
+                        : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z());
+                renderer.renderWorldToPng(regionesPreview, outputPath, MCARenderer.RenderOptions.defaults(), markerPoint);
                 return outputPath;
             }
 
@@ -393,7 +422,27 @@ public class PanelMundo extends JPanel {
             protected void done() {
                 updateUseWorldButtonState();
                 generarPreviewButton.setEnabled(mundosCombo.isEnabled() && getMundoSeleccionadoOActivo() != null);
-                actualizarPreviewSeleccionada();
+                try {
+                    // get() fuerza a propagar aqui cualquier excepcion ocurrida en segundo plano.
+                    // Sin esto, el worker podia fallar internamente y la UI solo mostraba sintomas
+                    // vagos como mensajes "null" o una preview que nunca aparecia.
+                    get();
+                    actualizarPreviewSeleccionada();
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    mostrarTextoPreview("La generacion de la preview fue interrumpida.");
+                } catch (ExecutionException ex) {
+                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                    String message = cause.getMessage();
+                    if(message == null || message.isBlank()) {
+                        message = cause.getClass().getSimpleName();
+                    }
+                    mostrarTextoPreview("No se ha podido generar la preview.");
+                    JOptionPane.showMessageDialog(PanelMundo.this,
+                            "No se ha podido generar la preview: " + message,
+                            "Generar preview",
+                            JOptionPane.ERROR_MESSAGE);
+                }
             }
         };
         worker.execute();
@@ -411,6 +460,15 @@ public class PanelMundo extends JPanel {
             List<Path> regiones = stream
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mca"))
+                    // Algunos servidores dejan regiones de 0 bytes; no contienen datos validos
+                    // y solo sirven para provocar errores de lectura en el renderer.
+                    .filter(path -> {
+                        try {
+                            return Files.size(path) > 0L;
+                        } catch (IOException ex) {
+                            return false;
+                        }
+                    })
                     .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
                     .toList();
 
