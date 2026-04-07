@@ -1,3 +1,13 @@
+/*
+ * Fichero: GestorMundos.java
+ *
+ * Autor: Manuel Enrique Jeronimo Aragon
+ *
+ * Descripcion:
+ * Esta clase se encarga de la gestion de mundos del servidor, incluyendo su sincronizacion,
+ * importacion, exportacion, cambio y preparacion de nuevos mundos.
+ * */
+
 package controlador;
 
 import modelo.MinecraftConstants;
@@ -31,9 +41,11 @@ public final class GestorMundos {
     private static final String SUFIJO_NETHER = "_nether";
     private static final String SUFIJO_END = "_the_end";
 
+    // Evita instancias de esta clase utilitaria.
     private GestorMundos() {
     }
 
+    // Sincroniza la estructura de mundos del servidor con el sistema gestionado por la aplicacion.
     public static boolean sincronizarMundosServidor(Server server) {
         if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) return false;
 
@@ -78,6 +90,7 @@ public final class GestorMundos {
         }
     }
 
+    // Devuelve la lista de mundos principales disponibles para el servidor.
     public static List<String> listarMundos(Server server) {
         if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) return List.of();
 
@@ -97,6 +110,7 @@ public final class GestorMundos {
         }
     }
 
+    // Obtiene el nombre del mundo actualmente configurado como activo en server.properties.
     public static String getNombreMundoActivo(Server server) {
         if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) return MinecraftConstants.DEFAULT_WORLD_NAME;
 
@@ -110,10 +124,12 @@ public final class GestorMundos {
         }
     }
 
+    // Devuelve los ticks del mundo activo usando el servidor indicado.
     public static long getActiveTicks(Server server) {
         return getActiveTicks(server, getNombreMundoActivo(server));
     }
 
+    // Lee desde level.dat el tiempo acumulado del mundo indicado.
     public static long getActiveTicks(Server server, String nombreMundo) {
         if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) return 0L;
         if(nombreMundo == null || nombreMundo.isBlank()) return 0L;
@@ -138,6 +154,7 @@ public final class GestorMundos {
             return 0L;
         }
     }
+    // Importa un mundo externo a la carpeta gestionada del servidor.
     public static boolean importarMundo(Server server, Component parent) {
         if(!puedeModificarMundos(server, parent)) return false;
         sincronizarMundosServidor(server);
@@ -176,6 +193,7 @@ public final class GestorMundos {
         }
     }
 
+    // Exporta un mundo gestionado del servidor a una carpeta elegida por el usuario.
     public static boolean exportarMundo(Server server, String nombreMundo, Component parent) {
         if(server == null || nombreMundo == null || nombreMundo.isBlank()) {
             JOptionPane.showMessageDialog(parent,
@@ -228,6 +246,7 @@ public final class GestorMundos {
         }
     }
 
+    // Marca un mundo existente como mundo activo para el siguiente inicio del servidor.
     public static boolean cambiarMundo(Server server, String nombreMundo, Component parent) {
         if(server == null || nombreMundo == null || nombreMundo.isBlank()) {
             JOptionPane.showMessageDialog(parent,
@@ -268,6 +287,7 @@ public final class GestorMundos {
         }
     }
 
+    // Prepara un nuevo mundo y guarda su metadata de generacion para poder activarlo despues.
     public static boolean generarNuevoMundo(Server server, WorldGenerationSettings settings, Component parent) {
         if(settings == null) return false;
         if(!puedeModificarMundos(server, parent)) return false;
@@ -311,14 +331,17 @@ public final class GestorMundos {
         }
     }
 
+    // Devuelve la ruta base donde la aplicacion almacena los mundos del servidor.
     public static Path getDirectorioMundos(Server server) {
         return Path.of(server.getServerDir()).resolve(DIRECTORIO_MUNDOS);
     }
 
+    // Construye la ruta completa de un mundo concreto dentro del servidor.
     public static Path getDirectorioMundo(Server server, String nombreMundo) {
         return getDirectorioMundos(server).resolve(nombreMundo);
     }
 
+    // Comprueba si el servidor permite operaciones de mundos y muestra avisos si no es asi.
     private static boolean puedeModificarMundos(Server server, Component parent) {
         if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
             JOptionPane.showMessageDialog(parent,
@@ -337,12 +360,14 @@ public final class GestorMundos {
         return true;
     }
 
+    // Valida si una carpeta parece ser un mundo de Minecraft comprobando level.dat.
     private static boolean esMundoValido(Path directorio) {
         return directorio != null
                 && Files.isDirectory(directorio)
                 && Files.isRegularFile(directorio.resolve("level.dat"));
     }
 
+    // Pide al usuario un nombre alternativo cuando ya existe un mundo con el mismo nombre.
     private static String resolverNombreDisponible(Component parent, Server server, String nombreBase) {
         String candidato = nombreBase == null || nombreBase.isBlank() ? MinecraftConstants.DEFAULT_WORLD_NAME : nombreBase;
         Set<String> existentes = new LinkedHashSet<>(listarMundos(server));
@@ -363,18 +388,21 @@ public final class GestorMundos {
         return candidato;
     }
 
+    // Copia el mundo principal junto con sus dimensiones Nether y End si existen.
     private static void copiarConDimensiones(Path origenBase, Path destinoBase) throws IOException {
         Utilidades.copiarDirectorio(origenBase, destinoBase);
         copiarSiExiste(origenBase.resolveSibling(origenBase.getFileName() + SUFIJO_NETHER), destinoBase.resolveSibling(destinoBase.getFileName() + SUFIJO_NETHER));
         copiarSiExiste(origenBase.resolveSibling(origenBase.getFileName() + SUFIJO_END), destinoBase.resolveSibling(destinoBase.getFileName() + SUFIJO_END));
     }
 
+    // Copia un directorio solo si la ruta de origen existe como carpeta.
     private static void copiarSiExiste(Path origen, Path destino) throws IOException {
         if(Files.isDirectory(origen)) {
             Utilidades.copiarDirectorio(origen, destino);
         }
     }
 
+    // Migra un mundo ubicado en la raiz del servidor al directorio gestionado por la aplicacion.
     private static boolean migrarMundoRaizASistemaGestionado(Path serverDir, String nombreMundo) throws IOException {
         Path origen = serverDir.resolve(nombreMundo);
         Path destino = serverDir.resolve(DIRECTORIO_MUNDOS).resolve(nombreMundo);
@@ -393,12 +421,14 @@ public final class GestorMundos {
         return cambios;
     }
 
+    // Mueve una dimension asociada al mundo solo cuando el origen existe y el destino aun no.
     private static boolean moverDimensionSiHaceFalta(Path origen, Path destino) throws IOException {
         if(!Files.isDirectory(origen) || Files.exists(destino)) return false;
         Utilidades.moverDirectorio(origen, destino);
         return true;
     }
 
+    // Carga server.properties y lo crea con valores por defecto si se solicita y no existe.
     private static Properties cargarServerProperties(Path serverDir, boolean crearSiNoExiste) throws IOException {
         Path propertiesPath = serverDir.resolve("server.properties");
         if(!Files.exists(propertiesPath) && crearSiNoExiste) {
@@ -418,6 +448,7 @@ public final class GestorMundos {
         return props;
     }
 
+    // Guarda en disco las propiedades del servidor recibidas.
     private static void guardarServerProperties(Path serverDir, Properties props) throws IOException {
         Path propertiesPath = serverDir.resolve("server.properties");
         try(FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
@@ -425,6 +456,7 @@ public final class GestorMundos {
         }
     }
 
+    // Guarda en un archivo auxiliar la metadata necesaria para regenerar o activar un mundo.
     private static void guardarMetadataMundo(Path mundoDir, WorldGenerationSettings settings) throws IOException {
         Properties metadata = new Properties();
         metadata.setProperty("display-name", settings.getNombre());
@@ -441,6 +473,7 @@ public final class GestorMundos {
         }
     }
 
+    // Copia al server.properties la metadata persistida del mundo seleccionado.
     private static void aplicarMetadataMundo(Path mundoDir, Properties props) throws IOException {
         Path metadataPath = mundoDir.resolve(META_ARCHIVO);
         if(!Files.exists(metadataPath)) return;
@@ -459,6 +492,7 @@ public final class GestorMundos {
         copiarPropiedad(metadata, props, "allow-nether");
     }
 
+    // Copia una propiedad concreta entre dos conjuntos de propiedades si existe en el origen.
     private static void copiarPropiedad(Properties origen, Properties destino, String key) {
         String value = origen.getProperty(key);
         if(value != null) {
@@ -466,16 +500,19 @@ public final class GestorMundos {
         }
     }
 
+    // Indica si el level-name ya apunta al directorio gestionado de mundos.
     private static boolean esRutaGestionada(String levelName) {
         if(levelName == null) return false;
         String normalizado = levelName.replace('\\', '/');
         return normalizado.startsWith(DIRECTORIO_MUNDOS + "/");
     }
 
+    // Construye el valor de level-name usando la ruta gestionada por la aplicacion.
     private static String construirLevelNameGestionado(String nombreMundo) {
         return DIRECTORIO_MUNDOS + "/" + nombreMundo;
     }
 
+    // Extrae y normaliza el nombre de mundo a partir del valor guardado en level-name.
     private static String normalizarNombreMundo(String levelName) {
         if(levelName == null) return MinecraftConstants.DEFAULT_WORLD_NAME;
         String normalizado = levelName.replace('\\', '/').trim();
@@ -489,6 +526,7 @@ public final class GestorMundos {
         return sanitizarNombreMundo(normalizado);
     }
 
+    // Limpia un nombre de mundo para que sea valido como nombre de carpeta.
     private static String sanitizarNombreMundo(String nombre) {
         if(nombre == null) return "";
         return nombre.trim()
@@ -507,6 +545,7 @@ public final class GestorMundos {
         private final boolean permitirNether;
         private final boolean activarAlCrear;
 
+        // Construye un conjunto inmutable de opciones para preparar un nuevo mundo.
         public WorldGenerationSettings(String nombre,
                                        String semilla,
                                        String tipoMundo,
@@ -527,38 +566,47 @@ public final class GestorMundos {
             this.activarAlCrear = activarAlCrear;
         }
 
+        // Devuelve el nombre solicitado para el mundo.
         public String getNombre() {
             return nombre;
         }
 
+        // Devuelve la semilla configurada para la generacion del mundo.
         public String getSemilla() {
             return semilla;
         }
 
+        // Devuelve el tipo de mundo configurado.
         public String getTipoMundo() {
             return tipoMundo;
         }
 
+        // Indica si el mundo debe generarse con estructuras.
         public boolean isGenerarEstructuras() {
             return generarEstructuras;
         }
 
+        // Indica si el nuevo mundo se preparara en modo hardcore.
         public boolean isHardcore() {
             return hardcore;
         }
 
+        // Devuelve el modo de juego por defecto del mundo.
         public String getGamemode() {
             return gamemode;
         }
 
+        // Devuelve la dificultad configurada para el mundo.
         public String getDificultad() {
             return dificultad;
         }
 
+        // Indica si el mundo permitira acceder al Nether.
         public boolean isPermitirNether() {
             return permitirNether;
         }
 
+        // Indica si el mundo debe quedar seleccionado justo despues de crearlo.
         public boolean isActivarAlCrear() {
             return activarAlCrear;
         }
