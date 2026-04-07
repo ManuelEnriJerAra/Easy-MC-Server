@@ -14,6 +14,13 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <!-- https://mvnrepository.com/artifact/tools.jackson.core/jackson-databind -->
         <dependency>
@@ -59,22 +66,16 @@
             <version>2.13.2</version>
             <scope>compile</scope>
         </dependency>
-        <!-- Source: https://mvnrepository.com/artifact/io.github.jglrxavpok.hephaistos/common -->
+        <!-- Source: https://mvnrepository.com/artifact/com.github.Querz/NBT -->
         <dependency>
-            <groupId>io.github.jglrxavpok.hephaistos</groupId>
-            <artifactId>common</artifactId>
-            <version>2.6.1</version>
-            <scope>compile</scope>
+            <groupId>com.github.Querz</groupId>
+            <artifactId>NBT</artifactId>
+            <version>6.1</version>
         </dependency>
-        <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-stdlib</artifactId>
-            <version>1.5.10</version>
-            <scope>compile</scope>
-        </dependency>    </dependencies>
+    </dependencies>
     <build>
         <plugins>
-            <!-- Compilación -->
+            <!-- Compilaciï¿½n -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -82,7 +83,7 @@
                 <configuration>
                     <release>25</release>
                     <encoding>UTF-8</encoding>
-                    <!-- Lombok en compilación -->
+                    <!-- Lombok en compilaciï¿½n -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -114,7 +115,7 @@
                                 </transformer>
                             </transformers>
 
-                            <!-- evita problemas típicos al juntar jars -->
+                            <!-- evita problemas tï¿½picos al juntar jars -->
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>

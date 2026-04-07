@@ -1,7 +1,8 @@
-﻿package vista;
+package vista;
 
 import controlador.GestorMundos;
 import controlador.GestorServidores;
+import controlador.WorldDataReader;
 import modelo.MinecraftConstants;
 import modelo.Server;
 import modelo.World;
@@ -9,16 +10,14 @@ import modelo.World;
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 
 public class PanelMundo extends JPanel {
-    private static final int TICKS_REFRESH_MS = 30_000;
-
     private final GestorServidores gestorServidores;
 
     private final JLabel mundoActivoLabel = new JLabel();
-    private final JLabel tiempoRealLabel = new JLabel("Tiempo real transcurrido: -");
+    private final JLabel tiempoRealLabel = new JLabel("Tiempo activo: -");
+    private final JLabel lastPlayedLabel = new JLabel("Nunca");
     private final JComboBox<World> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
     private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
@@ -28,11 +27,11 @@ public class PanelMundo extends JPanel {
 
     private World mundoActivoActual;
     private final Runnable onWorldChanged;
-    private final Timer ticksRefreshTimer;
     private String mundoTicksCache = "";
     private long ticksMostradosCache = 0L;
     private long ticksArchivoCache = 0L;
     private long ultimaActualizacionTicksMs = 0L;
+    private boolean actualizandoComboMundos = false;
 
     PanelMundo(GestorServidores gestorServidores, Runnable onWorldChanged){
         this.gestorServidores = gestorServidores;
@@ -51,6 +50,7 @@ public class PanelMundo extends JPanel {
 
         mundoActivoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         tiempoRealLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lastPlayedLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         selectorPanel.setOpaque(false);
@@ -74,8 +74,8 @@ public class PanelMundo extends JPanel {
         applyDefaultPrimaryButtonStyle();
 
         mundosCombo.addActionListener(e -> {
-            updateUseWorldButtonState();
-            actualizarTicksMundoSeleccionado();
+            if(actualizandoComboMundos) return;
+            actualizarVistaMundos();
         });
         refrescarButton.addActionListener(e -> refrescarDatos());
         usarEsteMundoButton.addActionListener(e -> cambiarMundoSeleccionado());
@@ -97,6 +97,8 @@ public class PanelMundo extends JPanel {
         body.add(Box.createVerticalStrut(6));
         body.add(tiempoRealLabel);
         body.add(Box.createVerticalStrut(12));
+        body.add(lastPlayedLabel);
+        body.add(Box.createVerticalStrut(12));
         body.add(selectorPanel);
         body.add(Box.createVerticalStrut(12));
         body.add(botones);
@@ -105,31 +107,12 @@ public class PanelMundo extends JPanel {
 
         section.getContentPanel().add(body, BorderLayout.CENTER);
 
-        ticksRefreshTimer = new Timer(TICKS_REFRESH_MS, e -> actualizarTicksMundoSeleccionado());
-        ticksRefreshTimer.setRepeats(true);
-        ticksRefreshTimer.start();
-
         refrescarDatos();
-    }
-
-    @Override
-    public void addNotify() {
-        super.addNotify();
-        if(ticksRefreshTimer != null && !ticksRefreshTimer.isRunning()) {
-            ticksRefreshTimer.start();
-        }
-    }
-
-    @Override
-    public void removeNotify() {
-        if(ticksRefreshTimer != null && ticksRefreshTimer.isRunning()) {
-            ticksRefreshTimer.stop();
-        }
-        super.removeNotify();
     }
 
     private void refrescarDatos(){
         Server server = gestorServidores.getServidorSeleccionado();
+        actualizandoComboMundos = true;
         mundosCombo.removeAllItems();
         mundoActivoActual = null;
         mundoTicksCache = "";
@@ -139,7 +122,8 @@ public class PanelMundo extends JPanel {
 
         if(server == null){
             mundoActivoLabel.setText("Selecciona un servidor para gestionar sus mundos.");
-            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            tiempoRealLabel.setText("Tiempo activo: -");
+            lastPlayedLabel.setText("Jugado por ultima vez: -");
             setControlesActivos(false);
             return;
         }
@@ -163,32 +147,43 @@ public class PanelMundo extends JPanel {
                 }
             }
             setControlesActivos(true);
-            actualizarTicksMundoSeleccionado();
         } catch (RuntimeException ex){
             mundoActivoLabel.setText("Error cargando mundos: " + ex.getMessage());
-            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            tiempoRealLabel.setText("Tiempo activo: -");
+            lastPlayedLabel.setText("Jugado por ultima vez: -");
             setControlesActivos(false);
+        } finally {
+            actualizandoComboMundos = false;
         }
+        actualizarVistaMundos();
     }
 
-    private void actualizarTicksMundoSeleccionado(){
+    private void actualizarVistaMundos() {
+        updateUseWorldButtonState();
+        actualizarLabelsDatosServidor();
+    }
+
+    private void actualizarLabelsDatosServidor(){
         Server server = gestorServidores.getServidorSeleccionado();
         if(server == null){
-            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            mundoActivoLabel.setText("Selecciona un servidor para gestionar sus mundos.");
+            tiempoRealLabel.setText("Tiempo activo: -");
+            lastPlayedLabel.setText("Jugado por ultima vez: -");
             return;
         }
 
-        World mundo = (World) mundosCombo.getSelectedItem();
+        World mundo = getMundoSeleccionadoOActivo();
+        String nombreActivo = mundoActivoActual == null ? "-" : mundoActivoActual.getWorldName();
+        mundoActivoLabel.setText("Mundo activo: " + nombreActivo);
+
         if(mundo == null) {
-            mundo = mundoActivoActual;
-        }
-        if(mundo == null) {
-            tiempoRealLabel.setText("Tiempo real transcurrido: -");
+            tiempoRealLabel.setText("Tiempo activo: -");
+            lastPlayedLabel.setText("Jugado por ultima vez: -");
             return;
         }
 
         long ahoraMs = System.currentTimeMillis();
-        long ticksArchivo = GestorMundos.getActiveTicks(server, mundo);
+        long ticksArchivo = WorldDataReader.getActiveTicks(mundo);
         String claveMundo = mundo.getWorldName();
 
         boolean esMismoMundo = Objects.equals(claveMundo, mundoTicksCache);
@@ -217,7 +212,13 @@ public class PanelMundo extends JPanel {
         }
 
         long ticksParaMostrar = Math.max(ticksMostradosCache, 0L);
+        lastPlayedLabel.setText("Jugado por última vez: " + WorldDataReader.getLastPlayed(mundo));
         tiempoRealLabel.setText("Tiempo activo: " + formatearTiempo(ticksParaMostrar));
+    }
+
+    private World getMundoSeleccionadoOActivo() {
+        World mundo = (World) mundosCombo.getSelectedItem();
+        return mundo != null ? mundo : mundoActivoActual;
     }
 
     private String formatearTiempo(long ticks){

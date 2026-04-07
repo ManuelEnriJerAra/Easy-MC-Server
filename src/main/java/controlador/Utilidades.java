@@ -18,6 +18,9 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Properties;
@@ -203,6 +206,11 @@ public class Utilidades {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static String fromMStoDateString(Long ms){
+        System.out.println("Me ha llegado el valor: "+ms.toString());
+        return Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
     }
 
 }

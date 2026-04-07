@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Fichero: GestorMundos.java
  *
  * Autor: Manuel Enrique Jeronimo Aragon
@@ -29,12 +29,6 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Stream;
-
-import org.jglrxavpok.hephaistos.nbt.CompressedProcesser;
-import org.jglrxavpok.hephaistos.nbt.NBT;
-import org.jglrxavpok.hephaistos.nbt.NBTCompound;
-import org.jglrxavpok.hephaistos.nbt.NBTReader;
-import kotlin.Pair;
 
 public final class GestorMundos {
     public static final String DIRECTORIO_MUNDOS = "Easy-MC-Worlds";
@@ -138,37 +132,6 @@ public final class GestorMundos {
             return cargarMundo(mundoDir);
         } catch (IOException e) {
             return new World(getDirectorioMundo(server, MinecraftConstants.DEFAULT_WORLD_NAME).toString(), MinecraftConstants.DEFAULT_WORLD_NAME);
-        }
-    }
-
-    // Devuelve los ticks del mundo activo usando el servidor indicado.
-    public static long getActiveTicks(Server server) {
-        return getActiveTicks(server, getMundoActivo(server));
-    }
-
-    // Lee desde level.dat el tiempo acumulado del mundo indicado.
-    public static long getActiveTicks(Server server, World mundo) {
-        if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) return 0L;
-        if(mundo == null || mundo.getWorldName() == null || mundo.getWorldName().isBlank()) return 0L;
-
-        Path levelDat = getDirectorioMundo(server, mundo).resolve("level.dat");
-        if(!Files.isRegularFile(levelDat)) return 0L;
-
-        try(NBTReader reader = new NBTReader(levelDat, CompressedProcesser.GZIP)) {
-            Pair<String, NBT> namedRoot = reader.readNamed();
-            if(namedRoot == null) return 0L;
-
-            NBT rootTag = namedRoot.getSecond();
-            if(rootTag == null) return 0L;
-
-            if(!(rootTag instanceof NBTCompound root)) return 0L;
-            NBTCompound data = root.getCompound("Data");
-            if(data == null) return 0L;
-
-            Long ticks = data.getLong("Time");
-            return ticks == null ? 0L : Math.max(ticks, 0L);
-        } catch (IOException | org.jglrxavpok.hephaistos.nbt.NBTException | RuntimeException ex) {
-            return 0L;
         }
     }
 
