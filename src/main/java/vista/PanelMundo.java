@@ -19,7 +19,6 @@ public class PanelMundo extends JPanel {
 
     private final JLabel mundoActivoLabel = new JLabel();
     private final JLabel tiempoRealLabel = new JLabel("Tiempo real transcurrido: -");
-    private final JLabel diasMinecraftLabel = new JLabel("Dias de Minecraft transcurridos: -");
     private final JComboBox<World> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
     private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
@@ -52,7 +51,6 @@ public class PanelMundo extends JPanel {
 
         mundoActivoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         tiempoRealLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        diasMinecraftLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         selectorPanel.setOpaque(false);
@@ -98,8 +96,6 @@ public class PanelMundo extends JPanel {
         body.add(mundoActivoLabel);
         body.add(Box.createVerticalStrut(6));
         body.add(tiempoRealLabel);
-        body.add(Box.createVerticalStrut(4));
-        body.add(diasMinecraftLabel);
         body.add(Box.createVerticalStrut(12));
         body.add(selectorPanel);
         body.add(Box.createVerticalStrut(12));
@@ -144,7 +140,6 @@ public class PanelMundo extends JPanel {
         if(server == null){
             mundoActivoLabel.setText("Selecciona un servidor para gestionar sus mundos.");
             tiempoRealLabel.setText("Tiempo real transcurrido: -");
-            diasMinecraftLabel.setText("Días de Minecraft transcurridos: -");
             setControlesActivos(false);
             return;
         }
@@ -172,7 +167,6 @@ public class PanelMundo extends JPanel {
         } catch (RuntimeException ex){
             mundoActivoLabel.setText("Error cargando mundos: " + ex.getMessage());
             tiempoRealLabel.setText("Tiempo real transcurrido: -");
-            diasMinecraftLabel.setText("Días de Minecraft transcurridos: -");
             setControlesActivos(false);
         }
     }
@@ -181,7 +175,6 @@ public class PanelMundo extends JPanel {
         Server server = gestorServidores.getServidorSeleccionado();
         if(server == null){
             tiempoRealLabel.setText("Tiempo real transcurrido: -");
-            diasMinecraftLabel.setText("Días de Minecraft transcurridos: -");
             return;
         }
 
@@ -191,7 +184,6 @@ public class PanelMundo extends JPanel {
         }
         if(mundo == null) {
             tiempoRealLabel.setText("Tiempo real transcurrido: -");
-            diasMinecraftLabel.setText("Dias de Minecraft transcurridos: -");
             return;
         }
 
@@ -225,11 +217,10 @@ public class PanelMundo extends JPanel {
         }
 
         long ticksParaMostrar = Math.max(ticksMostradosCache, 0L);
-        tiempoRealLabel.setText("Tiempo real transcurrido: " + formatearTiempoReal(ticksParaMostrar));
-        diasMinecraftLabel.setText("Dias de Minecraft transcurridos: " + formatearDiasMinecraft(ticksParaMostrar));
+        tiempoRealLabel.setText("Tiempo activo: " + formatearTiempo(ticksParaMostrar));
     }
 
-    private String formatearTiempoReal(long ticks){
+    private String formatearTiempo(long ticks){
         if(ticks <= 0) return "0 s";
 
         long totalSegundos = ticks / 20L;
@@ -240,12 +231,6 @@ public class PanelMundo extends JPanel {
         if(horas > 0) return horas + " h " + minutos + " min " + segundos + " s";
         if(minutos > 0) return minutos + " min " + segundos + " s";
         return segundos + " s";
-    }
-
-    private String formatearDiasMinecraft(long ticks){
-        if(ticks <= 0) return "0.00";
-        double dias = ticks / 24000.0;
-        return String.format(Locale.ROOT, "%.2f", dias);
     }
 
     private void cambiarMundoSeleccionado(){
