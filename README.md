@@ -17,7 +17,7 @@ Easy MC Server is a Java desktop application for managing Minecraft servers from
 
 ## Requirements
 
-- Java 17
+- Java 25
 - Maven
 
 ## Build
