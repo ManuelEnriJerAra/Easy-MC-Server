@@ -209,7 +209,6 @@ public class Utilidades {
     }
 
     public static String fromMStoDateString(Long ms){
-        System.out.println("Me ha llegado el valor: "+ms.toString());
         return Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
     }
 
