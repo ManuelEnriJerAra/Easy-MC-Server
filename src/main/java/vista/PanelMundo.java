@@ -1,16 +1,25 @@
-package vista;
+﻿package vista;
 
 import controlador.GestorMundos;
 import controlador.GestorServidores;
+import controlador.MCARenderer;
 import controlador.WorldDataReader;
 import modelo.MinecraftConstants;
 import modelo.Server;
 import modelo.World;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 public class PanelMundo extends JPanel {
     private final GestorServidores gestorServidores;
@@ -18,12 +27,14 @@ public class PanelMundo extends JPanel {
     private final JLabel mundoActivoLabel = new JLabel();
     private final JLabel tiempoRealLabel = new JLabel("Tiempo activo: -");
     private final JLabel lastPlayedLabel = new JLabel("Nunca");
+    private final JLabel previewImageLabel = new JLabel("La preview todavia no existe.", SwingConstants.CENTER);
     private final JComboBox<World> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
     private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
     private final JButton importarButton = new JButton("Importar mundo");
     private final JButton exportarButton = new JButton("Exportar mundo");
     private final JButton generarButton = new JButton("Generar nuevo mundo");
+    private final JButton generarPreviewButton = new JButton("Generar preview");
 
     private World mundoActivoActual;
     private final Runnable onWorldChanged;
@@ -51,6 +62,10 @@ public class PanelMundo extends JPanel {
         mundoActivoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         tiempoRealLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         lastPlayedLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        previewImageLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        previewImageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        previewImageLabel.setVerticalAlignment(SwingConstants.CENTER);
+        previewImageLabel.setPreferredSize(new Dimension(320, 320));
 
         JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         selectorPanel.setOpaque(false);
@@ -66,11 +81,13 @@ public class PanelMundo extends JPanel {
         botones.add(importarButton);
         botones.add(exportarButton);
         botones.add(generarButton);
+        botones.add(generarPreviewButton);
 
         styleActionButton(refrescarButton);
         styleActionButton(importarButton);
         styleActionButton(exportarButton);
         styleActionButton(generarButton);
+        styleActionButton(generarPreviewButton);
         applyDefaultPrimaryButtonStyle();
 
         mundosCombo.addActionListener(e -> {
@@ -92,6 +109,7 @@ public class PanelMundo extends JPanel {
             }
         });
         generarButton.addActionListener(e -> abrirDialogoNuevoMundo());
+        generarPreviewButton.addActionListener(e -> generarPreviewMundoSeleccionado());
 
         body.add(mundoActivoLabel);
         body.add(Box.createVerticalStrut(6));
@@ -102,6 +120,8 @@ public class PanelMundo extends JPanel {
         body.add(selectorPanel);
         body.add(Box.createVerticalStrut(12));
         body.add(botones);
+        body.add(Box.createVerticalStrut(12));
+        body.add(crearPanelPreview());
         body.add(Box.createVerticalStrut(12));
         body.add(Box.createVerticalGlue());
 
@@ -161,6 +181,7 @@ public class PanelMundo extends JPanel {
     private void actualizarVistaMundos() {
         updateUseWorldButtonState();
         actualizarLabelsDatosServidor();
+        actualizarPreviewSeleccionada();
     }
 
     private void actualizarLabelsDatosServidor(){
@@ -323,7 +344,148 @@ public class PanelMundo extends JPanel {
         importarButton.setEnabled(hayServidor);
         exportarButton.setEnabled(hayMundos);
         generarButton.setEnabled(hayServidor);
+        generarPreviewButton.setEnabled(hayMundos);
         updateUseWorldButtonState();
+    }
+
+    private void generarPreviewMundoSeleccionado() {
+        World mundo = getMundoSeleccionadoOActivo();
+        if(mundo == null) {
+            JOptionPane.showMessageDialog(this,
+                    "No hay un mundo seleccionado.",
+                    "Generar preview",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        List<Path> regionesPreview;
+        try {
+            regionesPreview = encontrarRegionesPreview(mundo);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "No se han podido localizar regiones .mca para el mundo seleccionado: " + ex.getMessage(),
+                    "Generar preview",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if(regionesPreview.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "El mundo no contiene archivos .mca en la carpeta region.",
+                    "Generar preview",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Path outputPath = getPreviewPath(mundo);
+        previewImageLabel.setIcon(null);
+        previewImageLabel.setText("Generando preview...");
+        generarPreviewButton.setEnabled(false);
+        MCARenderer renderer = new MCARenderer();
+        SwingWorker<Path, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Path doInBackground() throws Exception {
+                renderer.renderWorldToPng(regionesPreview, outputPath);
+                return outputPath;
+            }
+
+            @Override
+            protected void done() {
+                updateUseWorldButtonState();
+                generarPreviewButton.setEnabled(mundosCombo.isEnabled() && getMundoSeleccionadoOActivo() != null);
+                actualizarPreviewSeleccionada();
+            }
+        };
+        worker.execute();
+    }
+
+    private List<Path> encontrarRegionesPreview(World mundo) throws Exception {
+        Path worldDir = Path.of(mundo.getWorldDir());
+        Path regionDir = worldDir.resolve("region");
+        if(!Files.isDirectory(regionDir)) {
+            return List.of();
+        }
+
+        MCARenderer renderer = new MCARenderer();
+        try(Stream<Path> stream = Files.list(regionDir)) {
+            List<Path> regiones = stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mca"))
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                    .toList();
+
+            List<Path> visibles = new java.util.ArrayList<>();
+            for(Path region : regiones) {
+                if(renderer.hasVisibleBlocks(region)) {
+                    visibles.add(region);
+                }
+            }
+            return visibles.isEmpty() ? regiones : visibles;
+        }
+    }
+
+    private JPanel crearPanelPreview() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setOpaque(false);
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel titulo = new JLabel("Preview del mundo");
+        titulo.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 0));
+        panel.add(titulo, BorderLayout.NORTH);
+
+        previewImageLabel.setBorder(AppTheme.createRoundedBorder(new Insets(12, 12, 12, 12), 1f));
+        panel.add(previewImageLabel, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void actualizarPreviewSeleccionada() {
+        World mundo = getMundoSeleccionadoOActivo();
+        if(mundo == null) {
+            mostrarTextoPreview("La preview todavia no existe.");
+            return;
+        }
+
+        Path previewPath = getPreviewPath(mundo);
+        if(!Files.isRegularFile(previewPath)) {
+            mostrarTextoPreview("La preview todavia no existe.");
+            return;
+        }
+
+        try {
+            BufferedImage image = ImageIO.read(previewPath.toFile());
+            if(image == null) {
+                mostrarTextoPreview("No se ha podido leer la preview.");
+                return;
+            }
+            Image scaled = escalarPreview(image, 320, 320);
+            previewImageLabel.setText("");
+            previewImageLabel.setIcon(new ImageIcon(scaled));
+        } catch (IOException ex) {
+            mostrarTextoPreview("No se ha podido leer la preview.");
+        }
+    }
+
+    private void mostrarTextoPreview(String texto) {
+        previewImageLabel.setIcon(null);
+        previewImageLabel.setText(texto);
+    }
+
+    private Image escalarPreview(BufferedImage image, int maxWidth, int maxHeight) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if(width <= 0 || height <= 0) {
+            return image;
+        }
+
+        double ratio = Math.min((double) maxWidth / width, (double) maxHeight / height);
+        ratio = Math.min(1.0d, ratio);
+        int scaledWidth = Math.max(1, (int) Math.round(width * ratio));
+        int scaledHeight = Math.max(1, (int) Math.round(height * ratio));
+        return image.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH);
+    }
+
+    private Path getPreviewPath(World mundo) {
+        return Path.of(mundo.getWorldDir()).resolve("preview.png");
     }
 
     private void updateUseWorldButtonState(){
