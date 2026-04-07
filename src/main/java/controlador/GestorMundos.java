@@ -1,5 +1,6 @@
 package controlador;
 
+import modelo.MinecraftConstants;
 import modelo.Server;
 import modelo.ServerProperties;
 
@@ -43,11 +44,11 @@ public final class GestorMundos {
             Files.createDirectories(getDirectorioMundos(server));
             Properties props = cargarServerProperties(serverDir, true);
 
-            String levelNameBruto = props.getProperty("level-name", "world").trim();
-            if(levelNameBruto.isBlank()) levelNameBruto = "world";
+            String levelNameBruto = props.getProperty("level-name", MinecraftConstants.DEFAULT_WORLD_NAME).trim();
+            if(levelNameBruto.isBlank()) levelNameBruto = MinecraftConstants.DEFAULT_WORLD_NAME;
 
             String mundoActivo = normalizarNombreMundo(levelNameBruto);
-            if(mundoActivo.isBlank()) mundoActivo = "world";
+            if(mundoActivo.isBlank()) mundoActivo = MinecraftConstants.DEFAULT_WORLD_NAME;
 
             boolean cambios = false;
             if(!esRutaGestionada(levelNameBruto)) {
@@ -63,8 +64,8 @@ public final class GestorMundos {
             }
 
             if(listarMundos(server).isEmpty()) {
-                Files.createDirectories(getDirectorioMundo(server, "world"));
-                props.setProperty("level-name", construirLevelNameGestionado("world"));
+                Files.createDirectories(getDirectorioMundo(server, MinecraftConstants.DEFAULT_WORLD_NAME));
+                props.setProperty("level-name", construirLevelNameGestionado(MinecraftConstants.DEFAULT_WORLD_NAME));
                 cambios = true;
             }
 
@@ -97,15 +98,15 @@ public final class GestorMundos {
     }
 
     public static String getNombreMundoActivo(Server server) {
-        if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) return "world";
+        if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) return MinecraftConstants.DEFAULT_WORLD_NAME;
 
         try {
             Properties props = cargarServerProperties(Path.of(server.getServerDir()), false);
-            String levelName = props.getProperty("level-name", "world");
+            String levelName = props.getProperty("level-name", MinecraftConstants.DEFAULT_WORLD_NAME);
             String normalizado = normalizarNombreMundo(levelName);
-            return normalizado.isBlank() ? "world" : normalizado;
+            return normalizado.isBlank() ? MinecraftConstants.DEFAULT_WORLD_NAME : normalizado;
         } catch (IOException e) {
-            return "world";
+            return MinecraftConstants.DEFAULT_WORLD_NAME;
         }
     }
 
@@ -343,7 +344,7 @@ public final class GestorMundos {
     }
 
     private static String resolverNombreDisponible(Component parent, Server server, String nombreBase) {
-        String candidato = nombreBase == null || nombreBase.isBlank() ? "world" : nombreBase;
+        String candidato = nombreBase == null || nombreBase.isBlank() ? MinecraftConstants.DEFAULT_WORLD_NAME : nombreBase;
         Set<String> existentes = new LinkedHashSet<>(listarMundos(server));
         while(existentes.contains(candidato)) {
             String nuevoNombre = JOptionPane.showInputDialog(parent,
@@ -476,7 +477,7 @@ public final class GestorMundos {
     }
 
     private static String normalizarNombreMundo(String levelName) {
-        if(levelName == null) return "world";
+        if(levelName == null) return MinecraftConstants.DEFAULT_WORLD_NAME;
         String normalizado = levelName.replace('\\', '/').trim();
         if(normalizado.startsWith(DIRECTORIO_MUNDOS + "/")) {
             normalizado = normalizado.substring((DIRECTORIO_MUNDOS + "/").length());

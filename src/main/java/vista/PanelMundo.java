@@ -2,6 +2,7 @@ package vista;
 
 import controlador.GestorMundos;
 import controlador.GestorServidores;
+import modelo.MinecraftConstants;
 import modelo.Server;
 
 import javax.swing.*;
@@ -258,11 +259,11 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        JTextField nombreField = new JTextField("world-nuevo");
+        JTextField nombreField = new JTextField(MinecraftConstants.DEFAULT_WORLD_NAME + "-nuevo");
         JTextField semillaField = new JTextField();
-        JComboBox<String> tipoBox = new JComboBox<>(new String[]{"normal", "flat", "large biomes", "amplified", "single biome surface"});
-        JComboBox<String> gamemodeBox = new JComboBox<>(new String[]{"survival", "creative", "adventure", "spectator"});
-        JComboBox<String> dificultadBox = new JComboBox<>(new String[]{"peaceful", "easy", "normal", "hard"});
+        JComboBox<String> tipoBox = new JComboBox<>(MinecraftConstants.WORLD_TYPES.toArray(String[]::new));
+        JComboBox<String> gamemodeBox = new JComboBox<>(MinecraftConstants.GAMEMODES.toArray(String[]::new));
+        JComboBox<String> dificultadBox = new JComboBox<>(MinecraftConstants.DIFFICULTIES.toArray(String[]::new));
         JCheckBox estructurasBox = new JCheckBox("Generar estructuras", true);
         JCheckBox hardcoreBox = new JCheckBox("Hardcore", false);
         JCheckBox netherBox = new JCheckBox("Permitir Nether", true);

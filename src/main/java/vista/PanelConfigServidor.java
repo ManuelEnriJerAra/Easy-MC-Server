@@ -3,6 +3,7 @@ package vista;
 import controlador.GestorServidores;
 import modelo.Server;
 import modelo.ServerConfig;
+import modelo.MinecraftConstants;
 
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
@@ -23,15 +24,9 @@ import java.util.Map;
 import java.util.Properties;
 
 public class PanelConfigServidor extends JPanel {
-    private static final String[] DIFFICULTY_OPTIONS = {"peaceful", "easy", "normal", "hard"};
-    private static final String[] GAMEMODE_OPTIONS = {"survival", "creative", "adventure", "spectator"};
-    private static final String[] LEVEL_TYPE_OPTIONS = {
-            "minecraft:normal",
-            "minecraft:flat",
-            "minecraft:large_biomes",
-            "minecraft:amplified",
-            "minecraft:single_biome_surface"
-    };
+    private static final String[] DIFFICULTY_OPTIONS = MinecraftConstants.DIFFICULTIES.toArray(String[]::new);
+    private static final String[] GAMEMODE_OPTIONS = MinecraftConstants.GAMEMODES.toArray(String[]::new);
+    private static final String[] LEVEL_TYPE_OPTIONS = MinecraftConstants.WORLD_TYPES_NAMESPACED.toArray(String[]::new);
 
     private static final String SECTION_ACCESS_NETWORK = "Acceso y red";
     private static final String SECTION_WORLD_GENERATION = "Mundo y generación";
@@ -1077,34 +1072,34 @@ public class PanelConfigServidor extends JPanel {
     private static String normalizeLevelType(String value){
         if(value == null || value.isBlank()) return LEVEL_TYPE_OPTIONS[0];
         return switch(value.strip().toLowerCase(Locale.ROOT)){
-            case "default", "normal", "minecraft:normal" -> "minecraft:normal";
-            case "flat", "minecraft:flat" -> "minecraft:flat";
-            case "largebiomes", "large_biomes", "minecraft:large_biomes" -> "minecraft:large_biomes";
-            case "amplified", "minecraft:amplified" -> "minecraft:amplified";
-            case "singlebiomesurface", "single_biome_surface", "minecraft:single_biome_surface" -> "minecraft:single_biome_surface";
+            case "default", MinecraftConstants.WORLD_TYPE_NORMAL, MinecraftConstants.WORLD_TYPE_NORMAL_NAMESPACED -> MinecraftConstants.WORLD_TYPE_NORMAL_NAMESPACED;
+            case MinecraftConstants.WORLD_TYPE_FLAT, MinecraftConstants.WORLD_TYPE_FLAT_NAMESPACED -> MinecraftConstants.WORLD_TYPE_FLAT_NAMESPACED;
+            case "largebiomes", MinecraftConstants.WORLD_TYPE_LARGE_BIOMES, MinecraftConstants.WORLD_TYPE_LARGE_BIOMES_NAMESPACED -> MinecraftConstants.WORLD_TYPE_LARGE_BIOMES_NAMESPACED;
+            case MinecraftConstants.WORLD_TYPE_AMPLIFIED, MinecraftConstants.WORLD_TYPE_AMPLIFIED_NAMESPACED -> MinecraftConstants.WORLD_TYPE_AMPLIFIED_NAMESPACED;
+            case "singlebiomesurface", MinecraftConstants.WORLD_TYPE_SINGLE_BIOME_SURFACE, MinecraftConstants.WORLD_TYPE_SINGLE_BIOME_SURFACE_NAMESPACED -> MinecraftConstants.WORLD_TYPE_SINGLE_BIOME_SURFACE_NAMESPACED;
             default -> value.strip();
         };
     }
 
     private static String normalizeDifficulty(String value){
-        if(value == null) return DIFFICULTY_OPTIONS[2];
+        if(value == null) return MinecraftConstants.DEFAULT_DIFFICULTY;
         return switch(value.strip().toLowerCase(Locale.ROOT)){
-            case "0", "peaceful" -> "peaceful";
-            case "1", "easy" -> "easy";
-            case "2", "normal" -> "normal";
-            case "3", "hard" -> "hard";
-            default -> "normal";
+            case "0", MinecraftConstants.DIFFICULTY_PEACEFUL -> MinecraftConstants.DIFFICULTY_PEACEFUL;
+            case "1", MinecraftConstants.DIFFICULTY_EASY -> MinecraftConstants.DIFFICULTY_EASY;
+            case "2", MinecraftConstants.DIFFICULTY_NORMAL -> MinecraftConstants.DIFFICULTY_NORMAL;
+            case "3", MinecraftConstants.DIFFICULTY_HARD -> MinecraftConstants.DIFFICULTY_HARD;
+            default -> MinecraftConstants.DEFAULT_DIFFICULTY;
         };
     }
 
     private static String normalizeGamemode(String value){
-        if(value == null) return GAMEMODE_OPTIONS[0];
+        if(value == null) return MinecraftConstants.DEFAULT_GAMEMODE;
         return switch(value.strip().toLowerCase(Locale.ROOT)){
-            case "0", "survival" -> "survival";
-            case "1", "creative" -> "creative";
-            case "2", "adventure" -> "adventure";
-            case "3", "spectator" -> "spectator";
-            default -> "survival";
+            case "0", MinecraftConstants.GAMEMODE_SURVIVAL -> MinecraftConstants.GAMEMODE_SURVIVAL;
+            case "1", MinecraftConstants.GAMEMODE_CREATIVE -> MinecraftConstants.GAMEMODE_CREATIVE;
+            case "2", MinecraftConstants.GAMEMODE_ADVENTURE -> MinecraftConstants.GAMEMODE_ADVENTURE;
+            case "3", MinecraftConstants.GAMEMODE_SPECTATOR -> MinecraftConstants.GAMEMODE_SPECTATOR;
+            default -> MinecraftConstants.DEFAULT_GAMEMODE;
         };
     }
 
