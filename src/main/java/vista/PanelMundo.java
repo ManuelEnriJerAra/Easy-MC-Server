@@ -188,7 +188,7 @@ public class PanelMundo extends JPanel {
         }
         if(mundo == null || mundo.isBlank()) {
             tiempoRealLabel.setText("Tiempo real transcurrido: -");
-            diasMinecraftLabel.setText("D?as de Minecraft transcurridos: -");
+            diasMinecraftLabel.setText("Días de Minecraft transcurridos: -");
             return;
         }
 
@@ -222,7 +222,7 @@ public class PanelMundo extends JPanel {
 
         long ticksParaMostrar = Math.max(ticksMostradosCache, 0L);
         tiempoRealLabel.setText("Tiempo real transcurrido: " + formatearTiempoReal(ticksParaMostrar));
-        diasMinecraftLabel.setText("D?as de Minecraft transcurridos: " + formatearDiasMinecraft(ticksParaMostrar));
+        diasMinecraftLabel.setText("Días de Minecraft transcurridos: " + formatearDiasMinecraft(ticksParaMostrar));
     }
 
     private String formatearTiempoReal(long ticks){

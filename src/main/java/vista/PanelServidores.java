@@ -884,13 +884,13 @@ public class PanelServidores extends FlatScrollPane {
         if(server == null) return;
         String serverDir = server.getServerDir();
         if(serverDir == null || serverDir.isBlank()){
-            JOptionPane.showMessageDialog(this, "El servidor seleccionado no tiene una carpeta v?lida.", "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "El servidor seleccionado no tiene una carpeta válida.", "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
         File carpeta = new File(serverDir);
         if(!carpeta.isDirectory()){
-            JOptionPane.showMessageDialog(this, "El servidor seleccionado no tiene una carpeta v?lida.", "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "El servidor seleccionado no tiene una carpeta válida.", "Abrir carpeta", JOptionPane.ERROR_MESSAGE);
             return;
         }
 

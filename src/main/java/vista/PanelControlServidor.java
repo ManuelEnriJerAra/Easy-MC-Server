@@ -144,11 +144,11 @@ public class PanelControlServidor extends JPanel {
     private void actualizarBotonesSegunEstado(Server server){
         panelBotones.removeAll();
         if(server.getServerProcess() != null && server.getServerProcess().isAlive()){
-            // el servidor est? vivo
+            // el servidor está vivo
             panelBotones.add(panelBotonesIniciado, BorderLayout.CENTER);
         }
         else{
-            // el servidor no est? vivo
+            // el servidor no está vivo
             panelBotones.add(btnIniciarServidor, BorderLayout.CENTER);
         }
         panelBotones.revalidate();

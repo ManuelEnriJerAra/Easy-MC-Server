@@ -590,7 +590,7 @@ public class GestorServidores {
         normalizarMetadatosOrden(true);
     }
 
-    // Guarda un s?lo servidor en la lista de servidores y luego lo guarda en el JSON
+    // Guarda un sólo servidor en la lista de servidores y luego lo guarda en el JSON
     public void guardarServidor(Server server){
         if (server == null) return;
         if (listaServidores == null) {
@@ -671,7 +671,7 @@ public class GestorServidores {
     public boolean eliminarServidor(Server server){
         if(server == null) return false;
         if(server.getServerProcess() != null && server.getServerProcess().isAlive()){
-            return false; // no podemos eliminarlo mientras est? en ejecuci?n para no dejar procesos abiertos
+            return false; // no podemos eliminarlo mientras está en ejecución para no dejar procesos abiertos
         }
 
         boolean removed = listaServidores.removeIf(s -> Objects.equals(s.getId(), server.getId()));

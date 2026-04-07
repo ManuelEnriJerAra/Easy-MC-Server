@@ -436,7 +436,7 @@ public class VentanaPrincipal extends JFrame {
 
         JPanel barra = new CardPanel(new BorderLayout(), new Insets(6, 6, 6, 6));
         barra.setBackground(AppTheme.getPanelBackground());
-        barra.setPreferredSize(new Dimension(56, 0)); // m??s estrecha
+        barra.setPreferredSize(new Dimension(56, 0)); // más estrecha
 
         JPanel botones = new JPanel();
         botones.setOpaque(false);
@@ -519,7 +519,7 @@ public class VentanaPrincipal extends JFrame {
         b.setBorderPainted(true); // permitimos dibujar el borde en hover/seleccion
         b.setContentAreaFilled(false); // sin color de fondo por defecto
         b.setOpaque(false); // se pintará sólo cuando esté seleccionado
-        b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc())); // mantiene tama?o estable y permite mostrar borde en hover
+        b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc())); // mantiene tamaño estable y permite mostrar borde en hover
         b.putClientProperty("JButton.buttonType", "roundRect"); // mantener esquinas redondeadas con FlatLaf
         b.addActionListener(e -> navegarAPaginaDerecha(pagina));
         navButtons.put(pagina, b);
@@ -761,7 +761,7 @@ public class VentanaPrincipal extends JFrame {
 
         // Recalcula colores y bordes de los botones de navegación según el tema actual.
         setPaginaDerecha(paginaDerechaActual);
-        // Fuerza a que el listado recalcule bordes/colores (tambi?n lo hace en updateUI()).
+        // Fuerza a que el listado recalcule bordes/colores (también lo hace en updateUI()).
         if (listaServidoresPanel != null) {
             listaServidoresPanel.updateUI();
             listaServidoresPanel.repaint();

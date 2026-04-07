@@ -67,8 +67,8 @@ public class DetectorVersionServidor {
                     }
                 }
                 /*
-                 * Mojang empez� a a�adir el archivo version.json a partir de la versi�n 1.14, por lo tanto si el servidor
-                 * es de una versi�n anterior necesitamos leerlo por otro m�todo, que ser� extray�ndolo de un archivo CLASS
+                 * Mojang empezó a añadir el archivo version.json a partir de la versión 1.14, por lo tanto si el servidor
+                 * es de una versión anterior necesitamos leerlo por otro método, que será extrayéndolo de un archivo CLASS
                  */
                 JarEntry jarEntry2 = jar.getJarEntry("net/minecraft/server/MinecraftServer.class");
                 if(jarEntry2 != null){

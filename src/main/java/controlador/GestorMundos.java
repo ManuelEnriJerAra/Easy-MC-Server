@@ -151,7 +151,7 @@ public final class GestorMundos {
         Path origen = chooser.getSelectedFile().toPath();
         if(!esMundoValido(origen)) {
             JOptionPane.showMessageDialog(parent,
-                    "La carpeta seleccionada no parece ser un mundo v?lido de Minecraft. Debe contener level.dat.",
+                    "La carpeta seleccionada no parece ser un mundo válido de Minecraft. Debe contener level.dat.",
                     "Importar mundo",
                     JOptionPane.ERROR_MESSAGE);
             return false;
@@ -231,7 +231,7 @@ public final class GestorMundos {
     public static boolean cambiarMundo(Server server, String nombreMundo, Component parent) {
         if(server == null || nombreMundo == null || nombreMundo.isBlank()) {
             JOptionPane.showMessageDialog(parent,
-                    "Selecciona un mundo v?lido.",
+                    "Selecciona un mundo válido.",
                     "Cambiar mundo",
                     JOptionPane.WARNING_MESSAGE);
             return false;
@@ -276,7 +276,7 @@ public final class GestorMundos {
         String nombre = sanitizarNombreMundo(settings.getNombre());
         if(nombre.isBlank()) {
             JOptionPane.showMessageDialog(parent,
-                    "El nombre del mundo no puede estar vac?o.",
+                    "El nombre del mundo no puede estar vacío.",
                     "Generar mundo",
                     JOptionPane.WARNING_MESSAGE);
             return false;
@@ -298,7 +298,7 @@ public final class GestorMundos {
                 return cambiarMundo(server, nombre, parent);
             }
             JOptionPane.showMessageDialog(parent,
-                    "Mundo preparado en " + DIRECTORIO_MUNDOS + ": " + nombre + ". Se generar? al activarlo e iniciar el servidor.",
+                    "Mundo preparado en " + DIRECTORIO_MUNDOS + ": " + nombre + ". Se generará al activarlo e iniciar el servidor.",
                     "Generar mundo",
                     JOptionPane.INFORMATION_MESSAGE);
             return true;
@@ -322,14 +322,14 @@ public final class GestorMundos {
     private static boolean puedeModificarMundos(Server server, Component parent) {
         if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
             JOptionPane.showMessageDialog(parent,
-                    "No hay un servidor seleccionado v?lido.",
+                    "No hay un servidor seleccionado válido.",
                     "Mundos",
                     JOptionPane.WARNING_MESSAGE);
             return false;
         }
         if(server.getServerProcess() != null && server.getServerProcess().isAlive()) {
             JOptionPane.showMessageDialog(parent,
-                    "Det?n el servidor antes de importar, exportar, generar o cambiar mundos.",
+                    "Detén el servidor antes de importar, exportar, generar o cambiar mundos.",
                     "Mundos",
                     JOptionPane.WARNING_MESSAGE);
             return false;
@@ -354,7 +354,7 @@ public final class GestorMundos {
             candidato = sanitizarNombreMundo(nuevoNombre);
             if(candidato.isBlank()) {
                 JOptionPane.showMessageDialog(parent,
-                        "El nombre indicado no es v?lido.",
+                        "El nombre indicado no es válido.",
                         "Importar mundo",
                         JOptionPane.WARNING_MESSAGE);
                 candidato = nombreBase;
