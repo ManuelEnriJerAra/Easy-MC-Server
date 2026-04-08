@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 /**
  * Renderizador cenital de archivos MCA.
@@ -63,6 +64,7 @@ public final class MCARenderer {
     private static final int DEBUG_MAX_REASON_LINES = 12;
     private static final int DEBUG_MAX_CHUNK_LINES = 20;
     private static final int DEBUG_MAX_SAMPLE_LINES = 10;
+    private static final int REGION_RENDER_TILE_CHUNKS = 4;
     // Lista minima de bloques que siempre queremos tratar como invisibles desde una vista cenital.
     private static final Set<String> TRANSPARENT_BLOCKS = Set.of(
             "minecraft:air",
@@ -193,16 +195,29 @@ public final class MCARenderer {
             g2.setColor(new Color(normalizedOptions.defaultArgb(), true));
             g2.fillRect(0, 0, width, height);
 
-            for(int i = 0; i < normalizedPaths.size(); i++) {
-                // Muy importante: al componer varias regiones no debemos recortar cada una por separado.
-                // Si lo hiciésemos, cada imagen regional tendría un tamaño distinto y al dibujarla en su
-                // "slot" de 512x512 se desplazaría, provocando cortes rectos o mezclas entre previews.
-                BufferedImage regionImage = renderRegion(normalizedPaths.get(i), normalizedOptions, false);
-                RegionCoordinates region = coords.get(i);
+            List<RenderedRegion> renderedRegions = IntStream.range(0, normalizedPaths.size())
+                    .parallel()
+                    .mapToObj(i -> {
+                        try {
+                            // Muy importante: al componer varias regiones no debemos recortar cada una por separado.
+                            // Si lo hiciésemos, cada imagen regional tendría un tamaño distinto y al dibujarla en su
+                            // "slot" de 512x512 se desplazaría, provocando cortes rectos o mezclas entre previews.
+                            BufferedImage regionImage = renderRegion(normalizedPaths.get(i), normalizedOptions, false);
+                            return new RenderedRegion(coords.get(i), regionImage);
+                        } catch(IOException ex) {
+                            throw new RegionRenderRuntimeException(ex);
+                        }
+                    })
+                    .toList();
+
+            for(RenderedRegion renderedRegion : renderedRegions) {
+                RegionCoordinates region = renderedRegion.region();
                 int drawX = (region.x() - minRegionX) * pixelsPerRegion;
                 int drawY = (region.z() - minRegionZ) * pixelsPerRegion;
-                g2.drawImage(regionImage, drawX, drawY, null);
+                g2.drawImage(renderedRegion.image(), drawX, drawY, null);
             }
+        } catch(RegionRenderRuntimeException ex) {
+            throw ex.ioException();
         } finally {
             g2.dispose();
         }
@@ -213,7 +228,7 @@ public final class MCARenderer {
             paintMarker(image, markerPoint, minRegionX, minRegionZ, normalizedOptions);
         }
 
-        BufferedImage result = cropToVisibleArea(image, normalizedOptions.defaultArgb());
+        BufferedImage result = cropToVisibleArea(image, normalizedOptions);
         debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
         return result;
     }
@@ -233,8 +248,9 @@ public final class MCARenderer {
                 normalizedOptions.ignoreTransparentBlocks());
         MCAFile mcaFile = MCAUtil.read(normalizedPath.toFile(), RAW_DATA_FLAG);
         BufferedImage image = createRegionImage(normalizedOptions);
+        fillImageBackground(image, normalizedOptions.defaultArgb());
         paintRegion(mcaFile, image, region, normalizedOptions);
-        BufferedImage result = cropResult ? cropToVisibleArea(image, normalizedOptions.defaultArgb()) : image;
+        BufferedImage result = cropResult ? cropToVisibleArea(image, normalizedOptions) : image;
         debug("renderRegion finish path=%s result=%dx%d", normalizedPath, result.getWidth(), result.getHeight());
         return result;
     }
@@ -291,12 +307,22 @@ public final class MCARenderer {
      *
      * Si toda la imagen es fondo, se devuelve la imagen original.
      */
-    private BufferedImage cropToVisibleArea(BufferedImage image, int backgroundArgb) {
+    private BufferedImage cropToVisibleArea(BufferedImage image, int backgroundArgb, int pixelsPerBlock) {
         Rectangle visibleArea = findVisibleBounds(image, backgroundArgb);
         if(visibleArea == null) {
             return image;
         }
         return image.getSubimage(visibleArea.x, visibleArea.y, visibleArea.width, visibleArea.height);
+    }
+
+    private BufferedImage cropToVisibleArea(BufferedImage image, RenderOptions options) {
+        if(options != null && options.preferSquareCrop()) {
+            Rectangle squareArea = findLargestSquareWithoutEmptyChunks(image, options.defaultArgb(), options.pixelsPerBlock());
+            if(squareArea != null) {
+                return image.getSubimage(squareArea.x, squareArea.y, squareArea.width, squareArea.height);
+            }
+        }
+        return cropToVisibleArea(image, options == null ? DEFAULT_ARGB : options.defaultArgb(), options == null ? 1 : options.pixelsPerBlock());
     }
 
     /**
@@ -330,10 +356,92 @@ public final class MCARenderer {
         return new Rectangle(minX, minY, (maxX - minX) + 1, (maxY - minY) + 1);
     }
 
+    private Rectangle findLargestSquareWithoutEmptyChunks(BufferedImage image, int backgroundArgb, int pixelsPerBlock) {
+        int chunkPixelSide = CHUNK_BLOCK_SIDE * Math.max(1, pixelsPerBlock);
+        if(image.getWidth() < chunkPixelSide || image.getHeight() < chunkPixelSide) {
+            return null;
+        }
+        if(image.getWidth() % chunkPixelSide != 0 || image.getHeight() % chunkPixelSide != 0) {
+            return null;
+        }
+
+        int chunkCols = image.getWidth() / chunkPixelSide;
+        int chunkRows = image.getHeight() / chunkPixelSide;
+        boolean[][] occupied = new boolean[chunkRows][chunkCols];
+
+        for(int chunkY = 0; chunkY < chunkRows; chunkY++) {
+            for(int chunkX = 0; chunkX < chunkCols; chunkX++) {
+                occupied[chunkY][chunkX] = chunkHasVisiblePixels(image, chunkX, chunkY, chunkPixelSide, backgroundArgb);
+            }
+        }
+
+        int[][] dp = new int[chunkRows][chunkCols];
+        int bestSide = 0;
+        int bestEndX = -1;
+        int bestEndY = -1;
+
+        for(int y = 0; y < chunkRows; y++) {
+            for(int x = 0; x < chunkCols; x++) {
+                if(!occupied[y][x]) {
+                    dp[y][x] = 0;
+                    continue;
+                }
+
+                if(x == 0 || y == 0) {
+                    dp[y][x] = 1;
+                } else {
+                    dp[y][x] = 1 + Math.min(dp[y - 1][x], Math.min(dp[y][x - 1], dp[y - 1][x - 1]));
+                }
+
+                if(dp[y][x] > bestSide) {
+                    bestSide = dp[y][x];
+                    bestEndX = x;
+                    bestEndY = y;
+                }
+            }
+        }
+
+        if(bestSide <= 0) {
+            return null;
+        }
+
+        int startChunkX = bestEndX - bestSide + 1;
+        int startChunkY = bestEndY - bestSide + 1;
+        return new Rectangle(
+                startChunkX * chunkPixelSide,
+                startChunkY * chunkPixelSide,
+                bestSide * chunkPixelSide,
+                bestSide * chunkPixelSide
+        );
+    }
+
+    private boolean chunkHasVisiblePixels(BufferedImage image, int chunkX, int chunkY, int chunkPixelSide, int backgroundArgb) {
+        int startX = chunkX * chunkPixelSide;
+        int startY = chunkY * chunkPixelSide;
+        for(int y = startY; y < startY + chunkPixelSide; y++) {
+            for(int x = startX; x < startX + chunkPixelSide; x++) {
+                if(image.getRGB(x, y) != backgroundArgb) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // Crea el lienzo base para una sola region.
     private BufferedImage createRegionImage(RenderOptions options) {
         int size = REGION_BLOCK_SIDE * options.pixelsPerBlock();
         return new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+    }
+
+    private void fillImageBackground(BufferedImage image, int argb) {
+        Graphics2D g2 = image.createGraphics();
+        try {
+            g2.setColor(new Color(argb, true));
+            g2.fillRect(0, 0, image.getWidth(), image.getHeight());
+        } finally {
+            g2.dispose();
+        }
     }
 
     /**
@@ -345,11 +453,30 @@ public final class MCARenderer {
      *   las coordenadas globales reales del chunk y del bloque.
      */
     private void paintRegion(MCAFile mcaFile, BufferedImage image, RegionCoordinates region, RenderOptions options) {
-        for(int localChunkZ = 0; localChunkZ < REGION_CHUNK_SIDE; localChunkZ++) {
-            for(int localChunkX = 0; localChunkX < REGION_CHUNK_SIDE; localChunkX++) {
+        int tilesPerSide = (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS);
+        IntStream.range(0, tilesPerSide * tilesPerSide)
+                .parallel()
+                .forEach(tileIndex -> {
+                    int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
+                    int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
+                    paintChunkTile(image, mcaFile, region, options, tileChunkX, tileChunkZ);
+                });
+    }
+
+    private void paintChunkTile(
+            BufferedImage image,
+            MCAFile mcaFile,
+            RegionCoordinates region,
+            RenderOptions options,
+            int startChunkX,
+            int startChunkZ
+    ) {
+        int endChunkX = Math.min(REGION_CHUNK_SIDE, startChunkX + REGION_RENDER_TILE_CHUNKS);
+        int endChunkZ = Math.min(REGION_CHUNK_SIDE, startChunkZ + REGION_RENDER_TILE_CHUNKS);
+        for(int localChunkZ = startChunkZ; localChunkZ < endChunkZ; localChunkZ++) {
+            for(int localChunkX = startChunkX; localChunkX < endChunkX; localChunkX++) {
                 Chunk chunk = mcaFile.getChunk(localChunkX, localChunkZ);
                 if(chunk == null) {
-                    fillChunkBackground(image, localChunkX, localChunkZ, options.defaultArgb(), options.pixelsPerBlock());
                     continue;
                 }
                 paintChunk(image, chunk, localChunkX, localChunkZ, region, options);
@@ -464,8 +591,24 @@ public final class MCARenderer {
 
         CompoundTag legacyLevel = root.getCompoundTag("Level");
         if(legacyLevel != null) {
+            ListTag<CompoundTag> levelSections = getLegacyLevelSections(legacyLevel);
+            if(isModernLevelSections(levelSections)) {
+                markScheme(diagnostics, "modern_level");
+                int dataVersion = root.getInt("DataVersion");
+                debug("modern_level detected dv=%d sections=%d rootKeys=%s levelKeys=%s",
+                        dataVersion,
+                        levelSections == null ? 0 : levelSections.size(),
+                        root.keySet(),
+                        legacyLevel.keySet());
+                if(diagnostics != null) {
+                    diagnostics.dataVersion = dataVersion;
+                    diagnostics.sectionCount = levelSections == null ? 0 : levelSections.size();
+                }
+                return findTopBlockModernSections(levelSections, dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+            }
+
             markScheme(diagnostics, "legacy");
-            return findTopBlockLegacy(legacyLevel, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+            return findTopBlockLegacy(legacyLevel, root.getInt("DataVersion"), localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
         }
 
         ListTag<?> sectionsTag = root.getListTag("sections");
@@ -480,20 +623,51 @@ public final class MCARenderer {
             diagnostics.sectionCount = sectionsTag.size();
         }
         ListTag<CompoundTag> sections = sectionsTag.asCompoundTagList();
-        // En chunks modernos Querz guarda el DataVersion en la raiz del chunk.
-        // Lo necesitamos porque el empaquetado de block_states cambia segun la version:
-        // - versiones antiguas: los indices pueden cruzar el borde entre longs,
-        // - versiones nuevas (2527+): cada long se rellena con padding y los indices ya no cruzan.
         int dataVersion = root.getInt("DataVersion");
         if(diagnostics != null) {
             diagnostics.dataVersion = dataVersion;
         }
+        return findTopBlockModernSections(sections, dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+    }
+
+    private TopBlockSample findTopBlockModernSections(
+            ListTag<CompoundTag> sections,
+            int dataVersion,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options,
+            ColumnDiagnostics diagnostics
+    ) {
+        if(sections == null || sections.size() == 0) {
+            markReason(diagnostics, "modern_sections_missing");
+            return TopBlockSample.EMPTY;
+        }
+
         for(int y = options.maxY(); y >= options.minY(); y--) {
             CompoundTag section = findSectionForY(sections, y);
             if(section == null) {
                 continue;
             }
             String blockName = getModernBlockNameAt(section, localX, y & 15, localZ, dataVersion);
+            if(diagnostics != null && diagnostics.firstTransparentBlock == null && blockName != null) {
+                if("modern_level".equals(diagnostics.scheme)) {
+                    debug("modern_level sample worldBlock=(%d,%d) y=%d block=%s sectionKeys=%s",
+                            worldBlockX,
+                            worldBlockZ,
+                            y,
+                            blockName,
+                            section.keySet());
+                } else if(diagnostics.scheme != null && diagnostics.scheme.startsWith("modern(")) {
+                    debug("modern sample worldBlock=(%d,%d) y=%d block=%s sectionKeys=%s",
+                            worldBlockX,
+                            worldBlockZ,
+                            y,
+                            blockName,
+                            section.keySet());
+                }
+            }
             if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
                 if(diagnostics != null && blockName != null && diagnostics.firstTransparentBlock == null) {
                     diagnostics.firstTransparentBlock = blockName;
@@ -512,6 +686,39 @@ public final class MCARenderer {
         return TopBlockSample.EMPTY;
     }
 
+    private ListTag<CompoundTag> getLegacyLevelSections(CompoundTag legacyLevel) {
+        if(legacyLevel == null) {
+            return null;
+        }
+        ListTag<?> sectionsTag = legacyLevel.getListTag("Sections");
+        if(sectionsTag == null || sectionsTag.size() == 0) {
+            return null;
+        }
+        return sectionsTag.asCompoundTagList();
+    }
+
+    private boolean isModernLevelSections(ListTag<CompoundTag> sections) {
+        if(sections == null || sections.size() == 0) {
+            return false;
+        }
+        for(CompoundTag section : sections) {
+            if(section == null) {
+                continue;
+            }
+            if(section.getCompoundTag("block_states") != null) {
+                return true;
+            }
+            if(section.getLongArrayTag("BlockStates") != null || section.getListTag("Palette") != null) {
+                return true;
+            }
+            byte[] legacyBlocks = section.getByteArray("Blocks");
+            if(legacyBlocks != null && legacyBlocks.length == 4096) {
+                return false;
+            }
+        }
+        return false;
+    }
+
     /**
      * Camino legacy para versiones antiguas.
      *
@@ -520,6 +727,7 @@ public final class MCARenderer {
      */
     private TopBlockSample findTopBlockLegacy(
             CompoundTag level,
+            int dataVersion,
             int localX,
             int localZ,
             int worldBlockX,
@@ -537,6 +745,17 @@ public final class MCARenderer {
             diagnostics.sectionCount = sectionsTag.size();
         }
         ListTag<CompoundTag> sections = sectionsTag.asCompoundTagList();
+        if(isModernLevelSections(sections)) {
+            debug("legacy fallback switched to modern_level dv=%d sections=%d levelKeys=%s",
+                    dataVersion,
+                    sections.size(),
+                    level.keySet());
+            if(diagnostics != null) {
+                diagnostics.dataVersion = dataVersion;
+                diagnostics.scheme = "modern_level";
+            }
+            return findTopBlockModernSections(sections, dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+        }
         for(int y = options.maxY(); y >= options.minY(); y--) {
             CompoundTag section = findSectionForY(sections, y);
             if(section == null) {
@@ -592,11 +811,37 @@ public final class MCARenderer {
      */
     private String getModernBlockNameAt(CompoundTag section, int localX, int localY, int localZ, int dataVersion) {
         CompoundTag blockStates = section.getCompoundTag("block_states");
-        if(blockStates == null) {
-            return null;
+        if(blockStates != null) {
+            return getModernBlockNameFromPackedStates(
+                    blockStates.getListTag("palette"),
+                    blockStates.getLongArrayTag("data"),
+                    localX,
+                    localY,
+                    localZ,
+                    dataVersion
+            );
         }
 
-        ListTag<?> paletteTag = blockStates.getListTag("palette");
+        // 1.13-1.16 transitional chunks can still live under Level->Sections using
+        // Palette/BlockStates in the old capitalized form.
+        return getModernBlockNameFromPackedStates(
+                section.getListTag("Palette"),
+                section.getLongArrayTag("BlockStates"),
+                localX,
+                localY,
+                localZ,
+                dataVersion
+        );
+    }
+
+    private String getModernBlockNameFromPackedStates(
+            ListTag<?> paletteTag,
+            LongArrayTag dataTag,
+            int localX,
+            int localY,
+            int localZ,
+            int dataVersion
+    ) {
         if(paletteTag == null || paletteTag.size() == 0) {
             return null;
         }
@@ -606,7 +851,6 @@ public final class MCARenderer {
             return palette.get(0).getString("Name");
         }
 
-        LongArrayTag dataTag = blockStates.getLongArrayTag("data");
         if(dataTag == null) {
             return palette.get(0).getString("Name");
         }
@@ -1075,45 +1319,51 @@ public final class MCARenderer {
         private final int maxY;
         private final boolean shadeByHeight;
         private final boolean ignoreTransparentBlocks;
+        private final boolean preferSquareCrop;
         private final int defaultArgb;
 
-        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean ignoreTransparentBlocks, int defaultArgb) {
+        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb) {
             this.pixelsPerBlock = pixelsPerBlock;
             this.minY = minY;
             this.maxY = maxY;
             this.shadeByHeight = shadeByHeight;
             this.ignoreTransparentBlocks = ignoreTransparentBlocks;
+            this.preferSquareCrop = preferSquareCrop;
             this.defaultArgb = defaultArgb;
         }
 
         // Valores por defecto pensados para mundos modernos, pero validos tambien para muchos casos legacy.
         public static RenderOptions defaults() {
-            return new RenderOptions(1, -64, 319, true, true, DEFAULT_ARGB);
+            return new RenderOptions(1, -64, 319, true, true, true, DEFAULT_ARGB);
         }
 
         // Cambia la escala visual: 1 bloque = N pixeles.
         public RenderOptions withPixelsPerBlock(int pixelsPerBlock) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Cambia el rango vertical explorado al buscar la superficie.
         public RenderOptions withYRange(int minY, int maxY) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Activa o desactiva el sombreado por altura.
         public RenderOptions withShadeByHeight(boolean shadeByHeight) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Permite decidir si se ignoran bloques de detalle/transparencia.
         public RenderOptions withIgnoreTransparentBlocks(boolean ignoreTransparentBlocks) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+        }
+
+        public RenderOptions withPreferSquareCrop(boolean preferSquareCrop) {
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Permite cambiar el color de fondo.
         public RenderOptions withDefaultArgb(int defaultArgb) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Asegura que las opciones tengan valores coherentes antes de usarse internamente.
@@ -1121,7 +1371,7 @@ public final class MCARenderer {
             int normalizedPixels = Math.max(1, pixelsPerBlock);
             int normalizedMinY = minY;
             int normalizedMaxY = Math.max(normalizedMinY, maxY);
-            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, ignoreTransparentBlocks, defaultArgb);
+            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Getters simples para leer las opciones desde el renderer.
@@ -1130,6 +1380,7 @@ public final class MCARenderer {
         public int maxY() { return maxY; }
         public boolean shadeByHeight() { return shadeByHeight; }
         public boolean ignoreTransparentBlocks() { return ignoreTransparentBlocks; }
+        public boolean preferSquareCrop() { return preferSquareCrop; }
         public int defaultArgb() { return defaultArgb; }
     }
 
@@ -1192,8 +1443,12 @@ public final class MCARenderer {
 
         CompoundTag legacyLevel = root.getCompoundTag("Level");
         if(legacyLevel != null) {
-            ListTag<?> sections = legacyLevel.getListTag("Sections");
+            ListTag<CompoundTag> sections = getLegacyLevelSections(legacyLevel);
             int sectionCount = sections == null ? 0 : sections.size();
+            if(isModernLevelSections(sections)) {
+                int dataVersion = root.getInt("DataVersion");
+                return new ChunkInspection("modern_level(dv=" + dataVersion + ")", sectionCount, sectionCount == 0 ? "modern_sections_missing" : "ok");
+            }
             return new ChunkInspection("legacy", sectionCount, sectionCount == 0 ? "legacy_sections_missing" : "ok");
         }
 
@@ -1213,6 +1468,19 @@ public final class MCARenderer {
     }
 
     private record ChunkInspection(String scheme, int sectionCount, String status) {}
+    private record RenderedRegion(RegionCoordinates region, BufferedImage image) {}
+    private static final class RegionRenderRuntimeException extends RuntimeException {
+        private final IOException ioException;
+
+        private RegionRenderRuntimeException(IOException ioException) {
+            super(ioException);
+            this.ioException = ioException;
+        }
+
+        private IOException ioException() {
+            return ioException;
+        }
+    }
 
     private static final class DebugTrace {
         private final Path path;
@@ -1282,6 +1550,17 @@ public final class MCARenderer {
             }
             if(diagnostics.reason != null) {
                 recordReason(diagnostics.reason);
+                if(sampleLinesLogged < DEBUG_MAX_SAMPLE_LINES
+                        && ("only_transparent_blocks".equals(diagnostics.reason) || "no_visible_block_in_range".equals(diagnostics.reason))
+                        && diagnostics.firstTransparentBlock != null) {
+                    sampleLinesLogged++;
+                    debug("no visible column path=%s scheme=%s reason=%s transparentProbe=%s@%d",
+                            path.getFileName(),
+                            fallback(diagnostics.scheme, "?"),
+                            diagnostics.reason,
+                            diagnostics.firstTransparentBlock,
+                            diagnostics.firstTransparentY);
+                }
             }
         }
 

@@ -14,6 +14,7 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,14 +25,22 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class PanelMundo extends JPanel {
@@ -41,6 +50,7 @@ public class PanelMundo extends JPanel {
     private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter FORMATO_CONEXION = DateTimeFormatter.ofPattern("dd/MM/yyyy - HH:mm:ss");
     private static final String WORLD_METADATA_FILE = ".emw-world.properties";
+    private static final Map<Path, RegionVisibilityCacheEntry> REGION_VISIBILITY_CACHE = new ConcurrentHashMap<>();
 
     private final GestorServidores gestorServidores;
     private final Runnable onWorldChanged;
@@ -49,7 +59,7 @@ public class PanelMundo extends JPanel {
     private final JLabel lastPlayedLabel = new JLabel("Última apertura: -");
     private final JLabel versionLabel = new JLabel("Versión: -");
     private final JLabel tipoMundoLabel = new JLabel("-");
-    private final JLabel previewImageLabel = new JLabel("La preview todavía no existe.", SwingConstants.CENTER);
+    private final PreviewImagePanel previewImageLabel = new PreviewImagePanel();
     private final PreviewSpinner previewSpinner = new PreviewSpinner();
     private final JLabel seedValueLabel = new JLabel("-");
     private final JLabel tiempoRealValueLabel = new JLabel("-");
@@ -63,6 +73,10 @@ public class PanelMundo extends JPanel {
     private final JButton exportarButton = new JButton("Exportar mundo");
     private final JButton generarButton = new JButton("Generar nuevo");
     private final JButton generarPreviewButton = new JButton("Generar preview");
+    private final JButton previewMenuButton = new JButton("\u2630");
+    private final JPopupMenu previewOptionsMenu = new JPopupMenu();
+    private final JCheckBox mostrarSpawnMenuItem = new JCheckBox("Mostrar spawn", false);
+    private final JCheckBox usarTodoMenuItem = new JCheckBox("Usar todo", false);
     private final JLabel pesoMundoLabel = new JLabel("-");
     private final JLabel pesoStatsSavesLabel = new JLabel("Peso stats y saves: -");
     private final JLabel pesoTotalLabel = new JLabel("-");
@@ -72,11 +86,9 @@ public class PanelMundo extends JPanel {
     private final JPanel conexionesPanel = new JPanel();
 
     private World mundoActivoActual;
-    private String mundoTicksCache = "";
-    private long ticksMostradosCache = 0L;
-    private long ticksArchivoCache = 0L;
-    private long ultimaActualizacionTicksMs = 0L;
     private boolean actualizandoComboMundos = false;
+    private boolean mostrarSpawnEnPreview = false;
+    private boolean usarTodoEnPreview = false;
 
     PanelMundo(GestorServidores gestorServidores, Runnable onWorldChanged) {
         this.gestorServidores = gestorServidores;
@@ -89,11 +101,10 @@ public class PanelMundo extends JPanel {
         styleActionButton(exportarButton);
         styleActionButton(generarButton);
         styleActionButton(generarPreviewButton);
+        stylePreviewOverlayButton(generarPreviewButton);
+        stylePreviewMenuButton(previewMenuButton);
         applyDefaultPrimaryButtonStyle();
 
-        previewImageLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        previewImageLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        previewImageLabel.setVerticalAlignment(SwingConstants.CENTER);
         previewImageLabel.setPreferredSize(new Dimension(320, 320));
         previewImageLabel.setMinimumSize(new Dimension(260, 260));
         instalarMenuContextualPreview();
@@ -132,6 +143,7 @@ public class PanelMundo extends JPanel {
         });
         generarButton.addActionListener(e -> abrirDialogoNuevoMundo());
         generarPreviewButton.addActionListener(e -> generarPreviewMundoSeleccionado());
+        instalarMenuOpcionesPreview();
 
         JPanel body = new JPanel();
         body.setOpaque(false);
@@ -280,26 +292,14 @@ public class PanelMundo extends JPanel {
         panel.setPreferredSize(new Dimension(320, 320));
         panel.setMinimumSize(new Dimension(260, 260));
 
-        JPanel overlayBadge = new JPanel(new BorderLayout()) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                try {
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(AppTheme.withAlpha(AppTheme.getSelectionBackground(), 110));
-                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
-                } finally {
-                    g2.dispose();
-                }
-                super.paintComponent(g);
-            }
-        };
-        overlayBadge.setOpaque(false);
-        overlayBadge.add(generarPreviewButton, BorderLayout.CENTER);
+        JPanel overlayControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        overlayControls.setOpaque(false);
+        overlayControls.add(generarPreviewButton);
+        overlayControls.add(previewMenuButton);
 
         JPanel overlayCorner = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
         overlayCorner.setOpaque(false);
-        overlayCorner.add(overlayBadge);
+        overlayCorner.add(overlayControls);
 
         JPanel progressWrap = new JPanel(new BorderLayout());
         progressWrap.setOpaque(false);
@@ -369,10 +369,6 @@ public class PanelMundo extends JPanel {
         actualizandoComboMundos = true;
         mundosCombo.removeAllItems();
         mundoActivoActual = null;
-        mundoTicksCache = "";
-        ticksMostradosCache = 0L;
-        ticksArchivoCache = 0L;
-        ultimaActualizacionTicksMs = System.currentTimeMillis();
 
         if (server == null) {
             limpiarVistaSinServidor();
@@ -454,35 +450,8 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        long ahoraMs = System.currentTimeMillis();
         long ticksArchivo = WorldDataReader.getActiveTicks(mundo);
-        String claveMundo = mundo.getWorldName();
-        boolean esMismoMundo = Objects.equals(claveMundo, mundoTicksCache);
-        boolean servidorActivo = server.getServerProcess() != null && server.getServerProcess().isAlive();
-
-        if (!esMismoMundo) {
-            mundoTicksCache = claveMundo;
-            ticksArchivoCache = ticksArchivo;
-            ticksMostradosCache = ticksArchivo;
-            ultimaActualizacionTicksMs = ahoraMs;
-        } else if (ticksArchivo > ticksArchivoCache) {
-            ticksArchivoCache = ticksArchivo;
-            ticksMostradosCache = ticksArchivo;
-            ultimaActualizacionTicksMs = ahoraMs;
-        } else if (servidorActivo) {
-            long deltaMs = Math.max(0L, ahoraMs - ultimaActualizacionTicksMs);
-            long deltaTicksEstimados = (deltaMs * 20L) / 1000L;
-            if (deltaTicksEstimados > 0L) {
-                ticksMostradosCache += deltaTicksEstimados;
-                ultimaActualizacionTicksMs = ahoraMs;
-            }
-        } else {
-            ticksMostradosCache = ticksArchivo;
-            ticksArchivoCache = ticksArchivo;
-            ultimaActualizacionTicksMs = ahoraMs;
-        }
-
-        tiempoRealValueLabel.setText(formatearTiempo(Math.max(ticksMostradosCache, 0L)));
+        tiempoRealValueLabel.setText(ticksArchivo >= 0L ? formatearTiempo(ticksArchivo) : "-");
         String lastPlayed = WorldDataReader.getLastPlayed(mundo);
         lastPlayedValueLabel.setText(valorOPlaceholder(lastPlayed));
         versionValueLabel.setText(valorOPlaceholder(WorldDataReader.getVersionName(mundo)));
@@ -725,6 +694,7 @@ public class PanelMundo extends JPanel {
         exportarButton.setEnabled(hayMundos);
         generarButton.setEnabled(hayServidor);
         generarPreviewButton.setEnabled(hayMundos);
+        previewMenuButton.setEnabled(hayMundos);
         updateUseWorldButtonState();
     }
 
@@ -737,23 +707,25 @@ public class PanelMundo extends JPanel {
 
         Path outputPath = getPreviewPath(mundo);
         boolean habiaPreviewAnterior = Files.isRegularFile(outputPath);
-        previewImageLabel.setIcon(null);
-        previewImageLabel.setText("");
+        previewImageLabel.clearImage();
         setPreviewProgressVisible(true);
         generarPreviewButton.setEnabled(false);
+        previewMenuButton.setEnabled(false);
         MCARenderer renderer = new MCARenderer();
-        WorldDataReader.SpawnPoint spawnPoint = null;
+        WorldDataReader.SpawnPoint spawnPoint = WorldDataReader.getSpawnPoint(mundo);
         SwingWorker<PreviewGenerationResult, Void> worker = new SwingWorker<>() {
             @Override
             protected PreviewGenerationResult doInBackground() throws Exception {
-                List<Path> regionesPreview = encontrarRegionesPreview(mundo, false);
+                List<Path> regionesPreview = encontrarRegionesPreview(mundo, usarTodoEnPreview, spawnPoint);
                 if (regionesPreview.isEmpty()) {
                     return new PreviewGenerationResult(outputPath, true);
                 }
-                MCARenderer.WorldPoint markerPoint = spawnPoint == null
-                        ? null
-                        : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z());
-                BufferedImage preview = renderer.renderWorld(regionesPreview, MCARenderer.RenderOptions.defaults(), markerPoint);
+                MCARenderer.WorldPoint markerPoint = mostrarSpawnEnPreview && spawnPoint != null
+                        ? new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z())
+                        : null;
+                MCARenderer.RenderOptions renderOptions = MCARenderer.RenderOptions.defaults()
+                        .withPreferSquareCrop(!usarTodoEnPreview);
+                BufferedImage preview = renderer.renderWorld(regionesPreview, renderOptions, markerPoint);
                 guardarPreview(preview, outputPath);
                 return new PreviewGenerationResult(outputPath, false);
             }
@@ -763,6 +735,7 @@ public class PanelMundo extends JPanel {
                 updateUseWorldButtonState();
                 setPreviewProgressVisible(false);
                 generarPreviewButton.setEnabled(mundosCombo.isEnabled() && getMundoSeleccionadoOActivo() != null);
+                previewMenuButton.setEnabled(mundosCombo.isEnabled() && getMundoSeleccionadoOActivo() != null);
                 try {
                     PreviewGenerationResult result = get();
                     if (result.sinRegiones()) {
@@ -794,7 +767,7 @@ public class PanelMundo extends JPanel {
         worker.execute();
     }
 
-    private List<Path> encontrarRegionesPreview(World mundo, boolean generarTodo) throws Exception {
+    private List<Path> encontrarRegionesPreview(World mundo, boolean generarTodo, WorldDataReader.SpawnPoint spawnPoint) throws Exception {
         Path regionDir = WorldDataReader.getOverworldRegionDirectory(mundo);
         if (regionDir == null || !Files.isDirectory(regionDir)) {
             return List.of();
@@ -816,18 +789,231 @@ public class PanelMundo extends JPanel {
                     .toList();
 
             if (generarTodo) {
-                return regiones;
+                return seleccionarGrupoPrincipalRegiones(regiones, spawnPoint);
             }
 
-            List<Path> visibles = new java.util.ArrayList<>();
-            for (Path region : regiones) {
-                if (renderer.hasVisibleBlocks(region)) {
-                    visibles.add(region);
-                }
-            }
-            return visibles.isEmpty() ? regiones : visibles;
+            List<Path> visibles = IntStream.range(0, regiones.size())
+                    .parallel()
+                    .filter(i -> {
+                        try {
+                            return tieneRegionVisibleCacheada(renderer, regiones.get(i));
+                        } catch (IOException ex) {
+                            return false;
+                        }
+                    })
+                    .mapToObj(regiones::get)
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                    .toList();
+            List<Path> regionesBase = visibles.isEmpty() ? regiones : visibles;
+            return seleccionarGrupoPrincipalRegiones(regionesBase, spawnPoint);
         }
     }
+
+    private boolean tieneRegionVisibleCacheada(MCARenderer renderer, Path region) throws IOException {
+        if (renderer == null || region == null) {
+            return false;
+        }
+
+        Path normalized = region.toAbsolutePath().normalize();
+        long size = Files.size(normalized);
+        long lastModified = Files.getLastModifiedTime(normalized).toMillis();
+        RegionVisibilityCacheEntry cached = REGION_VISIBILITY_CACHE.get(normalized);
+        if (cached != null && cached.size() == size && cached.lastModified() == lastModified) {
+            return cached.visible();
+        }
+
+        boolean visible = renderer.hasVisibleBlocks(normalized);
+        REGION_VISIBILITY_CACHE.put(normalized, new RegionVisibilityCacheEntry(size, lastModified, visible));
+        return visible;
+    }
+
+    private List<Path> seleccionarGrupoPrincipalRegiones(List<Path> regiones, WorldDataReader.SpawnPoint spawnPoint) {
+        if (regiones == null || regiones.isEmpty()) {
+            return List.of();
+        }
+
+        List<RegionPreviewCandidate> candidatas = new ArrayList<>();
+        for (Path region : regiones) {
+            RegionPreviewCandidate candidata = parsearRegionPreview(region);
+            if (candidata != null) {
+                candidatas.add(candidata);
+            }
+        }
+
+        if (candidatas.isEmpty()) {
+            return regiones;
+        }
+
+        Map<RegionKey, RegionPreviewCandidate> porClave = new HashMap<>();
+        for (RegionPreviewCandidate candidata : candidatas) {
+            porClave.put(candidata.key(), candidata);
+        }
+
+        List<List<RegionPreviewCandidate>> grupos = new ArrayList<>();
+        Set<RegionKey> visitadas = new HashSet<>();
+        for (RegionPreviewCandidate candidata : candidatas) {
+            if (!visitadas.add(candidata.key())) {
+                continue;
+            }
+
+            List<RegionPreviewCandidate> grupo = new ArrayList<>();
+            ArrayDeque<RegionPreviewCandidate> cola = new ArrayDeque<>();
+            cola.add(candidata);
+
+            while (!cola.isEmpty()) {
+                RegionPreviewCandidate actual = cola.removeFirst();
+                grupo.add(actual);
+
+                for (int dz = -1; dz <= 1; dz++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        if (dx == 0 && dz == 0) {
+                            continue;
+                        }
+                        RegionKey vecina = new RegionKey(actual.regionX() + dx, actual.regionZ() + dz);
+                        if (!visitadas.add(vecina)) {
+                            continue;
+                        }
+                        RegionPreviewCandidate candidataVecina = porClave.get(vecina);
+                        if (candidataVecina != null) {
+                            cola.addLast(candidataVecina);
+                        } else {
+                            visitadas.remove(vecina);
+                        }
+                    }
+                }
+            }
+
+            grupos.add(grupo);
+        }
+
+        List<RegionPreviewCandidate> mejorGrupo = elegirMejorGrupo(grupos, spawnPoint);
+        return mejorGrupo.stream()
+                .sorted(Comparator.comparing((RegionPreviewCandidate r) -> r.path().getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                .map(RegionPreviewCandidate::path)
+                .toList();
+    }
+
+    private List<RegionPreviewCandidate> elegirMejorGrupo(List<List<RegionPreviewCandidate>> grupos, WorldDataReader.SpawnPoint spawnPoint) {
+        if (grupos == null || grupos.isEmpty()) {
+            return List.of();
+        }
+        if (grupos.size() == 1) {
+            return grupos.get(0);
+        }
+
+        RegionKey spawnRegion = spawnPoint == null ? null : new RegionKey(Math.floorDiv(spawnPoint.x(), 512), Math.floorDiv(spawnPoint.z(), 512));
+        List<RegionPreviewCandidate> mejor = null;
+        for (List<RegionPreviewCandidate> grupo : grupos) {
+            if (mejor == null || compararGrupos(grupo, mejor, spawnRegion) < 0) {
+                mejor = grupo;
+            }
+        }
+        return mejor == null ? grupos.get(0) : mejor;
+    }
+
+    private int compararGrupos(List<RegionPreviewCandidate> a, List<RegionPreviewCandidate> b, RegionKey spawnRegion) {
+        boolean aTieneSpawn = contieneRegion(a, spawnRegion);
+        boolean bTieneSpawn = contieneRegion(b, spawnRegion);
+        if (aTieneSpawn != bTieneSpawn) {
+            return aTieneSpawn ? -1 : 1;
+        }
+
+        int bySize = Integer.compare(b.size(), a.size());
+        if (bySize != 0) {
+            return bySize;
+        }
+
+        int byWeight = Long.compare(pesoGrupo(b), pesoGrupo(a));
+        if (byWeight != 0) {
+            return byWeight;
+        }
+
+        if (spawnRegion != null) {
+            int byDistance = Integer.compare(distanciaGrupoAlSpawn(a, spawnRegion), distanciaGrupoAlSpawn(b, spawnRegion));
+            if (byDistance != 0) {
+                return byDistance;
+            }
+        }
+
+        RegionKey minA = minRegionKey(a);
+        RegionKey minB = minRegionKey(b);
+        int byZ = Integer.compare(minA.regionZ(), minB.regionZ());
+        if (byZ != 0) {
+            return byZ;
+        }
+        return Integer.compare(minA.regionX(), minB.regionX());
+    }
+
+    private boolean contieneRegion(List<RegionPreviewCandidate> grupo, RegionKey objetivo) {
+        if (grupo == null || grupo.isEmpty() || objetivo == null) {
+            return false;
+        }
+        for (RegionPreviewCandidate candidata : grupo) {
+            if (candidata.key().equals(objetivo)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private long pesoGrupo(List<RegionPreviewCandidate> grupo) {
+        long total = 0L;
+        for (RegionPreviewCandidate candidata : grupo) {
+            total += candidata.size();
+        }
+        return total;
+    }
+
+    private int distanciaGrupoAlSpawn(List<RegionPreviewCandidate> grupo, RegionKey spawnRegion) {
+        int mejor = Integer.MAX_VALUE;
+        for (RegionPreviewCandidate candidata : grupo) {
+            int distancia = Math.abs(candidata.regionX() - spawnRegion.regionX()) + Math.abs(candidata.regionZ() - spawnRegion.regionZ());
+            if (distancia < mejor) {
+                mejor = distancia;
+            }
+        }
+        return mejor;
+    }
+
+    private RegionKey minRegionKey(List<RegionPreviewCandidate> grupo) {
+        RegionPreviewCandidate mejor = grupo.get(0);
+        for (RegionPreviewCandidate candidata : grupo) {
+            if (candidata.regionZ() < mejor.regionZ()
+                    || (candidata.regionZ() == mejor.regionZ() && candidata.regionX() < mejor.regionX())) {
+                mejor = candidata;
+            }
+        }
+        return mejor.key();
+    }
+
+    private RegionPreviewCandidate parsearRegionPreview(Path region) {
+        if (region == null || region.getFileName() == null) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("^r\\.(-?\\d+)\\.(-?\\d+)\\.mca$", Pattern.CASE_INSENSITIVE)
+                .matcher(region.getFileName().toString());
+        if (!matcher.matches()) {
+            return null;
+        }
+
+        try {
+            int regionX = Integer.parseInt(matcher.group(1));
+            int regionZ = Integer.parseInt(matcher.group(2));
+            long size = Files.size(region);
+            return new RegionPreviewCandidate(region, regionX, regionZ, size);
+        } catch (IOException | NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private record RegionPreviewCandidate(Path path, int regionX, int regionZ, long size) {
+        private RegionKey key() {
+            return new RegionKey(regionX, regionZ);
+        }
+    }
+
+    private record RegionKey(int regionX, int regionZ) {}
+    private record RegionVisibilityCacheEntry(long size, long lastModified, boolean visible) {}
 
     private void guardarPreview(BufferedImage image, Path outputPath) throws IOException {
         Path parent = outputPath.toAbsolutePath().getParent();
@@ -857,17 +1043,14 @@ public class PanelMundo extends JPanel {
                 mostrarTextoPreview("No se ha podido leer la preview.");
                 return;
             }
-            Image scaled = escalarPreview(image, 320, 320);
-            previewImageLabel.setText("");
-            previewImageLabel.setIcon(new ImageIcon(scaled));
+            previewImageLabel.setImage(image);
         } catch (IOException ex) {
             mostrarTextoPreview("No se ha podido leer la preview.");
         }
     }
 
     private void mostrarTextoPreview(String texto) {
-        previewImageLabel.setIcon(null);
-        previewImageLabel.setText(texto);
+        previewImageLabel.setMessage(texto);
     }
 
     private void restaurarPreviewAnteriorSiExiste(boolean habiaPreviewAnterior) {
@@ -892,8 +1075,11 @@ public class PanelMundo extends JPanel {
     private void instalarMenuContextualPreview() {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem verArchivoItem = new JMenuItem("Ver archivo");
+        JMenuItem guardarComoItem = new JMenuItem("Guardar como");
         verArchivoItem.addActionListener(e -> abrirPreviewEnExplorador());
+        guardarComoItem.addActionListener(e -> guardarPreviewComo());
         menu.add(verArchivoItem);
+        menu.add(guardarComoItem);
 
         MouseAdapter popupMouse = new MouseAdapter() {
             @Override
@@ -908,7 +1094,9 @@ public class PanelMundo extends JPanel {
 
             private void mostrarPopupSiCorresponde(MouseEvent e) {
                 if (!e.isPopupTrigger()) return;
-                verArchivoItem.setEnabled(existePreviewSeleccionada());
+                boolean existePreview = existePreviewSeleccionada();
+                verArchivoItem.setEnabled(existePreview);
+                guardarComoItem.setEnabled(existePreview);
                 menu.show(e.getComponent(), e.getX(), e.getY());
             }
         };
@@ -946,16 +1134,64 @@ public class PanelMundo extends JPanel {
         }
     }
 
-    private Image escalarPreview(BufferedImage image, int maxWidth, int maxHeight) {
-        int width = image.getWidth();
-        int height = image.getHeight();
-        if (width <= 0 || height <= 0) return image;
+    private void guardarPreviewComo() {
+        World mundo = getMundoSeleccionadoOActivo();
+        if (mundo == null) {
+            JOptionPane.showMessageDialog(this, "No hay un mundo seleccionado.", "Guardar como", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
 
-        double ratio = Math.min((double) maxWidth / width, (double) maxHeight / height);
-        ratio = Math.min(1.0d, ratio);
-        int scaledWidth = Math.max(1, (int) Math.round(width * ratio));
-        int scaledHeight = Math.max(1, (int) Math.round(height * ratio));
-        return image.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH);
+        Path previewPath = getPreviewPath(mundo);
+        if (!Files.isRegularFile(previewPath)) {
+            JOptionPane.showMessageDialog(this, "La preview todavía no existe.", "Guardar como", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Guardar preview como");
+        chooser.setSelectedFile(new java.io.File(crearNombreSugeridoPreview(mundo)));
+
+        int result = chooser.showSaveDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        Path destino = chooser.getSelectedFile().toPath();
+        if (!destino.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png")) {
+            destino = destino.resolveSibling(destino.getFileName() + ".png");
+        }
+
+        if (Files.exists(destino)) {
+            int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "El archivo ya existe. ¿Quieres reemplazarlo?",
+                    "Guardar como",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+            if (confirm != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+
+        try {
+            Path parent = destino.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.copy(previewPath, destino, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "No se ha podido guardar la preview: " + ex.getMessage(), "Guardar como", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private String crearNombreSugeridoPreview(World mundo) {
+        String nombre = mundo == null || mundo.getWorldName() == null || mundo.getWorldName().isBlank()
+                ? "world"
+                : mundo.getWorldName();
+        String nombreSeguro = nombre.replaceAll("[\\\\/:*?\"<>|]", "_");
+        String timestamp = java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+        return nombreSeguro + "_preview_" + timestamp + ".png";
     }
 
     private Path getPreviewPath(World mundo) {
@@ -1001,6 +1237,65 @@ public class PanelMundo extends JPanel {
         button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
         button.setBackground(AppTheme.getBackground());
         button.setForeground(AppTheme.getForeground());
+    }
+
+    private void stylePreviewMenuButton(JButton button) {
+        if (button == null) return;
+        styleActionButton(button);
+        button.setText("\u2630");
+        button.setMargin(new Insets(4, 8, 4, 8));
+        button.setFont(button.getFont().deriveFont(Font.PLAIN, 14f));
+        button.setToolTipText("Opciones de preview");
+        stylePreviewOverlayButton(button);
+    }
+
+    private void stylePreviewOverlayButton(JButton button) {
+        if (button == null) return;
+        button.setBackground(AppTheme.getBackground());
+        button.setForeground(AppTheme.getForeground());
+    }
+
+    private void instalarMenuOpcionesPreview() {
+        mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
+        mostrarSpawnMenuItem.addActionListener(e -> mostrarSpawnEnPreview = mostrarSpawnMenuItem.isSelected());
+        usarTodoMenuItem.setSelected(usarTodoEnPreview);
+        usarTodoMenuItem.addActionListener(e -> usarTodoEnPreview = usarTodoMenuItem.isSelected());
+
+        JPanel optionsPanel = new JPanel();
+        optionsPanel.setOpaque(true);
+        optionsPanel.setBackground(AppTheme.getBackground());
+        optionsPanel.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.Y_AXIS));
+
+        stylePreviewOptionCheckBox(mostrarSpawnMenuItem);
+        stylePreviewOptionCheckBox(usarTodoMenuItem);
+        optionsPanel.add(mostrarSpawnMenuItem);
+        optionsPanel.add(Box.createVerticalStrut(4));
+        optionsPanel.add(usarTodoMenuItem);
+
+        previewOptionsMenu.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f));
+        previewOptionsMenu.add(optionsPanel);
+
+        previewMenuButton.addActionListener(e -> mostrarMenuOpcionesPreview(previewMenuButton));
+    }
+
+    private void mostrarMenuOpcionesPreview(Component anchor) {
+        if (anchor == null) {
+            return;
+        }
+        mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
+        usarTodoMenuItem.setSelected(usarTodoEnPreview);
+        previewOptionsMenu.show(anchor, 0, anchor.getHeight());
+    }
+
+    private void stylePreviewOptionCheckBox(JCheckBox checkBox) {
+        if (checkBox == null) {
+            return;
+        }
+        checkBox.setOpaque(false);
+        checkBox.setFocusPainted(false);
+        checkBox.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        checkBox.setForeground(AppTheme.getForeground());
     }
 
     private void instalarInteraccionSeed() {
@@ -1104,6 +1399,194 @@ public class PanelMundo extends JPanel {
     private String obtenerInicial(String username) {
         if (username == null || username.isBlank()) return "?";
         return username.substring(0, 1).toUpperCase(Locale.ROOT);
+    }
+
+    private static final class PreviewImagePanel extends JComponent {
+        private BufferedImage image;
+        private String message = "La preview todavía no existe.";
+        private double zoom = 1.0d;
+        private double panX = 0d;
+        private double panY = 0d;
+        private Point dragAnchor;
+        private double dragStartPanX;
+        private double dragStartPanY;
+
+        private PreviewImagePanel() {
+            setOpaque(false);
+            setCursor(Cursor.getDefaultCursor());
+
+            MouseAdapter mouse = new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    updateCursor();
+                }
+
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    if (!SwingUtilities.isLeftMouseButton(e) || image == null) {
+                        return;
+                    }
+                    dragAnchor = e.getPoint();
+                    dragStartPanX = panX;
+                    dragStartPanY = panY;
+                }
+
+                @Override
+                public void mouseDragged(MouseEvent e) {
+                    if (dragAnchor == null || image == null) {
+                        return;
+                    }
+                    panX = dragStartPanX + (e.getX() - dragAnchor.x);
+                    panY = dragStartPanY + (e.getY() - dragAnchor.y);
+                    clampPan();
+                    repaint();
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    dragAnchor = null;
+                }
+
+                @Override
+                public void mouseWheelMoved(MouseWheelEvent e) {
+                    if (image == null) {
+                        return;
+                    }
+                    double oldZoom = zoom;
+                    double factor = Math.pow(1.12d, -e.getPreciseWheelRotation());
+                    zoom = Math.max(1.0d, Math.min(32.0d, zoom * factor));
+                    adjustPanForZoom(oldZoom, zoom, e.getPoint());
+                    clampPan();
+                    repaint();
+                }
+
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if (image != null && e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+                        resetView();
+                    }
+                }
+            };
+            addMouseListener(mouse);
+            addMouseMotionListener(mouse);
+            addMouseWheelListener(mouse);
+        }
+
+        private void setImage(BufferedImage image) {
+            this.image = image;
+            this.message = "";
+            resetView();
+            updateCursor();
+        }
+
+        private void clearImage() {
+            this.image = null;
+            this.message = "";
+            resetView();
+            updateCursor();
+        }
+
+        private void setMessage(String message) {
+            this.image = null;
+            this.message = message == null ? "" : message;
+            resetView();
+            updateCursor();
+        }
+
+        private void resetView() {
+            zoom = 1.0d;
+            panX = 0d;
+            panY = 0d;
+            repaint();
+        }
+
+        private void updateCursor() {
+            setCursor(image == null
+                    ? Cursor.getDefaultCursor()
+                    : Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+        }
+
+        private void adjustPanForZoom(double oldZoom, double newZoom, Point anchor) {
+            RenderState oldState = computeState(oldZoom, panX, panY);
+            if (oldState == null || anchor == null) {
+                return;
+            }
+
+            double imageX = (anchor.x - oldState.drawX()) / oldState.scale();
+            double imageY = (anchor.y - oldState.drawY()) / oldState.scale();
+            RenderState newState = computeState(newZoom, panX, panY);
+            if (newState == null) {
+                return;
+            }
+
+            panX = anchor.x - (newState.baseX() + imageX * newState.scale());
+            panY = anchor.y - (newState.baseY() + imageY * newState.scale());
+        }
+
+        private void clampPan() {
+            RenderState state = computeState(zoom, panX, panY);
+            if (state == null) {
+                panX = 0d;
+                panY = 0d;
+                return;
+            }
+            panX = Math.max(-state.maxPanX(), Math.min(state.maxPanX(), panX));
+            panY = Math.max(-state.maxPanY(), Math.min(state.maxPanY(), panY));
+        }
+
+        private RenderState computeState(double zoomValue, double panXValue, double panYValue) {
+            if (image == null || getWidth() <= 0 || getHeight() <= 0 || image.getWidth() <= 0 || image.getHeight() <= 0) {
+                return null;
+            }
+
+            double baseScale = Math.min((double) getWidth() / image.getWidth(), (double) getHeight() / image.getHeight());
+            if (baseScale <= 0d) {
+                return null;
+            }
+
+            double scale = baseScale * Math.max(1.0d, zoomValue);
+            int drawWidth = Math.max(1, (int) Math.round(image.getWidth() * scale));
+            int drawHeight = Math.max(1, (int) Math.round(image.getHeight() * scale));
+            double baseX = (getWidth() - drawWidth) / 2.0d;
+            double baseY = (getHeight() - drawHeight) / 2.0d;
+            double maxPanX = Math.max(0d, (drawWidth - getWidth()) / 2.0d);
+            double maxPanY = Math.max(0d, (drawHeight - getHeight()) / 2.0d);
+            int drawX = (int) Math.round(baseX + Math.max(-maxPanX, Math.min(maxPanX, panXValue)));
+            int drawY = (int) Math.round(baseY + Math.max(-maxPanY, Math.min(maxPanY, panYValue)));
+            return new RenderState(scale, drawX, drawY, drawWidth, drawHeight, baseX, baseY, maxPanX, maxPanY);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                if (image == null) {
+                    g2.setColor(AppTheme.getMutedForeground());
+                    FontMetrics metrics = g2.getFontMetrics();
+                    int x = Math.max(8, (getWidth() - metrics.stringWidth(message)) / 2);
+                    int y = (getHeight() + metrics.getAscent() - metrics.getDescent()) / 2;
+                    g2.drawString(message, x, y);
+                    return;
+                }
+
+                clampPan();
+                RenderState state = computeState(zoom, panX, panY);
+                if (state == null) {
+                    return;
+                }
+
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                g2.drawImage(image, state.drawX(), state.drawY(), state.drawWidth(), state.drawHeight(), null);
+            } finally {
+                g2.dispose();
+            }
+        }
+
+        private record RenderState(double scale, int drawX, int drawY, int drawWidth, int drawHeight,
+                                   double baseX, double baseY, double maxPanX, double maxPanY) {}
     }
 
     private static final class PreviewSpinner extends JComponent {
