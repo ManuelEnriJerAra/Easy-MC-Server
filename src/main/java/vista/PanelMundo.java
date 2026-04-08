@@ -10,6 +10,7 @@ import modelo.World;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.filechooser.FileSystemView;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
@@ -75,6 +76,7 @@ public class PanelMundo extends JPanel {
     private final JButton generarPreviewButton = new JButton("Generar preview");
     private final JButton previewMenuButton = new JButton("\u2630");
     private final JPopupMenu previewOptionsMenu = new JPopupMenu();
+    private final JCheckBox sombreadoMenuItem = new JCheckBox("Sombreado", true);
     private final JCheckBox mostrarSpawnMenuItem = new JCheckBox("Mostrar spawn", false);
     private final JCheckBox usarTodoMenuItem = new JCheckBox("Usar todo", false);
     private final JLabel pesoMundoLabel = new JLabel("-");
@@ -87,8 +89,10 @@ public class PanelMundo extends JPanel {
 
     private World mundoActivoActual;
     private boolean actualizandoComboMundos = false;
+    private boolean sombreadoEnPreview = true;
     private boolean mostrarSpawnEnPreview = false;
     private boolean usarTodoEnPreview = false;
+    private boolean previewGenerationInProgress = false;
 
     PanelMundo(GestorServidores gestorServidores, Runnable onWorldChanged) {
         this.gestorServidores = gestorServidores;
@@ -707,6 +711,7 @@ public class PanelMundo extends JPanel {
 
         Path outputPath = getPreviewPath(mundo);
         boolean habiaPreviewAnterior = Files.isRegularFile(outputPath);
+        previewGenerationInProgress = true;
         previewImageLabel.clearImage();
         setPreviewProgressVisible(true);
         generarPreviewButton.setEnabled(false);
@@ -724,6 +729,7 @@ public class PanelMundo extends JPanel {
                         ? new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z())
                         : null;
                 MCARenderer.RenderOptions renderOptions = MCARenderer.RenderOptions.defaults()
+                        .withShadeByHeight(sombreadoEnPreview)
                         .withPreferSquareCrop(!usarTodoEnPreview);
                 BufferedImage preview = renderer.renderWorld(regionesPreview, renderOptions, markerPoint);
                 guardarPreview(preview, outputPath);
@@ -732,6 +738,7 @@ public class PanelMundo extends JPanel {
 
             @Override
             protected void done() {
+                previewGenerationInProgress = false;
                 updateUseWorldButtonState();
                 setPreviewProgressVisible(false);
                 generarPreviewButton.setEnabled(mundosCombo.isEnabled() && getMundoSeleccionadoOActivo() != null);
@@ -1149,6 +1156,10 @@ public class PanelMundo extends JPanel {
 
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Guardar preview como");
+        java.io.File imagenesDir = FileSystemView.getFileSystemView().getDefaultDirectory();
+        if (imagenesDir != null && imagenesDir.isDirectory()) {
+            chooser.setCurrentDirectory(imagenesDir);
+        }
         chooser.setSelectedFile(new java.io.File(crearNombreSugeridoPreview(mundo)));
 
         int result = chooser.showSaveDialog(this);
@@ -1256,6 +1267,8 @@ public class PanelMundo extends JPanel {
     }
 
     private void instalarMenuOpcionesPreview() {
+        sombreadoMenuItem.setSelected(sombreadoEnPreview);
+        sombreadoMenuItem.addActionListener(e -> sombreadoEnPreview = sombreadoMenuItem.isSelected());
         mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
         mostrarSpawnMenuItem.addActionListener(e -> mostrarSpawnEnPreview = mostrarSpawnMenuItem.isSelected());
         usarTodoMenuItem.setSelected(usarTodoEnPreview);
@@ -1269,9 +1282,14 @@ public class PanelMundo extends JPanel {
 
         stylePreviewOptionCheckBox(mostrarSpawnMenuItem);
         stylePreviewOptionCheckBox(usarTodoMenuItem);
-        optionsPanel.add(mostrarSpawnMenuItem);
+        stylePreviewOptionCheckBox(sombreadoMenuItem);
+        optionsPanel.add(createPreviewOptionsSectionLabel("Generación"));
+        optionsPanel.add(sombreadoMenuItem);
         optionsPanel.add(Box.createVerticalStrut(4));
         optionsPanel.add(usarTodoMenuItem);
+        optionsPanel.add(Box.createVerticalStrut(10));
+        optionsPanel.add(createPreviewOptionsSectionLabel("Superposición"));
+        optionsPanel.add(mostrarSpawnMenuItem);
 
         previewOptionsMenu.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f));
         previewOptionsMenu.add(optionsPanel);
@@ -1283,6 +1301,7 @@ public class PanelMundo extends JPanel {
         if (anchor == null) {
             return;
         }
+        sombreadoMenuItem.setSelected(sombreadoEnPreview);
         mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
         usarTodoMenuItem.setSelected(usarTodoEnPreview);
         previewOptionsMenu.show(anchor, 0, anchor.getHeight());
@@ -1296,6 +1315,15 @@ public class PanelMundo extends JPanel {
         checkBox.setFocusPainted(false);
         checkBox.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         checkBox.setForeground(AppTheme.getForeground());
+    }
+
+    private JLabel createPreviewOptionsSectionLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        label.setForeground(AppTheme.getMutedForeground());
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 12f));
+        label.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 0));
+        return label;
     }
 
     private void instalarInteraccionSeed() {

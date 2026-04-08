@@ -228,7 +228,8 @@ public final class MCARenderer {
             paintMarker(image, markerPoint, minRegionX, minRegionZ, normalizedOptions);
         }
 
-        BufferedImage result = cropToVisibleArea(image, normalizedOptions);
+        Rectangle cropArea = resolveCropArea(image, normalizedOptions);
+        BufferedImage result = image.getSubimage(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
         debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
         return result;
     }
@@ -316,13 +317,22 @@ public final class MCARenderer {
     }
 
     private BufferedImage cropToVisibleArea(BufferedImage image, RenderOptions options) {
+        Rectangle cropArea = resolveCropArea(image, options);
+        return image.getSubimage(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+    }
+
+    private Rectangle resolveCropArea(BufferedImage image, RenderOptions options) {
         if(options != null && options.preferSquareCrop()) {
             Rectangle squareArea = findLargestSquareWithoutEmptyChunks(image, options.defaultArgb(), options.pixelsPerBlock());
             if(squareArea != null) {
-                return image.getSubimage(squareArea.x, squareArea.y, squareArea.width, squareArea.height);
+                return squareArea;
             }
         }
-        return cropToVisibleArea(image, options == null ? DEFAULT_ARGB : options.defaultArgb(), options == null ? 1 : options.pixelsPerBlock());
+        Rectangle visibleArea = findVisibleBounds(image, options == null ? DEFAULT_ARGB : options.defaultArgb());
+        if(visibleArea != null) {
+            return visibleArea;
+        }
+        return new Rectangle(0, 0, image.getWidth(), image.getHeight());
     }
 
     /**
@@ -453,23 +463,28 @@ public final class MCARenderer {
      *   las coordenadas globales reales del chunk y del bloque.
      */
     private void paintRegion(MCAFile mcaFile, BufferedImage image, RegionCoordinates region, RenderOptions options) {
+        String[][] blockNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
+        int[][] heights = new int[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         int tilesPerSide = (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS);
         IntStream.range(0, tilesPerSide * tilesPerSide)
                 .parallel()
                 .forEach(tileIndex -> {
                     int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
                     int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                    paintChunkTile(image, mcaFile, region, options, tileChunkX, tileChunkZ);
+                    sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, heights);
                 });
+
+        paintRegionFromSamples(image, blockNames, heights, options);
     }
 
-    private void paintChunkTile(
-            BufferedImage image,
+    private void sampleChunkTile(
             MCAFile mcaFile,
             RegionCoordinates region,
             RenderOptions options,
             int startChunkX,
-            int startChunkZ
+            int startChunkZ,
+            String[][] blockNames,
+            int[][] heights
     ) {
         int endChunkX = Math.min(REGION_CHUNK_SIDE, startChunkX + REGION_RENDER_TILE_CHUNKS);
         int endChunkZ = Math.min(REGION_CHUNK_SIDE, startChunkZ + REGION_RENDER_TILE_CHUNKS);
@@ -479,7 +494,7 @@ public final class MCARenderer {
                 if(chunk == null) {
                     continue;
                 }
-                paintChunk(image, chunk, localChunkX, localChunkZ, region, options);
+                sampleChunk(chunk, localChunkX, localChunkZ, region, options, blockNames, heights);
             }
         }
     }
@@ -496,25 +511,36 @@ public final class MCARenderer {
      * Ese paso de local a global es fundamental porque el sombreado y algunos calculos
      * posteriores usan coordenadas globales reales.
      */
-    private void paintChunk(
-            BufferedImage image,
+    private void sampleChunk(
             Chunk chunk,
             int localChunkX,
             int localChunkZ,
             RegionCoordinates region,
-            RenderOptions options
+            RenderOptions options,
+            String[][] blockNames,
+            int[][] heights
     ) {
-        int offsetX = localChunkX * CHUNK_BLOCK_SIDE;
-        int offsetZ = localChunkZ * CHUNK_BLOCK_SIDE;
         int worldChunkX = region.x() * REGION_CHUNK_SIDE + localChunkX;
         int worldChunkZ = region.z() * REGION_CHUNK_SIDE + localChunkZ;
+        int regionBlockZ = localChunkZ * CHUNK_BLOCK_SIDE;
+        int regionBlockX = localChunkX * CHUNK_BLOCK_SIDE;
 
         for(int localZ = 0; localZ < CHUNK_BLOCK_SIDE; localZ++) {
             for(int localX = 0; localX < CHUNK_BLOCK_SIDE; localX++) {
                 int worldBlockX = worldChunkX * CHUNK_BLOCK_SIDE + localX;
                 int worldBlockZ = worldChunkZ * CHUNK_BLOCK_SIDE + localZ;
                 TopBlockSample sample = findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options);
-                paintBlock(image, offsetX + localX, offsetZ + localZ, resolveBlockColor(sample, options), options.pixelsPerBlock());
+                blockNames[regionBlockZ + localZ][regionBlockX + localX] = sample.blockName();
+                heights[regionBlockZ + localZ][regionBlockX + localX] = sample.isEmpty() ? Integer.MIN_VALUE : sample.y();
+            }
+        }
+    }
+
+    private void paintRegionFromSamples(BufferedImage image, String[][] blockNames, int[][] heights, RenderOptions options) {
+        for(int blockZ = 0; blockZ < REGION_BLOCK_SIDE; blockZ++) {
+            for(int blockX = 0; blockX < REGION_BLOCK_SIDE; blockX++) {
+                int argb = resolveBlockColor(blockNames, heights, blockX, blockZ, options);
+                paintBlock(image, blockX, blockZ, argb, options.pixelsPerBlock());
             }
         }
     }
@@ -1042,20 +1068,63 @@ public final class MCARenderer {
      * Si el sombreado por altura esta activo, se aplica una pequena variacion para
      * que la imagen no quede completamente plana.
      */
-    private int resolveBlockColor(TopBlockSample sample, RenderOptions options) {
-        Color base = resolveBaseColor(sample.blockName());
+    private int resolveBlockColor(String[][] blockNames, int[][] heights, int blockX, int blockZ, RenderOptions options) {
+        String blockName = blockNames[blockZ][blockX];
+        Color base = resolveBaseColor(blockName);
         if(base == null) {
             return options.defaultArgb();
         }
-        if(!options.shadeByHeight() || sample.isEmpty()) {
+        if(!options.shadeByHeight()) {
             return base.getRGB();
         }
 
-        // El sombreado debe depender solo de la altura.
-        // Antes se añadia una variacion basada en X+Z para "romper" la planitud visual,
-        // pero eso generaba bandas diagonales muy visibles en todos los mapas.
-        int shade = Math.max(-18, Math.min(18, sample.y() / 12));
+        int center = heights[blockZ][blockX];
+        if(center == Integer.MIN_VALUE) {
+            return base.getRGB();
+        }
+
+        int west = sampleHeight(heights, blockX - 1, blockZ, center);
+        int east = sampleHeight(heights, blockX + 1, blockZ, center);
+        int north = sampleHeight(heights, blockX, blockZ - 1, center);
+        int south = sampleHeight(heights, blockX, blockZ + 1, center);
+
+        double dx = (east - west) * 0.5d;
+        double dz = (south - north) * 0.5d;
+        double exaggeration = blockName != null && blockName.contains("water") ? 0.18d : 0.38d;
+
+        double nx = -dx * exaggeration;
+        double ny = -dz * exaggeration;
+        double nz = 1.0d;
+        double normalLength = Math.sqrt((nx * nx) + (ny * ny) + (nz * nz));
+        if(normalLength <= 0d) {
+            return base.getRGB();
+        }
+        nx /= normalLength;
+        ny /= normalLength;
+        nz /= normalLength;
+
+        double lightX = -0.58d;
+        double lightY = -0.58d;
+        double lightZ = 0.57d;
+        double lightLength = Math.sqrt((lightX * lightX) + (lightY * lightY) + (lightZ * lightZ));
+        lightX /= lightLength;
+        lightY /= lightLength;
+        lightZ /= lightLength;
+
+        double dot = (nx * lightX) + (ny * lightY) + (nz * lightZ);
+        double ambient = blockName != null && blockName.contains("water") ? 0.80d : 0.62d;
+        double contrast = blockName != null && blockName.contains("water") ? 0.20d : 0.38d;
+        double intensity = Math.max(0d, Math.min(1d, ambient + (Math.max(-0.9d, Math.min(0.9d, dot)) * contrast)));
+        int shade = (int) Math.round((intensity - 0.72d) * 62d);
         return applyShade(base, shade).getRGB();
+    }
+
+    private int sampleHeight(int[][] heights, int x, int z, int fallback) {
+        if(heights == null || z < 0 || z >= heights.length || x < 0 || x >= heights[z].length) {
+            return fallback;
+        }
+        int value = heights[z][x];
+        return value == Integer.MIN_VALUE ? fallback : value;
     }
 
     /**
