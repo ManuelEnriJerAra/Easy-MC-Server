@@ -24,6 +24,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 /**
@@ -50,6 +52,7 @@ import java.util.stream.IntStream;
  * - guardar el resultado directamente como PNG.
  */
 public final class MCARenderer {
+    private static final Pattern REGION_FILE_PATTERN = Pattern.compile("^r\\.(-?\\d+)\\.(-?\\d+)\\.mca$", Pattern.CASE_INSENSITIVE);
     // Numero de chunks por lado dentro de una region MCA.
     public static final int REGION_CHUNK_SIDE = 32;
     // Numero de bloques por lado dentro de un chunk.
@@ -205,7 +208,6 @@ public final class MCARenderer {
             g2.fillRect(0, 0, width, height);
 
             List<RenderedRegion> renderedRegions = IntStream.range(0, normalizedPaths.size())
-                    .parallel()
                     .mapToObj(i -> {
                         try {
                             // Muy importante: al componer varias regiones no debemos recortar cada una por separado.
@@ -333,6 +335,16 @@ public final class MCARenderer {
     }
 
     private Rectangle resolveCropArea(BufferedImage image, RenderOptions options) {
+        if(options != null && options.hasWorldBounds()) {
+            // Si ya se ha pedido una ventana concreta del mundo, evitamos recentrados "inteligentes"
+            // como el crop cuadrado, pero aun asi quitamos bordes totalmente vacios para no dejar
+            // franjas negras innecesarias cuando la zona pedida cae cerca de regiones incompletas.
+            Rectangle visibleArea = findVisibleBounds(image, options.defaultArgb());
+            if(visibleArea != null) {
+                return visibleArea;
+            }
+            return new Rectangle(0, 0, image.getWidth(), image.getHeight());
+        }
         if(options != null && options.preferSquareCrop()) {
             Rectangle squareArea = findLargestSquareWithoutEmptyChunks(image, options.defaultArgb(), options.pixelsPerBlock());
             if(squareArea != null) {
@@ -481,7 +493,6 @@ public final class MCARenderer {
         int[][] waterDepths = new int[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         int tilesPerSide = (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS);
         IntStream.range(0, tilesPerSide * tilesPerSide)
-                .parallel()
                 .forEach(tileIndex -> {
                     int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
                     int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
@@ -507,6 +518,9 @@ public final class MCARenderer {
         int endChunkZ = Math.min(REGION_CHUNK_SIDE, startChunkZ + REGION_RENDER_TILE_CHUNKS);
         for(int localChunkZ = startChunkZ; localChunkZ < endChunkZ; localChunkZ++) {
             for(int localChunkX = startChunkX; localChunkX < endChunkX; localChunkX++) {
+                if(!chunkIntersectsRenderBounds(region, localChunkX, localChunkZ, options)) {
+                    continue;
+                }
                 Chunk chunk = mcaFile.getChunk(localChunkX, localChunkZ);
                 if(chunk == null) {
                     continue;
@@ -544,9 +558,23 @@ public final class MCARenderer {
         int worldChunkZ = region.z() * REGION_CHUNK_SIDE + localChunkZ;
         int regionBlockZ = localChunkZ * CHUNK_BLOCK_SIDE;
         int regionBlockX = localChunkX * CHUNK_BLOCK_SIDE;
-
-        for(int localZ = 0; localZ < CHUNK_BLOCK_SIDE; localZ++) {
-            for(int localX = 0; localX < CHUNK_BLOCK_SIDE; localX++) {
+        int startLocalX = 0;
+        int endLocalX = CHUNK_BLOCK_SIDE;
+        int startLocalZ = 0;
+        int endLocalZ = CHUNK_BLOCK_SIDE;
+        if(options.hasWorldBounds()) {
+            int chunkWorldStartX = worldChunkX * CHUNK_BLOCK_SIDE;
+            int chunkWorldStartZ = worldChunkZ * CHUNK_BLOCK_SIDE;
+            startLocalX = Math.max(0, options.minWorldBlockX() - chunkWorldStartX);
+            endLocalX = Math.min(CHUNK_BLOCK_SIDE, options.maxWorldBlockX() - chunkWorldStartX + 1);
+            startLocalZ = Math.max(0, options.minWorldBlockZ() - chunkWorldStartZ);
+            endLocalZ = Math.min(CHUNK_BLOCK_SIDE, options.maxWorldBlockZ() - chunkWorldStartZ + 1);
+            if(startLocalX >= endLocalX || startLocalZ >= endLocalZ) {
+                return;
+            }
+        }
+        for(int localZ = startLocalZ; localZ < endLocalZ; localZ++) {
+            for(int localX = startLocalX; localX < endLocalX; localX++) {
                 int worldBlockX = worldChunkX * CHUNK_BLOCK_SIDE + localX;
                 int worldBlockZ = worldChunkZ * CHUNK_BLOCK_SIDE + localZ;
                 TopBlockSample sample = findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options);
@@ -559,6 +587,22 @@ public final class MCARenderer {
                 waterDepths[regionBlockZ + localZ][regionBlockX + localX] = sample.waterDepth();
             }
         }
+    }
+
+    private boolean chunkIntersectsRenderBounds(RegionCoordinates region, int localChunkX, int localChunkZ, RenderOptions options) {
+        if(options == null || !options.hasWorldBounds()) {
+            return true;
+        }
+        int worldChunkX = region.x() * REGION_CHUNK_SIDE + localChunkX;
+        int worldChunkZ = region.z() * REGION_CHUNK_SIDE + localChunkZ;
+        int chunkMinX = worldChunkX * CHUNK_BLOCK_SIDE;
+        int chunkMaxX = chunkMinX + CHUNK_BLOCK_SIDE - 1;
+        int chunkMinZ = worldChunkZ * CHUNK_BLOCK_SIDE;
+        int chunkMaxZ = chunkMinZ + CHUNK_BLOCK_SIDE - 1;
+        return chunkMaxX >= options.minWorldBlockX()
+                && chunkMinX <= options.maxWorldBlockX()
+                && chunkMaxZ >= options.minWorldBlockZ()
+                && chunkMinZ <= options.maxWorldBlockZ();
     }
 
     private void paintRegionFromSamples(BufferedImage image, String[][] blockNames, String[][] biomeNames, String[][] waterFloorNames, int[][] heights, int[][] waterDepths, RenderOptions options) {
@@ -1748,11 +1792,19 @@ public final class MCARenderer {
      * {@code r.<regionX>.<regionZ>.mca}
      */
     private RegionCoordinates parseRegionCoordinates(Path mcaPath) {
-        String[] parts = mcaPath.getFileName().toString().split("\\.");
-        if(parts.length != 4 || !"r".equalsIgnoreCase(parts[0]) || !"mca".equalsIgnoreCase(parts[3])) {
+        String fileName = mcaPath == null || mcaPath.getFileName() == null ? null : mcaPath.getFileName().toString();
+        if(fileName == null || fileName.isBlank()) {
             throw new IllegalArgumentException("Nombre de region invalido: " + mcaPath.getFileName());
         }
-        return new RegionCoordinates(Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+        Matcher matcher = REGION_FILE_PATTERN.matcher(fileName);
+        if(!matcher.matches()) {
+            throw new IllegalArgumentException("Nombre de region invalido: " + fileName + ". Se esperaba el formato r.<x>.<z>.mca");
+        }
+        try {
+            return new RegionCoordinates(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
+        } catch(NumberFormatException ex) {
+            throw new IllegalArgumentException("Coordenadas de region fuera de rango en: " + fileName, ex);
+        }
     }
 
     /**
@@ -1772,8 +1824,13 @@ public final class MCARenderer {
         private final boolean ignoreTransparentBlocks;
         private final boolean preferSquareCrop;
         private final int defaultArgb;
+        private final Integer minWorldBlockX;
+        private final Integer maxWorldBlockX;
+        private final Integer minWorldBlockZ;
+        private final Integer maxWorldBlockZ;
 
-        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean waterSubsurfaceShading, boolean biomeColoring, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb) {
+        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean waterSubsurfaceShading, boolean biomeColoring, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb,
+                              Integer minWorldBlockX, Integer maxWorldBlockX, Integer minWorldBlockZ, Integer maxWorldBlockZ) {
             this.pixelsPerBlock = pixelsPerBlock;
             this.minY = minY;
             this.maxY = maxY;
@@ -1783,48 +1840,60 @@ public final class MCARenderer {
             this.ignoreTransparentBlocks = ignoreTransparentBlocks;
             this.preferSquareCrop = preferSquareCrop;
             this.defaultArgb = defaultArgb;
+            this.minWorldBlockX = minWorldBlockX;
+            this.maxWorldBlockX = maxWorldBlockX;
+            this.minWorldBlockZ = minWorldBlockZ;
+            this.maxWorldBlockZ = maxWorldBlockZ;
         }
 
         // Valores por defecto pensados para mundos modernos, pero validos tambien para muchos casos legacy.
         public static RenderOptions defaults() {
-            return new RenderOptions(1, -64, 319, true, false, false, true, true, DEFAULT_ARGB);
+            return new RenderOptions(1, -64, 319, true, false, false, true, true, DEFAULT_ARGB, null, null, null, null);
         }
 
         // Cambia la escala visual: 1 bloque = N pixeles.
         public RenderOptions withPixelsPerBlock(int pixelsPerBlock) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Cambia el rango vertical explorado al buscar la superficie.
         public RenderOptions withYRange(int minY, int maxY) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Activa o desactiva el sombreado por altura.
         public RenderOptions withShadeByHeight(boolean shadeByHeight) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         public RenderOptions withWaterSubsurfaceShading(boolean waterSubsurfaceShading) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         public RenderOptions withBiomeColoring(boolean biomeColoring) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Permite decidir si se ignoran bloques de detalle/transparencia.
         public RenderOptions withIgnoreTransparentBlocks(boolean ignoreTransparentBlocks) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         public RenderOptions withPreferSquareCrop(boolean preferSquareCrop) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Permite cambiar el color de fondo.
         public RenderOptions withDefaultArgb(int defaultArgb) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+        }
+
+        public RenderOptions withWorldBounds(int minWorldBlockX, int maxWorldBlockX, int minWorldBlockZ, int maxWorldBlockZ) {
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
+                    Math.min(minWorldBlockX, maxWorldBlockX),
+                    Math.max(minWorldBlockX, maxWorldBlockX),
+                    Math.min(minWorldBlockZ, maxWorldBlockZ),
+                    Math.max(minWorldBlockZ, maxWorldBlockZ));
         }
 
         // Asegura que las opciones tengan valores coherentes antes de usarse internamente.
@@ -1832,7 +1901,8 @@ public final class MCARenderer {
             int normalizedPixels = Math.max(1, pixelsPerBlock);
             int normalizedMinY = minY;
             int normalizedMaxY = Math.max(normalizedMinY, maxY);
-            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
+                    minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Getters simples para leer las opciones desde el renderer.
@@ -1845,6 +1915,11 @@ public final class MCARenderer {
         public boolean ignoreTransparentBlocks() { return ignoreTransparentBlocks; }
         public boolean preferSquareCrop() { return preferSquareCrop; }
         public int defaultArgb() { return defaultArgb; }
+        public boolean hasWorldBounds() { return minWorldBlockX != null && maxWorldBlockX != null && minWorldBlockZ != null && maxWorldBlockZ != null; }
+        public int minWorldBlockX() { return minWorldBlockX == null ? Integer.MIN_VALUE : minWorldBlockX; }
+        public int maxWorldBlockX() { return maxWorldBlockX == null ? Integer.MAX_VALUE : maxWorldBlockX; }
+        public int minWorldBlockZ() { return minWorldBlockZ == null ? Integer.MIN_VALUE : minWorldBlockZ; }
+        public int maxWorldBlockZ() { return maxWorldBlockZ == null ? Integer.MAX_VALUE : maxWorldBlockZ; }
     }
 
     // Coordenadas de una region dentro del mundo. Ejemplo: r.1.-2.mca -> x=1, z=-2.

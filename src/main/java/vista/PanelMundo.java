@@ -3,16 +3,26 @@
 import controlador.GestorMundos;
 import controlador.GestorServidores;
 import controlador.MCARenderer;
+import controlador.MojangAPI;
 import controlador.WorldDataReader;
 import modelo.MinecraftConstants;
 import modelo.Server;
 import modelo.World;
+import net.querz.nbt.io.NBTUtil;
+import net.querz.nbt.io.NamedTag;
+import net.querz.nbt.tag.CompoundTag;
+import net.querz.nbt.tag.ListTag;
+import net.querz.nbt.tag.Tag;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.filechooser.FileSystemView;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
+import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -20,11 +30,14 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayDeque;
@@ -38,22 +51,30 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class PanelMundo extends JPanel {
+    private static final int CONNECTION_HEAD_SIZE = 24;
+    private static final int PREVIEW_PLAYER_HEAD_SIZE = 24;
     private static final Pattern JOIN = Pattern.compile("([^\\s]+) joined the game");
     private static final Pattern HORA_LOG = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
+    private static final Pattern REGION_FILE_PATTERN = Pattern.compile("^r\\.(-?\\d+)\\.(-?\\d+)\\.mca$", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter FORMATO_HORA_LOG = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter FORMATO_CONEXION = DateTimeFormatter.ofPattern("dd/MM/yyyy - HH:mm:ss");
     private static final String WORLD_METADATA_FILE = ".emw-world.properties";
     private static final String PREVIEW_METADATA_FILE = ".preview-overlay.properties";
     private static final Map<Path, RegionVisibilityCacheEntry> REGION_VISIBILITY_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, ImageIcon> PLAYER_HEAD_CACHE = new ConcurrentHashMap<>();
+    private static final Set<String> PLAYER_HEADS_LOADING = ConcurrentHashMap.newKeySet();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final GestorServidores gestorServidores;
     private final Runnable onWorldChanged;
@@ -69,6 +90,7 @@ public class PanelMundo extends JPanel {
     private final JLabel lastPlayedValueLabel = new JLabel("-");
     private final JLabel versionValueLabel = new JLabel("-");
     private final JLabel tipoMundoValueLabel = new JLabel("-");
+    private final JLabel previewRenderStatusLabel = new JLabel();
     private final JComboBox<World> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
     private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
@@ -77,13 +99,28 @@ public class PanelMundo extends JPanel {
     private final JButton generarButton = new JButton("Generar nuevo");
     private final JButton generarPreviewButton = new JButton("Generar preview");
     private final JButton previewMenuButton = new JButton("\u2630");
-    private final JPopupMenu previewOptionsMenu = new JPopupMenu();
+    private JDialog previewOptionsDialog;
+    private JPanel previewOptionsPanel;
     private final JCheckBox sombreadoMenuItem = new JCheckBox("Sombreado", true);
     private final JCheckBox sombreadoAguaMenuItem = new JCheckBox("Sombreado agua", true);
     private final JCheckBox colorearBiomasMenuItem = new JCheckBox("Colorear biomas", true);
     private final JCheckBox mostrarSpawnMenuItem = new JCheckBox("Mostrar spawn", false);
+    private final JCheckBox mostrarJugadoresMenuItem = new JCheckBox("Mostrar jugadores", false);
     private final JCheckBox limitesChunksMenuItem = new JCheckBox("Límites de chunks", false);
     private final JCheckBox usarTodoMenuItem = new JCheckBox("Mapa completo", false);
+    private final JComboBox<PreviewRenderLimitOption> limiteRenderCombo = new JComboBox<>(new PreviewRenderLimitOption[]{
+            new PreviewRenderLimitOption("64x64", 64),
+            new PreviewRenderLimitOption("128x128", 128),
+            new PreviewRenderLimitOption("256x256", 256),
+            new PreviewRenderLimitOption("512x512", 512),
+            new PreviewRenderLimitOption("1024x1024", 1024),
+            new PreviewRenderLimitOption("2048x2048", 2048),
+            new PreviewRenderLimitOption("4096x4096", 4096),
+            new PreviewRenderLimitOption("8192x8192", 8192),
+            new PreviewRenderLimitOption("16384x16384", 16384),
+            new PreviewRenderLimitOption("Ilimitado", 0)
+    });
+    private final JComboBox<PreviewCenterOption> centroRenderCombo = new JComboBox<>();
     private final JLabel pesoMundoLabel = new JLabel("-");
     private final JLabel pesoStatsSavesLabel = new JLabel("Peso stats y saves: -");
     private final JLabel pesoTotalLabel = new JLabel("-");
@@ -98,9 +135,19 @@ public class PanelMundo extends JPanel {
     private boolean sombreadoAguaEnPreview = true;
     private boolean colorearBiomasEnPreview = true;
     private boolean mostrarSpawnEnPreview = false;
+    private boolean mostrarJugadoresEnPreview = false;
     private boolean limitesChunksEnPreview = false;
     private boolean usarTodoEnPreview = false;
+    private int limiteMaximoRenderPreview = 512;
+    private String centroRenderPreviewId = "spawn";
     private boolean previewGenerationInProgress = false;
+    private SwingWorker<PreviewGenerationResult, Void> previewGenerationWorker;
+    private final AtomicLong previewGenerationSequence = new AtomicLong();
+    private boolean previewDisponibleAntesDeGenerar = false;
+    private String previewGenerationServerId;
+    private String previewGenerationServerName;
+    private String previewGenerationWorldDir;
+    private String previewGenerationWorldName;
 
     PanelMundo(GestorServidores gestorServidores, Runnable onWorldChanged) {
         this.gestorServidores = gestorServidores;
@@ -130,6 +177,7 @@ public class PanelMundo extends JPanel {
         styleInfoLabel(pesoMundoValueLabel);
         styleInfoLabel(pesoStatsSavesValueLabel);
         styleInfoLabel(pesoTotalValueLabel);
+        stylePreviewStatusLabel(previewRenderStatusLabel);
         instalarInteraccionSeed();
 
         conexionesPanel.setOpaque(false);
@@ -311,6 +359,11 @@ public class PanelMundo extends JPanel {
 
         JPanel overlayCorner = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
         overlayCorner.setOpaque(false);
+        overlayCorner.setLayout(new BoxLayout(overlayCorner, BoxLayout.Y_AXIS));
+        previewRenderStatusLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        overlayControls.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        overlayCorner.add(previewRenderStatusLabel);
+        overlayCorner.add(Box.createVerticalStrut(6));
         overlayCorner.add(overlayControls);
 
         JPanel progressWrap = new JPanel(new BorderLayout());
@@ -434,6 +487,8 @@ public class PanelMundo extends JPanel {
         mostrarTextoPreview("Selecciona un servidor para gestionar sus mundos.");
         renderConexiones(List.of());
         setControlesActivos(false);
+        actualizarTextoBotonPreview();
+        actualizarIndicadorRenderEnCurso();
     }
 
     private void actualizarVistaMundos() {
@@ -441,6 +496,7 @@ public class PanelMundo extends JPanel {
         actualizarLabelsDatosServidor();
         actualizarPreviewSeleccionada();
         actualizarTextoBotonPreview();
+        actualizarIndicadorRenderEnCurso();
         actualizarDatosAlmacenamiento();
         actualizarConexionesRecientes();
     }
@@ -516,40 +572,166 @@ public class PanelMundo extends JPanel {
             renderConexiones(List.of());
             return;
         }
-        renderConexiones(obtenerUltimasConexiones(server));
+        renderConexiones(obtenerUltimasConexiones(server, getMundoSeleccionadoOActivo()));
     }
 
-    private List<RecentConnection> obtenerUltimasConexiones(Server server) {
+    private List<RecentConnection> obtenerUltimasConexiones(Server server, World mundo) {
         List<String> rawLogLines = server.getRawLogLines();
-        if (rawLogLines == null || rawLogLines.isEmpty()) {
+        java.util.ArrayList<RecentConnection> conexiones = new java.util.ArrayList<>();
+        if (rawLogLines != null && !rawLogLines.isEmpty()) {
+            LocalDate fechaBase = LocalDate.now();
+
+            for (int i = rawLogLines.size() - 1; i >= 0 && conexiones.size() < 4; i--) {
+                String raw = rawLogLines.get(i);
+                if (raw == null || raw.isBlank()) continue;
+
+                Matcher joinMatcher = JOIN.matcher(raw);
+                if (!joinMatcher.find()) continue;
+
+                String jugador = joinMatcher.group(1);
+                String timestamp = fechaBase.format(FORMATO_FECHA) + " - --:--:--";
+                Matcher horaMatcher = HORA_LOG.matcher(raw);
+                if (horaMatcher.find()) {
+                    try {
+                        LocalTime hora = LocalTime.parse(horaMatcher.group(1), FORMATO_HORA_LOG);
+                        timestamp = FORMATO_CONEXION.format(fechaBase.atTime(hora));
+                    } catch (DateTimeParseException ignored) {
+                    }
+                }
+
+                conexiones.add(new RecentConnection(jugador, timestamp, null));
+            }
+        }
+
+        if (!conexiones.isEmpty()) {
+            return conexiones;
+        }
+
+        return obtenerUltimosJugadoresDesdePlayerdata(server, mundo);
+    }
+
+    private List<RecentConnection> obtenerUltimosJugadoresDesdePlayerdata(Server server, World mundo) {
+        return obtenerJugadoresRecientesDesdePlayerdata(server, mundo).stream()
+                .map(player -> new RecentConnection(
+                        player.username(),
+                        FORMATO_CONEXION.format(player.lastSeen().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime()),
+                        "X: " + player.point().x() + " Z: " + player.point().z(),
+                        player.lastSeen().toMillis()
+                ))
+                .toList();
+    }
+
+    private List<PreviewPlayerData> obtenerJugadoresRecientesDesdePlayerdata(Server server, World mundo) {
+        if (server == null || mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) {
             return List.of();
         }
 
-        java.util.ArrayList<RecentConnection> conexiones = new java.util.ArrayList<>();
-        LocalDate fechaBase = LocalDate.now();
-
-        for (int i = rawLogLines.size() - 1; i >= 0 && conexiones.size() < 4; i--) {
-            String raw = rawLogLines.get(i);
-            if (raw == null || raw.isBlank()) continue;
-
-            Matcher joinMatcher = JOIN.matcher(raw);
-            if (!joinMatcher.find()) continue;
-
-            String jugador = joinMatcher.group(1);
-            String timestamp = fechaBase.format(FORMATO_FECHA) + " - --:--:--";
-            Matcher horaMatcher = HORA_LOG.matcher(raw);
-            if (horaMatcher.find()) {
-                try {
-                    LocalTime hora = LocalTime.parse(horaMatcher.group(1), FORMATO_HORA_LOG);
-                    timestamp = FORMATO_CONEXION.format(fechaBase.atTime(hora));
-                } catch (DateTimeParseException ignored) {
-                }
-            }
-
-            conexiones.add(new RecentConnection(jugador, timestamp));
+        Path playerdataDir = Path.of(mundo.getWorldDir()).resolve("playerdata");
+        if (!Files.isDirectory(playerdataDir)) {
+            return List.of();
         }
 
-        return conexiones;
+        Map<UUID, String> nombresPorUuid = cargarNombresJugadores(server);
+        try (Stream<Path> stream = Files.list(playerdataDir)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName() != null)
+                    .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".dat"))
+                    .map(path -> leerJugadorRecienteDesdePlayerdata(path, nombresPorUuid))
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(PreviewPlayerData::lastSeen, Comparator.reverseOrder()))
+                    .limit(4)
+                    .toList();
+        } catch (IOException ex) {
+            return List.of();
+        }
+    }
+
+    private PreviewPlayerData leerJugadorRecienteDesdePlayerdata(Path playerFile, Map<UUID, String> nombresPorUuid) {
+        try {
+            String fileName = playerFile.getFileName().toString();
+            String uuidText = fileName.substring(0, fileName.length() - 4);
+            UUID uuid = UUID.fromString(uuidText);
+            String username = nombresPorUuid.getOrDefault(uuid, uuidText);
+            FileTime lastModified = Files.getLastModifiedTime(playerFile);
+            MCARenderer.WorldPoint point = leerPosicionJugador(playerFile);
+            if (point == null) {
+                return null;
+            }
+            return new PreviewPlayerData(username, point, lastModified);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private List<PreviewPlayerPoint> obtenerJugadoresRecientesParaOverlay(World mundo) {
+        return obtenerJugadoresRecientesDesdePlayerdata(gestorServidores.getServidorSeleccionado(), mundo).stream()
+                .map(player -> new PreviewPlayerPoint(player.username(), player.point()))
+                .toList();
+    }
+
+    private MCARenderer.WorldPoint leerPosicionJugador(Path playerFile) {
+        try {
+            NamedTag namedTag = NBTUtil.read(playerFile.toFile());
+            if (namedTag == null || !(namedTag.getTag() instanceof CompoundTag root)) {
+                return null;
+            }
+
+            ListTag<?> pos = root.getListTag("Pos");
+            if (pos == null || pos.size() < 3) {
+                return null;
+            }
+
+            Double x = leerNumeroTag(pos.get(0));
+            Double z = leerNumeroTag(pos.get(2));
+            if (x == null || z == null) {
+                return null;
+            }
+
+            return new MCARenderer.WorldPoint((int) Math.round(x), (int) Math.round(z));
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Double leerNumeroTag(Tag<?> tag) {
+        if (tag instanceof net.querz.nbt.tag.NumberTag<?> numberTag) {
+            return numberTag.asDouble();
+        }
+        return null;
+    }
+
+    private Map<UUID, String> cargarNombresJugadores(Server server) {
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            return Map.of();
+        }
+
+        Path usercachePath = Path.of(server.getServerDir()).resolve("usercache.json");
+        if (!Files.isRegularFile(usercachePath)) {
+            return Map.of();
+        }
+
+        try {
+            JsonNode root = objectMapper.readTree(usercachePath.toFile());
+            if (root == null || !root.isArray()) {
+                return Map.of();
+            }
+
+            Map<UUID, String> nombres = new HashMap<>();
+            for (JsonNode node : root) {
+                if (node == null) continue;
+                String uuidText = node.path("uuid").asString(null);
+                String name = node.path("name").asString(null);
+                if (uuidText == null || name == null || name.isBlank()) continue;
+                try {
+                    nombres.put(UUID.fromString(uuidText), name.strip());
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            return nombres;
+        } catch (Exception ex) {
+            return Map.of();
+        }
     }
 
     private void renderConexiones(List<RecentConnection> conexiones) {
@@ -577,25 +759,63 @@ public class PanelMundo extends JPanel {
         JPanel fila = new JPanel(new BorderLayout(10, 0));
         fila.setOpaque(false);
         fila.setAlignmentX(Component.LEFT_ALIGNMENT);
-        fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
 
         JLabel avatar = new JLabel(obtenerInicial(conexion.username()), SwingConstants.CENTER);
-        avatar.setPreferredSize(new Dimension(30, 30));
-        avatar.setMinimumSize(new Dimension(30, 30));
-        avatar.setOpaque(true);
-        avatar.setBackground(AppTheme.getSoftSelectionBackground());
+        avatar.setPreferredSize(new Dimension(CONNECTION_HEAD_SIZE, CONNECTION_HEAD_SIZE));
+        avatar.setMinimumSize(new Dimension(CONNECTION_HEAD_SIZE, CONNECTION_HEAD_SIZE));
+        avatar.setOpaque(false);
+        avatar.setBackground(new Color(0, 0, 0, 0));
         avatar.setForeground(AppTheme.getForeground());
-        avatar.setBorder(AppTheme.createRoundedBorder(new Insets(4, 4, 4, 4), 1f));
+        avatar.setBorder(BorderFactory.createEmptyBorder());
         avatar.setFont(avatar.getFont().deriveFont(Font.BOLD, 12f));
+        aplicarCabezaJugadorConexion(avatar, conexion.username());
 
         JLabel nombre = new JLabel(conexion.username());
         JLabel fecha = new JLabel(conexion.timestamp());
         fecha.setForeground(AppTheme.getMutedForeground());
+        JLabel ubicacion = new JLabel(valorOPlaceholder(conexion.location()));
+        ubicacion.setForeground(AppTheme.getMutedForeground());
+        ubicacion.setFont(ubicacion.getFont().deriveFont(Font.PLAIN, 11f));
+
+        JPanel texto = new JPanel();
+        texto.setOpaque(false);
+        texto.setLayout(new BoxLayout(texto, BoxLayout.Y_AXIS));
+        texto.add(nombre);
+        if (conexion.location() != null && !conexion.location().isBlank()) {
+            texto.add(ubicacion);
+        }
 
         fila.add(avatar, BorderLayout.WEST);
-        fila.add(nombre, BorderLayout.CENTER);
+        fila.add(texto, BorderLayout.CENTER);
         fila.add(fecha, BorderLayout.EAST);
         return fila;
+    }
+
+    private void aplicarCabezaJugadorConexion(JLabel avatar, String username) {
+        if (avatar == null || username == null || username.isBlank()) {
+            return;
+        }
+
+        String key = username.strip().toLowerCase(Locale.ROOT);
+        ImageIcon cachedHead = PLAYER_HEAD_CACHE.get(key);
+        if (cachedHead != null && cachedHead.getImage() != null) {
+            avatar.setText(null);
+            avatar.setIcon(cachedHead);
+            return;
+        }
+
+        avatar.setText(obtenerInicial(username));
+        avatar.setIcon(null);
+        cargarCabezaJugadorPreviewAsync(username, () -> {
+            ImageIcon loadedHead = PLAYER_HEAD_CACHE.get(key);
+            if (loadedHead != null && loadedHead.getImage() != null) {
+                avatar.setText(null);
+                avatar.setIcon(loadedHead);
+            }
+            avatar.revalidate();
+            avatar.repaint();
+        });
     }
 
     private World getMundoSeleccionadoOActivo() {
@@ -717,20 +937,52 @@ public class PanelMundo extends JPanel {
             return;
         }
 
+        if (previewGenerationInProgress) {
+            if (mismoContextoRenderEnCurso(gestorServidores.getServidorSeleccionado(), mundo)) {
+                cancelarGeneracionPreview();
+                return;
+            }
+            JOptionPane.showMessageDialog(
+                    this,
+                    construirMensajeRenderEnCurso(),
+                    "Generar preview",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+
+        long generationId = previewGenerationSequence.incrementAndGet();
+        String worldDir = mundo.getWorldDir();
+        Server selectedServer = gestorServidores.getServidorSeleccionado();
+        String serverId = selectedServer == null ? null : selectedServer.getId();
         Path outputPath = getPreviewPath(mundo);
         boolean habiaPreviewAnterior = Files.isRegularFile(outputPath);
+        previewDisponibleAntesDeGenerar = habiaPreviewAnterior;
         previewGenerationInProgress = true;
+        previewGenerationServerId = serverId;
+        previewGenerationServerName = selectedServer == null
+                ? null
+                : (selectedServer.getDisplayName() == null || selectedServer.getDisplayName().isBlank()
+                ? selectedServer.getId()
+                : selectedServer.getDisplayName());
+        previewGenerationWorldDir = worldDir;
+        previewGenerationWorldName = mundo.getWorldName();
         previewImageLabel.clearImage();
         setPreviewProgressVisible(true);
-        generarPreviewButton.setEnabled(false);
-        previewMenuButton.setEnabled(false);
+        actualizarTextoBotonPreview();
+        actualizarIndicadorRenderEnCurso();
         long previewStartNanos = System.nanoTime();
         MCARenderer renderer = new MCARenderer();
         WorldDataReader.SpawnPoint spawnPoint = WorldDataReader.getSpawnPoint(mundo);
         SwingWorker<PreviewGenerationResult, Void> worker = new SwingWorker<>() {
             @Override
             protected PreviewGenerationResult doInBackground() throws Exception {
-                List<Path> regionesPreview = encontrarRegionesPreview(mundo, usarTodoEnPreview, spawnPoint);
+                List<PreviewPlayerData> recentPlayers = obtenerJugadoresRecientesDesdePlayerdata(selectedServer, mundo);
+                MCARenderer.WorldPoint centerPoint = usarTodoEnPreview ? null : resolverCentroRender(mundo, spawnPoint, recentPlayers);
+                List<Path> regionesPreview = encontrarRegionesPreview(mundo, usarTodoEnPreview, spawnPoint, centerPoint);
+                if (isCancelled()) {
+                    return null;
+                }
                 if (regionesPreview.isEmpty()) {
                     return new PreviewGenerationResult(outputPath, true, null, null);
                 }
@@ -739,28 +991,66 @@ public class PanelMundo extends JPanel {
                         .withWaterSubsurfaceShading(sombreadoAguaEnPreview)
                         .withBiomeColoring(colorearBiomasEnPreview)
                         .withPreferSquareCrop(!usarTodoEnPreview);
+                if (!usarTodoEnPreview && centerPoint != null && limiteMaximoRenderPreview > 0) {
+                    RenderWorldBounds bounds = resolverLimitesRender(regionesPreview, centerPoint, limiteMaximoRenderPreview);
+                    if (bounds != null) {
+                        renderOptions = renderOptions.withWorldBounds(
+                                bounds.minBlockX(),
+                                bounds.maxBlockX(),
+                                bounds.minBlockZ(),
+                                bounds.maxBlockZ()
+                        );
+                    }
+                }
                 MCARenderer.RenderedWorld renderedWorld = renderer.renderWorldWithMetadata(regionesPreview, renderOptions);
-                BufferedImage preview = renderedWorld.image();
+                if (isCancelled()) {
+                    return null;
+                }
+                CroppedPreview croppedPreview = usarTodoEnPreview
+                        ? new CroppedPreview(renderedWorld.image(), renderedWorld.originBlockX(), renderedWorld.originBlockZ())
+                        : recortarPreviewPorLimite(renderedWorld, centerPoint, limiteMaximoRenderPreview);
+                BufferedImage preview = croppedPreview.image();
                 guardarPreview(preview, outputPath);
-                PreviewOverlayData overlayData = new PreviewOverlayData(
-                        renderedWorld.originBlockX(),
-                        renderedWorld.originBlockZ(),
-                        renderedWorld.pixelsPerBlock(),
-                        spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z())
-                );
-                guardarPreviewOverlayData(mundo, overlayData);
+                PreviewOverlayData overlayData = null;
+                try {
+                    overlayData = new PreviewOverlayData(
+                            croppedPreview.originBlockX(),
+                            croppedPreview.originBlockZ(),
+                            renderedWorld.pixelsPerBlock(),
+                            spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z()),
+                            recentPlayers.stream()
+                                    .map(player -> new PreviewPlayerPoint(player.username(), player.point()))
+                                    .toList()
+                    );
+                    guardarPreviewOverlayData(mundo, overlayData);
+                } catch (RuntimeException ex) {
+                    System.out.println("[PanelMundo] No se ha podido construir la metadata de overlay de la preview: " + ex.getMessage());
+                    ex.printStackTrace(System.out);
+                }
                 return new PreviewGenerationResult(outputPath, false, preview, overlayData);
             }
 
             @Override
             protected void done() {
-                previewGenerationInProgress = false;
-                updateUseWorldButtonState();
-                setPreviewProgressVisible(false);
-                generarPreviewButton.setEnabled(mundosCombo.isEnabled() && getMundoSeleccionadoOActivo() != null);
-                previewMenuButton.setEnabled(mundosCombo.isEnabled() && getMundoSeleccionadoOActivo() != null);
+                boolean isCurrentWorker = previewGenerationWorker == this && previewGenerationSequence.get() == generationId;
+                if (isCurrentWorker) {
+                    previewGenerationInProgress = false;
+                    previewGenerationWorker = null;
+                    limpiarContextoRenderEnCurso();
+                    updateUseWorldButtonState();
+                    setPreviewProgressVisible(false);
+                    actualizarTextoBotonPreview();
+                    actualizarIndicadorRenderEnCurso();
+                }
                 try {
+                    if (isCancelled()) {
+                        restaurarPreviewAnteriorSiExiste(habiaPreviewAnterior);
+                        return;
+                    }
                     PreviewGenerationResult result = get();
+                    if (result == null) {
+                        return;
+                    }
                     if (result.sinRegiones()) {
                         restaurarPreviewAnteriorSiExiste(habiaPreviewAnterior);
                         JOptionPane.showMessageDialog(PanelMundo.this,
@@ -771,14 +1061,18 @@ public class PanelMundo extends JPanel {
                     }
                     double elapsedSeconds = (System.nanoTime() - previewStartNanos) / 1_000_000_000.0d;
                     System.out.println(String.format(Locale.ROOT, "[PanelMundo] Preview generated in %.2f seconds", elapsedSeconds));
-                    if (result.preview() != null) {
+                    boolean sigueEnMismoMundo = mismoContextoSeleccionado(serverId, worldDir);
+                    if (result.preview() != null && sigueEnMismoMundo) {
                         previewImageLabel.setImage(result.preview());
                         previewImageLabel.setOverlayData(result.overlayData());
                         previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
                         previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
-                    } else {
+                        previewImageLabel.setPlayersVisible(mostrarJugadoresEnPreview);
+                    } else if (sigueEnMismoMundo) {
                         actualizarPreviewSeleccionada();
                     }
+                } catch (java.util.concurrent.CancellationException ex) {
+                    restaurarPreviewAnteriorSiExiste(habiaPreviewAnterior);
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                     restaurarPreviewAnteriorSiExiste(habiaPreviewAnterior);
@@ -796,10 +1090,11 @@ public class PanelMundo extends JPanel {
                 }
             }
         };
+        previewGenerationWorker = worker;
         worker.execute();
     }
 
-    private List<Path> encontrarRegionesPreview(World mundo, boolean generarTodo, WorldDataReader.SpawnPoint spawnPoint) throws Exception {
+    private List<Path> encontrarRegionesPreview(World mundo, boolean generarTodo, WorldDataReader.SpawnPoint spawnPoint, MCARenderer.WorldPoint centerPoint) throws Exception {
         Path regionDir = WorldDataReader.getOverworldRegionDirectory(mundo);
         if (regionDir == null || !Files.isDirectory(regionDir)) {
             return List.of();
@@ -810,6 +1105,7 @@ public class PanelMundo extends JPanel {
             List<Path> regiones = stream
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mca"))
+                    .filter(this::esArchivoRegionValido)
                     .filter(path -> {
                         try {
                             return Files.size(path) > 0L;
@@ -821,23 +1117,27 @@ public class PanelMundo extends JPanel {
                     .toList();
 
             if (generarTodo) {
-                return seleccionarGrupoPrincipalRegiones(regiones, spawnPoint);
+                return seleccionarGrupoPrincipalRegiones(regiones, spawnPoint, centerPoint, limiteMaximoRenderPreview);
             }
 
-            List<Path> visibles = IntStream.range(0, regiones.size())
-                    .parallel()
-                    .filter(i -> {
-                        try {
-                            return tieneRegionVisibleCacheada(renderer, regiones.get(i));
-                        } catch (IOException ex) {
-                            return false;
-                        }
-                    })
-                    .mapToObj(regiones::get)
-                    .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
-                    .toList();
-            List<Path> regionesBase = visibles.isEmpty() ? regiones : visibles;
-            return seleccionarGrupoPrincipalRegiones(regionesBase, spawnPoint);
+            List<Path> regionesBase;
+            if (centerPoint != null && limiteMaximoRenderPreview > 0) {
+                regionesBase = regiones;
+            } else {
+                List<Path> visibles = IntStream.range(0, regiones.size())
+                        .filter(i -> {
+                            try {
+                                return tieneRegionVisibleCacheada(renderer, regiones.get(i));
+                            } catch (IOException ex) {
+                                return false;
+                            }
+                        })
+                        .mapToObj(regiones::get)
+                        .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                        .toList();
+                regionesBase = visibles.isEmpty() ? regiones : visibles;
+            }
+            return seleccionarGrupoPrincipalRegiones(regionesBase, spawnPoint, centerPoint, limiteMaximoRenderPreview);
         }
     }
 
@@ -859,7 +1159,80 @@ public class PanelMundo extends JPanel {
         return visible;
     }
 
-    private List<Path> seleccionarGrupoPrincipalRegiones(List<Path> regiones, WorldDataReader.SpawnPoint spawnPoint) {
+    private void cancelarGeneracionPreview() {
+        SwingWorker<PreviewGenerationResult, Void> worker = previewGenerationWorker;
+        if (worker != null) {
+            worker.cancel(true);
+        }
+        previewGenerationInProgress = false;
+        previewGenerationWorker = null;
+        limpiarContextoRenderEnCurso();
+        setPreviewProgressVisible(false);
+        restaurarPreviewAnteriorSiExiste(previewDisponibleAntesDeGenerar);
+        actualizarTextoBotonPreview();
+        actualizarIndicadorRenderEnCurso();
+    }
+
+    private boolean mismoContextoSeleccionado(String expectedServerId, String expectedWorldDir) {
+        Server currentServer = gestorServidores.getServidorSeleccionado();
+        World currentWorld = getMundoSeleccionadoOActivo();
+        String currentServerId = currentServer == null ? null : currentServer.getId();
+        String currentWorldDir = currentWorld == null ? null : currentWorld.getWorldDir();
+        return Objects.equals(expectedServerId, currentServerId) && Objects.equals(expectedWorldDir, currentWorldDir);
+    }
+
+    private boolean mismoContextoRenderEnCurso(Server server, World world) {
+        String serverId = server == null ? null : server.getId();
+        String worldDir = world == null ? null : world.getWorldDir();
+        return Objects.equals(previewGenerationServerId, serverId) && Objects.equals(previewGenerationWorldDir, worldDir);
+    }
+
+    private void limpiarContextoRenderEnCurso() {
+        previewGenerationServerId = null;
+        previewGenerationServerName = null;
+        previewGenerationWorldDir = null;
+        previewGenerationWorldName = null;
+    }
+
+    private CroppedPreview recortarPreviewPorLimite(MCARenderer.RenderedWorld renderedWorld, MCARenderer.WorldPoint centerPoint, int maxBlocksPerSide) {
+        if (renderedWorld == null || renderedWorld.image() == null || maxBlocksPerSide <= 0) {
+            return new CroppedPreview(
+                    renderedWorld == null ? null : renderedWorld.image(),
+                    renderedWorld == null ? 0 : renderedWorld.originBlockX(),
+                    renderedWorld == null ? 0 : renderedWorld.originBlockZ()
+            );
+        }
+
+        BufferedImage image = renderedWorld.image();
+        int pixelsPerBlock = Math.max(1, renderedWorld.pixelsPerBlock());
+        int maxPixelSide = Math.max(1, maxBlocksPerSide * pixelsPerBlock);
+        if (image.getWidth() <= maxPixelSide && image.getHeight() <= maxPixelSide) {
+            return new CroppedPreview(image, renderedWorld.originBlockX(), renderedWorld.originBlockZ());
+        }
+
+        int cropWidth = Math.min(image.getWidth(), maxPixelSide);
+        int cropHeight = Math.min(image.getHeight(), maxPixelSide);
+        int desiredMinBlockX;
+        int desiredMinBlockZ;
+        if (centerPoint == null) {
+            desiredMinBlockX = renderedWorld.originBlockX() + Math.max(0, ((image.getWidth() / pixelsPerBlock) - maxBlocksPerSide) / 2);
+            desiredMinBlockZ = renderedWorld.originBlockZ() + Math.max(0, ((image.getHeight() / pixelsPerBlock) - maxBlocksPerSide) / 2);
+        } else {
+            int halfSpan = Math.max(1, maxBlocksPerSide / 2);
+            desiredMinBlockX = centerPoint.x() - halfSpan;
+            desiredMinBlockZ = centerPoint.z() - halfSpan;
+        }
+
+        int cropX = Math.max(0, Math.min(image.getWidth() - cropWidth, (desiredMinBlockX - renderedWorld.originBlockX()) * pixelsPerBlock));
+        int cropY = Math.max(0, Math.min(image.getHeight() - cropHeight, (desiredMinBlockZ - renderedWorld.originBlockZ()) * pixelsPerBlock));
+
+        BufferedImage cropped = image.getSubimage(cropX, cropY, cropWidth, cropHeight);
+        int originBlockX = renderedWorld.originBlockX() + Math.floorDiv(cropX, pixelsPerBlock);
+        int originBlockZ = renderedWorld.originBlockZ() + Math.floorDiv(cropY, pixelsPerBlock);
+        return new CroppedPreview(cropped, originBlockX, originBlockZ);
+    }
+
+    private List<Path> seleccionarGrupoPrincipalRegiones(List<Path> regiones, WorldDataReader.SpawnPoint spawnPoint, MCARenderer.WorldPoint centerPoint, int limiteMaximoRender) {
         if (regiones == null || regiones.isEmpty()) {
             return List.of();
         }
@@ -874,6 +1247,18 @@ public class PanelMundo extends JPanel {
 
         if (candidatas.isEmpty()) {
             return regiones;
+        }
+
+        if (usarTodoEnPreview) {
+            return candidatas.stream()
+                    .sorted(Comparator.comparing((RegionPreviewCandidate r) -> r.path().getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                    .map(RegionPreviewCandidate::path)
+                    .toList();
+        }
+
+        List<Path> regionesVentana = seleccionarRegionesParaVentana(candidatas, centerPoint, limiteMaximoRender);
+        if (!regionesVentana.isEmpty()) {
+            return regionesVentana;
         }
 
         Map<RegionKey, RegionPreviewCandidate> porClave = new HashMap<>();
@@ -918,14 +1303,160 @@ public class PanelMundo extends JPanel {
             grupos.add(grupo);
         }
 
-        List<RegionPreviewCandidate> mejorGrupo = elegirMejorGrupo(grupos, spawnPoint);
-        return mejorGrupo.stream()
+        List<RegionPreviewCandidate> mejorGrupo = elegirMejorGrupo(grupos, spawnPoint, centerPoint);
+        List<RegionPreviewCandidate> regionesLimitadas = limitarGrupoParaRender(mejorGrupo, centerPoint, limiteMaximoRender);
+        return regionesLimitadas.stream()
                 .sorted(Comparator.comparing((RegionPreviewCandidate r) -> r.path().getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
                 .map(RegionPreviewCandidate::path)
                 .toList();
     }
 
-    private List<RegionPreviewCandidate> elegirMejorGrupo(List<List<RegionPreviewCandidate>> grupos, WorldDataReader.SpawnPoint spawnPoint) {
+    private List<Path> seleccionarRegionesParaVentana(List<RegionPreviewCandidate> candidatas, MCARenderer.WorldPoint centerPoint, int limiteMaximoRender) {
+        if (candidatas == null || candidatas.isEmpty() || centerPoint == null || limiteMaximoRender <= 0) {
+            return List.of();
+        }
+
+        int halfSpan = Math.max(1, limiteMaximoRender / 2);
+        int minBlockX = centerPoint.x() - halfSpan;
+        int maxBlockX = minBlockX + limiteMaximoRender - 1;
+        int minBlockZ = centerPoint.z() - halfSpan;
+        int maxBlockZ = minBlockZ + limiteMaximoRender - 1;
+
+        return candidatas.stream()
+                .filter(candidate -> regionIntersectsWindow(candidate, minBlockX, maxBlockX, minBlockZ, maxBlockZ))
+                .sorted(Comparator.comparing((RegionPreviewCandidate r) -> r.path().getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                .map(RegionPreviewCandidate::path)
+                .toList();
+    }
+
+    private RenderWorldBounds resolverLimitesRender(List<Path> regionesPreview, MCARenderer.WorldPoint centerPoint, int limiteMaximoRender) {
+        if (regionesPreview == null || regionesPreview.isEmpty() || centerPoint == null || limiteMaximoRender <= 0) {
+            return null;
+        }
+
+        int minRegionX = Integer.MAX_VALUE;
+        int maxRegionX = Integer.MIN_VALUE;
+        int minRegionZ = Integer.MAX_VALUE;
+        int maxRegionZ = Integer.MIN_VALUE;
+        for (Path region : regionesPreview) {
+            RegionPreviewCandidate candidate = parsearRegionPreview(region);
+            if (candidate == null) {
+                continue;
+            }
+            minRegionX = Math.min(minRegionX, candidate.regionX());
+            maxRegionX = Math.max(maxRegionX, candidate.regionX());
+            minRegionZ = Math.min(minRegionZ, candidate.regionZ());
+            maxRegionZ = Math.max(maxRegionZ, candidate.regionZ());
+        }
+
+        if (minRegionX == Integer.MAX_VALUE) {
+            return null;
+        }
+
+        int availableMinBlockX = minRegionX * MCARenderer.REGION_BLOCK_SIDE;
+        int availableMaxBlockX = ((maxRegionX + 1) * MCARenderer.REGION_BLOCK_SIDE) - 1;
+        int availableMinBlockZ = minRegionZ * MCARenderer.REGION_BLOCK_SIDE;
+        int availableMaxBlockZ = ((maxRegionZ + 1) * MCARenderer.REGION_BLOCK_SIDE) - 1;
+
+        int span = Math.max(1, limiteMaximoRender);
+        int requestedMinBlockX = centerPoint.x() - (span / 2);
+        int requestedMaxBlockX = requestedMinBlockX + span - 1;
+        int requestedMinBlockZ = centerPoint.z() - (span / 2);
+        int requestedMaxBlockZ = requestedMinBlockZ + span - 1;
+
+        int minBlockX = Math.max(availableMinBlockX, requestedMinBlockX);
+        int maxBlockX = Math.min(availableMaxBlockX, requestedMaxBlockX);
+        int minBlockZ = Math.max(availableMinBlockZ, requestedMinBlockZ);
+        int maxBlockZ = Math.min(availableMaxBlockZ, requestedMaxBlockZ);
+        if (minBlockX > maxBlockX || minBlockZ > maxBlockZ) {
+            return null;
+        }
+
+        return new RenderWorldBounds(minBlockX, maxBlockX, minBlockZ, maxBlockZ);
+    }
+
+    private boolean regionIntersectsWindow(RegionPreviewCandidate candidate, int minBlockX, int maxBlockX, int minBlockZ, int maxBlockZ) {
+        if (candidate == null) {
+            return false;
+        }
+        int regionMinX = candidate.regionX() * MCARenderer.REGION_BLOCK_SIDE;
+        int regionMaxX = regionMinX + MCARenderer.REGION_BLOCK_SIDE - 1;
+        int regionMinZ = candidate.regionZ() * MCARenderer.REGION_BLOCK_SIDE;
+        int regionMaxZ = regionMinZ + MCARenderer.REGION_BLOCK_SIDE - 1;
+        return regionMaxX >= minBlockX
+                && regionMinX <= maxBlockX
+                && regionMaxZ >= minBlockZ
+                && regionMinZ <= maxBlockZ;
+    }
+
+    private List<RegionPreviewCandidate> limitarGrupoParaRender(List<RegionPreviewCandidate> grupo, MCARenderer.WorldPoint centerPoint, int limiteMaximoRender) {
+        if (grupo == null || grupo.isEmpty() || limiteMaximoRender <= 0) {
+            return grupo == null ? List.of() : grupo;
+        }
+
+        int maxRegionsPerSide = Math.max(1, limiteMaximoRender / MCARenderer.REGION_BLOCK_SIDE);
+        if (maxRegionsPerSide == Integer.MAX_VALUE) {
+            return grupo;
+        }
+
+        int minRegionX = grupo.stream().mapToInt(RegionPreviewCandidate::regionX).min().orElse(0);
+        int maxRegionX = grupo.stream().mapToInt(RegionPreviewCandidate::regionX).max().orElse(0);
+        int minRegionZ = grupo.stream().mapToInt(RegionPreviewCandidate::regionZ).min().orElse(0);
+        int maxRegionZ = grupo.stream().mapToInt(RegionPreviewCandidate::regionZ).max().orElse(0);
+        if ((maxRegionX - minRegionX + 1) <= maxRegionsPerSide && (maxRegionZ - minRegionZ + 1) <= maxRegionsPerSide) {
+            return grupo;
+        }
+
+        RegionKey centerRegion = centerPoint == null ? null : new RegionKey(Math.floorDiv(centerPoint.x(), MCARenderer.REGION_BLOCK_SIDE), Math.floorDiv(centerPoint.z(), MCARenderer.REGION_BLOCK_SIDE));
+        double anchorX = centerRegion != null ? centerRegion.regionX() : grupo.stream().mapToInt(RegionPreviewCandidate::regionX).average().orElse(0d);
+        double anchorZ = centerRegion != null ? centerRegion.regionZ() : grupo.stream().mapToInt(RegionPreviewCandidate::regionZ).average().orElse(0d);
+
+        List<Integer> startXs = construirIniciosVentana(minRegionX, maxRegionX, maxRegionsPerSide, anchorX);
+        List<Integer> startZs = construirIniciosVentana(minRegionZ, maxRegionZ, maxRegionsPerSide, anchorZ);
+
+        WindowSelection mejorSeleccion = null;
+        for (int startX : startXs) {
+            int endX = startX + maxRegionsPerSide - 1;
+            for (int startZ : startZs) {
+                int endZ = startZ + maxRegionsPerSide - 1;
+                List<RegionPreviewCandidate> subset = grupo.stream()
+                        .filter(region -> region.regionX() >= startX && region.regionX() <= endX
+                                && region.regionZ() >= startZ && region.regionZ() <= endZ)
+                        .toList();
+                if (subset.isEmpty()) {
+                    continue;
+                }
+                WindowSelection actual = new WindowSelection(startX, startZ, endX, endZ, subset, centerRegion, anchorX, anchorZ);
+                if (mejorSeleccion == null || actual.compareTo(mejorSeleccion) < 0) {
+                    mejorSeleccion = actual;
+                }
+            }
+        }
+
+        return mejorSeleccion == null ? grupo : mejorSeleccion.regiones();
+    }
+
+    private List<Integer> construirIniciosVentana(int minRegion, int maxRegion, int maxRegionsPerSide, double anchor) {
+        int span = maxRegion - minRegion + 1;
+        if (span <= maxRegionsPerSide) {
+            return List.of(minRegion);
+        }
+
+        int ultimoInicio = maxRegion - maxRegionsPerSide + 1;
+        List<Integer> inicios = new ArrayList<>();
+        int sugerido = (int) Math.round(anchor - ((maxRegionsPerSide - 1) / 2.0d));
+        sugerido = Math.max(minRegion, Math.min(ultimoInicio, sugerido));
+        inicios.add(sugerido);
+
+        for (int current = minRegion; current <= ultimoInicio; current++) {
+            if (!inicios.contains(current)) {
+                inicios.add(current);
+            }
+        }
+        return inicios;
+    }
+
+    private List<RegionPreviewCandidate> elegirMejorGrupo(List<List<RegionPreviewCandidate>> grupos, WorldDataReader.SpawnPoint spawnPoint, MCARenderer.WorldPoint centerPoint) {
         if (grupos == null || grupos.isEmpty()) {
             return List.of();
         }
@@ -933,7 +1464,10 @@ public class PanelMundo extends JPanel {
             return grupos.get(0);
         }
 
-        RegionKey spawnRegion = spawnPoint == null ? null : new RegionKey(Math.floorDiv(spawnPoint.x(), 512), Math.floorDiv(spawnPoint.z(), 512));
+        MCARenderer.WorldPoint effectiveCenter = centerPoint != null
+                ? centerPoint
+                : (spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z()));
+        RegionKey spawnRegion = effectiveCenter == null ? null : new RegionKey(Math.floorDiv(effectiveCenter.x(), 512), Math.floorDiv(effectiveCenter.z(), 512));
         List<RegionPreviewCandidate> mejor = null;
         for (List<RegionPreviewCandidate> grupo : grupos) {
             if (mejor == null || compararGrupos(grupo, mejor, spawnRegion) < 0) {
@@ -1022,8 +1556,7 @@ public class PanelMundo extends JPanel {
         if (region == null || region.getFileName() == null) {
             return null;
         }
-        Matcher matcher = Pattern.compile("^r\\.(-?\\d+)\\.(-?\\d+)\\.mca$", Pattern.CASE_INSENSITIVE)
-                .matcher(region.getFileName().toString());
+        Matcher matcher = REGION_FILE_PATTERN.matcher(region.getFileName().toString());
         if (!matcher.matches()) {
             return null;
         }
@@ -1038,6 +1571,23 @@ public class PanelMundo extends JPanel {
         }
     }
 
+    private boolean esArchivoRegionValido(Path region) {
+        if (region == null || region.getFileName() == null) {
+            return false;
+        }
+        Matcher matcher = REGION_FILE_PATTERN.matcher(region.getFileName().toString());
+        if (!matcher.matches()) {
+            return false;
+        }
+        try {
+            Integer.parseInt(matcher.group(1));
+            Integer.parseInt(matcher.group(2));
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+    }
+
     private record RegionPreviewCandidate(Path path, int regionX, int regionZ, long size) {
         private RegionKey key() {
             return new RegionKey(regionX, regionZ);
@@ -1045,6 +1595,72 @@ public class PanelMundo extends JPanel {
     }
 
     private record RegionKey(int regionX, int regionZ) {}
+
+    private record PreviewRenderLimitOption(String label, int maxPixels) {
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    private record PreviewCenterOption(String id, String label, MCARenderer.WorldPoint point) {
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    private record WindowSelection(int startX, int startZ, int endX, int endZ, List<RegionPreviewCandidate> regiones,
+                                   RegionKey spawnRegion, double anchorX, double anchorZ) {
+        private int compareTo(WindowSelection other) {
+            boolean thisHasSpawn = contieneSpawn();
+            boolean otherHasSpawn = other.contieneSpawn();
+            if (thisHasSpawn != otherHasSpawn) {
+                return thisHasSpawn ? -1 : 1;
+            }
+
+            int byCount = Integer.compare(other.regiones.size(), regiones.size());
+            if (byCount != 0) {
+                return byCount;
+            }
+
+            int byWeight = Long.compare(other.pesoTotal(), pesoTotal());
+            if (byWeight != 0) {
+                return byWeight;
+            }
+
+            int byAnchorDistance = Double.compare(distanciaAlAncla(), other.distanciaAlAncla());
+            if (byAnchorDistance != 0) {
+                return byAnchorDistance;
+            }
+
+            int byZ = Integer.compare(startZ, other.startZ);
+            if (byZ != 0) {
+                return byZ;
+            }
+            return Integer.compare(startX, other.startX);
+        }
+
+        private boolean contieneSpawn() {
+            return spawnRegion != null
+                    && spawnRegion.regionX() >= startX && spawnRegion.regionX() <= endX
+                    && spawnRegion.regionZ() >= startZ && spawnRegion.regionZ() <= endZ;
+        }
+
+        private long pesoTotal() {
+            long total = 0L;
+            for (RegionPreviewCandidate region : regiones) {
+                total += region.size();
+            }
+            return total;
+        }
+
+        private double distanciaAlAncla() {
+            double centerX = startX + ((endX - startX) / 2.0d);
+            double centerZ = startZ + ((endZ - startZ) / 2.0d);
+            return Math.abs(centerX - anchorX) + Math.abs(centerZ - anchorZ);
+        }
+    }
     private record RegionVisibilityCacheEntry(long size, long lastModified, boolean visible) {}
 
     private void guardarPreview(BufferedImage image, Path outputPath) throws IOException {
@@ -1080,7 +1696,8 @@ public class PanelMundo extends JPanel {
             previewImageLabel.setOverlayData(overlayData);
             previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
             previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
-            if ((limitesChunksEnPreview || mostrarSpawnEnPreview) && overlayData == null) {
+            previewImageLabel.setPlayersVisible(mostrarJugadoresEnPreview);
+            if ((limitesChunksEnPreview || mostrarSpawnEnPreview || mostrarJugadoresEnPreview) && overlayData == null) {
                 System.out.println("[PanelMundo] Overlay metadata missing for preview. Regenerate the preview once to enable local overlays.");
                 JOptionPane.showMessageDialog(
                         this,
@@ -1099,6 +1716,7 @@ public class PanelMundo extends JPanel {
         previewImageLabel.setOverlayData(null);
         previewImageLabel.setChunkGridVisible(false);
         previewImageLabel.setSpawnVisible(false);
+        previewImageLabel.setPlayersVisible(false);
     }
 
     private void restaurarPreviewAnteriorSiExiste(boolean habiaPreviewAnterior) {
@@ -1122,10 +1740,13 @@ public class PanelMundo extends JPanel {
 
     private void instalarMenuContextualPreview() {
         JPopupMenu menu = new JPopupMenu();
+        JMenuItem copiarItem = new JMenuItem("Copiar");
         JMenuItem verArchivoItem = new JMenuItem("Ver archivo");
         JMenuItem guardarComoItem = new JMenuItem("Guardar como");
+        copiarItem.addActionListener(e -> copiarPreviewAlPortapapeles());
         verArchivoItem.addActionListener(e -> abrirPreviewEnExplorador());
         guardarComoItem.addActionListener(e -> guardarPreviewComo());
+        menu.add(copiarItem);
         menu.add(verArchivoItem);
         menu.add(guardarComoItem);
 
@@ -1143,6 +1764,7 @@ public class PanelMundo extends JPanel {
             private void mostrarPopupSiCorresponde(MouseEvent e) {
                 if (!e.isPopupTrigger()) return;
                 boolean existePreview = existePreviewSeleccionada();
+                copiarItem.setEnabled(existePreview);
                 verArchivoItem.setEnabled(existePreview);
                 guardarComoItem.setEnabled(existePreview);
                 menu.show(e.getComponent(), e.getX(), e.getY());
@@ -1154,6 +1776,30 @@ public class PanelMundo extends JPanel {
     private boolean existePreviewSeleccionada() {
         World mundo = getMundoSeleccionadoOActivo();
         return mundo != null && Files.isRegularFile(getPreviewPath(mundo));
+    }
+
+    private void copiarPreviewAlPortapapeles() {
+        World mundo = getMundoSeleccionadoOActivo();
+        if (mundo == null) {
+            JOptionPane.showMessageDialog(this, "No hay un mundo seleccionado.", "Copiar", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Path previewPath = getPreviewPath(mundo);
+        if (!Files.isRegularFile(previewPath)) {
+            JOptionPane.showMessageDialog(this, "La preview todavía no existe.", "Copiar", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            BufferedImage image = ImageIO.read(previewPath.toFile());
+            if (image == null) {
+                throw new FileNotFoundException("No se ha podido leer la preview.");
+            }
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new ImageSelection(image), null);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "No se ha podido copiar la preview: " + ex.getMessage(), "Copiar", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void abrirPreviewEnExplorador() {
@@ -1267,11 +1913,25 @@ public class PanelMundo extends JPanel {
             props.setProperty("spawnX", Integer.toString(overlayData.spawnPoint().x()));
             props.setProperty("spawnZ", Integer.toString(overlayData.spawnPoint().z()));
         }
+        List<PreviewPlayerPoint> playerPoints = overlayData.playerPoints();
+        int playerIndex = 0;
+        if (playerPoints != null) {
+            for (PreviewPlayerPoint point : playerPoints) {
+                if (point == null || point.username() == null || point.username().isBlank() || point.point() == null) {
+                    continue;
+                }
+                props.setProperty("player." + playerIndex + ".name", point.username());
+                props.setProperty("player." + playerIndex + ".x", Integer.toString(point.point().x()));
+                props.setProperty("player." + playerIndex + ".z", Integer.toString(point.point().z()));
+                playerIndex++;
+            }
+        }
+        props.setProperty("playerCount", Integer.toString(playerIndex));
 
         Path metadataPath = getPreviewOverlayMetadataPath(mundo);
         try (OutputStream out = Files.newOutputStream(metadataPath)) {
             props.store(out, "Preview overlay metadata");
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             System.out.println("No se ha podido guardar la metadata de overlay de la preview: " + metadataPath);
         }
     }
@@ -1297,14 +1957,28 @@ public class PanelMundo extends JPanel {
             MCARenderer.WorldPoint spawnPoint = (spawnX != null && spawnZ != null)
                     ? new MCARenderer.WorldPoint(Integer.parseInt(spawnX), Integer.parseInt(spawnZ))
                     : null;
-            return new PreviewOverlayData(originBlockX, originBlockZ, pixelsPerBlock, spawnPoint);
+            int playerCount = Integer.parseInt(props.getProperty("playerCount", "0"));
+            List<PreviewPlayerPoint> playerPoints = new ArrayList<>();
+            for (int i = 0; i < playerCount; i++) {
+                String name = props.getProperty("player." + i + ".name");
+                String x = props.getProperty("player." + i + ".x");
+                String z = props.getProperty("player." + i + ".z");
+                if (name == null || x == null || z == null || name.isBlank()) {
+                    continue;
+                }
+                playerPoints.add(new PreviewPlayerPoint(
+                        name,
+                        new MCARenderer.WorldPoint(Integer.parseInt(x), Integer.parseInt(z))
+                ));
+            }
+            return new PreviewOverlayData(originBlockX, originBlockZ, pixelsPerBlock, spawnPoint, playerPoints);
         } catch (IOException | NumberFormatException ex) {
             return null;
         }
     }
 
     private void avisarSuperposicionesNoDisponiblesSiHaceFalta() {
-        if (!limitesChunksEnPreview && !mostrarSpawnEnPreview) {
+        if (!limitesChunksEnPreview && !mostrarSpawnEnPreview && !mostrarJugadoresEnPreview) {
             return;
         }
 
@@ -1322,9 +1996,49 @@ public class PanelMundo extends JPanel {
     }
 
     private void actualizarTextoBotonPreview() {
+        if (previewGenerationInProgress) {
+            World mundo = getMundoSeleccionadoOActivo();
+            if (mismoContextoRenderEnCurso(gestorServidores.getServidorSeleccionado(), mundo)) {
+                generarPreviewButton.setText("Cancelar");
+            } else {
+                generarPreviewButton.setText("Render en curso");
+            }
+            return;
+        }
         World mundo = getMundoSeleccionadoOActivo();
         boolean existePreview = mundo != null && Files.isRegularFile(getPreviewPath(mundo));
         generarPreviewButton.setText(existePreview ? "Regenerar preview" : "Generar preview");
+    }
+
+    private void actualizarIndicadorRenderEnCurso() {
+        if (!previewGenerationInProgress) {
+            previewRenderStatusLabel.setVisible(false);
+            previewRenderStatusLabel.setText("");
+            previewRenderStatusLabel.setToolTipText(null);
+            return;
+        }
+
+        String destino = construirEtiquetaRenderEnCurso();
+        previewRenderStatusLabel.setText("Renderizando: " + destino);
+        previewRenderStatusLabel.setToolTipText(destino);
+        previewRenderStatusLabel.setVisible(true);
+        previewRenderStatusLabel.revalidate();
+        previewRenderStatusLabel.repaint();
+    }
+
+    private String construirEtiquetaRenderEnCurso() {
+        String serverName = previewGenerationServerName == null || previewGenerationServerName.isBlank()
+                ? "Servidor"
+                : previewGenerationServerName;
+        String worldName = previewGenerationWorldName == null || previewGenerationWorldName.isBlank()
+                ? "mundo"
+                : previewGenerationWorldName;
+        return serverName + " / " + worldName;
+    }
+
+    private String construirMensajeRenderEnCurso() {
+        return "Ya hay una renderización en curso para " + construirEtiquetaRenderEnCurso()
+                + ".\nEspera a que termine o vuelve a ese mundo para cancelarla.";
     }
 
     private void updateUseWorldButtonState() {
@@ -1378,6 +2092,19 @@ public class PanelMundo extends JPanel {
         button.setForeground(AppTheme.getForeground());
     }
 
+    private void stylePreviewStatusLabel(JLabel label) {
+        if (label == null) return;
+        label.setVisible(false);
+        label.setOpaque(true);
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 11f));
+        label.setForeground(Color.WHITE);
+        label.setBackground(new Color(24, 28, 36, 220));
+        label.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(255, 255, 255, 45)),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)
+        ));
+    }
+
     private void instalarMenuOpcionesPreview() {
         sombreadoMenuItem.setSelected(sombreadoEnPreview);
         sombreadoMenuItem.addActionListener(e -> sombreadoEnPreview = sombreadoMenuItem.isSelected());
@@ -1391,6 +2118,12 @@ public class PanelMundo extends JPanel {
             previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
             avisarSuperposicionesNoDisponiblesSiHaceFalta();
         });
+        mostrarJugadoresMenuItem.setSelected(mostrarJugadoresEnPreview);
+        mostrarJugadoresMenuItem.addActionListener(e -> {
+            mostrarJugadoresEnPreview = mostrarJugadoresMenuItem.isSelected();
+            previewImageLabel.setPlayersVisible(mostrarJugadoresEnPreview);
+            avisarSuperposicionesNoDisponiblesSiHaceFalta();
+        });
         limitesChunksMenuItem.setSelected(limitesChunksEnPreview);
         limitesChunksMenuItem.addActionListener(e -> {
             limitesChunksEnPreview = limitesChunksMenuItem.isSelected();
@@ -1398,12 +2131,18 @@ public class PanelMundo extends JPanel {
             avisarSuperposicionesNoDisponiblesSiHaceFalta();
         });
         usarTodoMenuItem.setSelected(usarTodoEnPreview);
-        usarTodoMenuItem.addActionListener(e -> usarTodoEnPreview = usarTodoMenuItem.isSelected());
+        usarTodoMenuItem.addActionListener(e -> {
+            usarTodoEnPreview = usarTodoMenuItem.isSelected();
+            actualizarEstadoControlesRender();
+        });
+        configurarLimiteRenderCombo();
+        configurarCentroRenderCombo();
+        actualizarEstadoControlesRender();
 
         JPanel optionsPanel = new JPanel();
         optionsPanel.setOpaque(true);
         optionsPanel.setBackground(AppTheme.getBackground());
-        optionsPanel.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        optionsPanel.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f));
         optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.Y_AXIS));
 
         stylePreviewOptionCheckBox(mostrarSpawnMenuItem);
@@ -1411,8 +2150,13 @@ public class PanelMundo extends JPanel {
         stylePreviewOptionCheckBox(sombreadoMenuItem);
         stylePreviewOptionCheckBox(sombreadoAguaMenuItem);
         stylePreviewOptionCheckBox(colorearBiomasMenuItem);
+        stylePreviewOptionCheckBox(mostrarJugadoresMenuItem);
         stylePreviewOptionCheckBox(limitesChunksMenuItem);
         optionsPanel.add(createPreviewOptionsSectionLabel("Generación"));
+        optionsPanel.add(createPreviewOptionRow("Límite render", limiteRenderCombo));
+        optionsPanel.add(Box.createVerticalStrut(8));
+        optionsPanel.add(createPreviewOptionRow("Centro render", centroRenderCombo));
+        optionsPanel.add(Box.createVerticalStrut(8));
         optionsPanel.add(sombreadoMenuItem);
         optionsPanel.add(Box.createVerticalStrut(4));
         optionsPanel.add(sombreadoAguaMenuItem);
@@ -1424,10 +2168,11 @@ public class PanelMundo extends JPanel {
         optionsPanel.add(createPreviewOptionsSectionLabel("Superposición"));
         optionsPanel.add(mostrarSpawnMenuItem);
         optionsPanel.add(Box.createVerticalStrut(4));
+        optionsPanel.add(mostrarJugadoresMenuItem);
+        optionsPanel.add(Box.createVerticalStrut(4));
         optionsPanel.add(limitesChunksMenuItem);
 
-        previewOptionsMenu.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f));
-        previewOptionsMenu.add(optionsPanel);
+        previewOptionsPanel = optionsPanel;
 
         previewMenuButton.addActionListener(e -> mostrarMenuOpcionesPreview(previewMenuButton));
     }
@@ -1440,9 +2185,50 @@ public class PanelMundo extends JPanel {
         sombreadoAguaMenuItem.setSelected(sombreadoAguaEnPreview);
         colorearBiomasMenuItem.setSelected(colorearBiomasEnPreview);
         mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
+        mostrarJugadoresMenuItem.setSelected(mostrarJugadoresEnPreview);
         limitesChunksMenuItem.setSelected(limitesChunksEnPreview);
         usarTodoMenuItem.setSelected(usarTodoEnPreview);
-        previewOptionsMenu.show(anchor, 0, anchor.getHeight());
+        actualizarEstadoControlesRender();
+        seleccionarLimiteRenderComboActual();
+        actualizarCentroRenderCombo();
+        if (previewOptionsDialog != null && previewOptionsDialog.isVisible()) {
+            previewOptionsDialog.setVisible(false);
+            previewOptionsDialog.dispose();
+            previewOptionsDialog = null;
+            return;
+        }
+
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        if (owner == null || previewOptionsPanel == null) {
+            return;
+        }
+
+        JDialog dialog = new JDialog(owner);
+        dialog.setUndecorated(true);
+        dialog.setModal(false);
+        dialog.setAlwaysOnTop(false);
+        dialog.setFocusableWindowState(true);
+        dialog.setBackground(new Color(0, 0, 0, 0));
+        dialog.setContentPane(previewOptionsPanel);
+        dialog.pack();
+
+        Point screenLocation = anchor.getLocationOnScreen();
+        int x = screenLocation.x + anchor.getWidth() - dialog.getWidth();
+        int y = screenLocation.y + anchor.getHeight();
+        dialog.setLocation(x, y);
+        dialog.addWindowFocusListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowLostFocus(java.awt.event.WindowEvent e) {
+                dialog.setVisible(false);
+                dialog.dispose();
+                if (previewOptionsDialog == dialog) {
+                    previewOptionsDialog = null;
+                }
+            }
+        });
+
+        previewOptionsDialog = dialog;
+        dialog.setVisible(true);
     }
 
     private void stylePreviewOptionCheckBox(JCheckBox checkBox) {
@@ -1462,6 +2248,119 @@ public class PanelMundo extends JPanel {
         label.setFont(label.getFont().deriveFont(Font.BOLD, 12f));
         label.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 0));
         return label;
+    }
+
+    private void configurarLimiteRenderCombo() {
+        limiteRenderCombo.setOpaque(false);
+        limiteRenderCombo.setFocusable(false);
+        limiteRenderCombo.putClientProperty("JComponent.roundRect", true);
+        limiteRenderCombo.setMaximumSize(new Dimension(180, 30));
+        limiteRenderCombo.setPreferredSize(new Dimension(180, 30));
+        limiteRenderCombo.addActionListener(e -> {
+            PreviewRenderLimitOption selected = (PreviewRenderLimitOption) limiteRenderCombo.getSelectedItem();
+            if (selected != null) {
+                limiteMaximoRenderPreview = selected.maxPixels();
+            }
+        });
+        seleccionarLimiteRenderComboActual();
+    }
+
+    private void seleccionarLimiteRenderComboActual() {
+        for (int i = 0; i < limiteRenderCombo.getItemCount(); i++) {
+            PreviewRenderLimitOption option = limiteRenderCombo.getItemAt(i);
+            if (option.maxPixels() == limiteMaximoRenderPreview) {
+                limiteRenderCombo.setSelectedIndex(i);
+                return;
+            }
+        }
+        if (limiteRenderCombo.getItemCount() > 0) {
+            limiteRenderCombo.setSelectedIndex(0);
+        }
+    }
+
+    private void configurarCentroRenderCombo() {
+        centroRenderCombo.setOpaque(false);
+        centroRenderCombo.setFocusable(false);
+        centroRenderCombo.putClientProperty("JComponent.roundRect", true);
+        centroRenderCombo.setMaximumSize(new Dimension(180, 30));
+        centroRenderCombo.setPreferredSize(new Dimension(180, 30));
+        centroRenderCombo.addActionListener(e -> {
+            PreviewCenterOption selected = (PreviewCenterOption) centroRenderCombo.getSelectedItem();
+            if (selected != null) {
+                centroRenderPreviewId = selected.id();
+            }
+        });
+    }
+
+    private void actualizarCentroRenderCombo() {
+        World mundo = getMundoSeleccionadoOActivo();
+        Server server = gestorServidores.getServidorSeleccionado();
+        WorldDataReader.SpawnPoint spawnPoint = mundo == null ? null : WorldDataReader.getSpawnPoint(mundo);
+        List<PreviewPlayerData> recentPlayers = obtenerJugadoresRecientesDesdePlayerdata(server, mundo);
+
+        DefaultComboBoxModel<PreviewCenterOption> model = new DefaultComboBoxModel<>();
+        if (spawnPoint != null) {
+            model.addElement(new PreviewCenterOption("spawn", "Spawn", new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z())));
+        }
+        for (PreviewPlayerData player : recentPlayers) {
+            String label = (player.username() == null || player.username().isBlank()) ? "Jugador" : player.username();
+            model.addElement(new PreviewCenterOption("player:" + player.username(), label, player.point()));
+        }
+
+        centroRenderCombo.setModel(model);
+        seleccionarCentroRenderComboActual();
+    }
+
+    private void seleccionarCentroRenderComboActual() {
+        for (int i = 0; i < centroRenderCombo.getItemCount(); i++) {
+            PreviewCenterOption option = centroRenderCombo.getItemAt(i);
+            if (Objects.equals(option.id(), centroRenderPreviewId)) {
+                centroRenderCombo.setSelectedIndex(i);
+                return;
+            }
+        }
+        if (centroRenderCombo.getItemCount() > 0) {
+            centroRenderCombo.setSelectedIndex(0);
+            PreviewCenterOption selected = (PreviewCenterOption) centroRenderCombo.getSelectedItem();
+            centroRenderPreviewId = selected == null ? "spawn" : selected.id();
+        }
+    }
+
+    private void actualizarEstadoControlesRender() {
+        boolean habilitados = !usarTodoEnPreview;
+        limiteRenderCombo.setEnabled(habilitados);
+        centroRenderCombo.setEnabled(habilitados);
+    }
+
+    private MCARenderer.WorldPoint resolverCentroRender(World mundo, WorldDataReader.SpawnPoint spawnPoint, List<PreviewPlayerData> recentPlayers) {
+        if (centroRenderPreviewId == null || centroRenderPreviewId.isBlank() || "spawn".equals(centroRenderPreviewId)) {
+            return spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z());
+        }
+
+        if (recentPlayers != null) {
+            for (PreviewPlayerData player : recentPlayers) {
+                if (player == null || player.username() == null || player.username().isBlank()) {
+                    continue;
+                }
+                if (Objects.equals("player:" + player.username(), centroRenderPreviewId)) {
+                    return player.point();
+                }
+            }
+        }
+
+        return spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z());
+    }
+
+    private JPanel createPreviewOptionRow(String label, JComponent component) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel textLabel = new JLabel(label);
+        textLabel.setForeground(AppTheme.getForeground());
+        row.add(textLabel, BorderLayout.WEST);
+        row.add(component, BorderLayout.EAST);
+        return row;
     }
 
     private void instalarInteraccionSeed() {
@@ -1562,9 +2461,46 @@ public class PanelMundo extends JPanel {
         return format.format(value) + " " + units[unitIndex];
     }
 
-    private String obtenerInicial(String username) {
+    private static String obtenerInicial(String username) {
         if (username == null || username.isBlank()) return "?";
         return username.substring(0, 1).toUpperCase(Locale.ROOT);
+    }
+
+    private static void precargarCabezasJugadoresPreview(List<PreviewPlayerPoint> playerPoints, Runnable onLoaded) {
+        if (playerPoints == null || playerPoints.isEmpty()) {
+            return;
+        }
+        for (PreviewPlayerPoint playerPoint : playerPoints) {
+            if (playerPoint == null || playerPoint.username() == null || playerPoint.username().isBlank()) {
+                continue;
+            }
+            cargarCabezaJugadorPreviewAsync(playerPoint.username(), onLoaded);
+        }
+    }
+
+    private static void cargarCabezaJugadorPreviewAsync(String username, Runnable onLoaded) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
+
+        String key = username.strip().toLowerCase(Locale.ROOT);
+        if (key.isBlank() || PLAYER_HEAD_CACHE.containsKey(key) || !PLAYER_HEADS_LOADING.add(key)) {
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                ImageIcon head = new MojangAPI().obtenerCabezaJugador(username, PREVIEW_PLAYER_HEAD_SIZE);
+                if (head != null) {
+                    PLAYER_HEAD_CACHE.put(key, head);
+                }
+            } finally {
+                PLAYER_HEADS_LOADING.remove(key);
+                if (onLoaded != null) {
+                    SwingUtilities.invokeLater(onLoaded);
+                }
+            }
+        }, "preview-head-" + key).start();
     }
 
     private static final class PreviewImagePanel extends JComponent {
@@ -1572,6 +2508,7 @@ public class PanelMundo extends JPanel {
         private PreviewOverlayData overlayData;
         private boolean chunkGridVisible = false;
         private boolean spawnVisible = false;
+        private boolean playersVisible = false;
         private String message = "La preview todavía no existe.";
         private double zoom = 1.0d;
         private double panX = 0d;
@@ -1650,6 +2587,7 @@ public class PanelMundo extends JPanel {
 
         private void setOverlayData(PreviewOverlayData overlayData) {
             this.overlayData = overlayData;
+            precargarCabezasJugadoresPreview(overlayData == null ? null : overlayData.playerPoints(), this::repaint);
             repaint();
         }
 
@@ -1660,6 +2598,14 @@ public class PanelMundo extends JPanel {
 
         private void setSpawnVisible(boolean spawnVisible) {
             this.spawnVisible = spawnVisible;
+            repaint();
+        }
+
+        private void setPlayersVisible(boolean playersVisible) {
+            this.playersVisible = playersVisible;
+            if (playersVisible && overlayData != null) {
+                precargarCabezasJugadoresPreview(overlayData.playerPoints(), this::repaint);
+            }
             repaint();
         }
 
@@ -1768,6 +2714,7 @@ public class PanelMundo extends JPanel {
                 g2.drawImage(image, state.drawX(), state.drawY(), state.drawWidth(), state.drawHeight(), null);
                 paintChunkGrid(g2, state);
                 paintSpawn(g2, state);
+                paintPlayers(g2, state);
             } finally {
                 g2.dispose();
             }
@@ -1848,6 +2795,67 @@ public class PanelMundo extends JPanel {
             }
         }
 
+        private void paintPlayers(Graphics2D g2, RenderState state) {
+            if (!playersVisible || overlayData == null || overlayData.playerPoints() == null || overlayData.playerPoints().isEmpty() || state == null) {
+                return;
+            }
+
+            Graphics2D marker = (Graphics2D) g2.create();
+            try {
+                marker.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                marker.setFont(marker.getFont().deriveFont(Font.BOLD, 11f));
+
+                for (PreviewPlayerPoint player : overlayData.playerPoints()) {
+                    if (player == null || player.point() == null || player.username() == null || player.username().isBlank()) {
+                        continue;
+                    }
+
+                    double relativeBlockX = player.point().x() - overlayData.originBlockX();
+                    double relativeBlockZ = player.point().z() - overlayData.originBlockZ();
+                    double imagePixelX = relativeBlockX * overlayData.pixelsPerBlock();
+                    double imagePixelY = relativeBlockZ * overlayData.pixelsPerBlock();
+                    int centerX = (int) Math.round(state.drawX() + imagePixelX * state.scale());
+                    int centerY = (int) Math.round(state.drawY() + imagePixelY * state.scale());
+
+                    if (centerX < state.drawX() || centerY < state.drawY()
+                            || centerX >= state.drawX() + state.drawWidth()
+                            || centerY >= state.drawY() + state.drawHeight()) {
+                        continue;
+                    }
+
+                    String cacheKey = player.username().strip().toLowerCase(Locale.ROOT);
+                    ImageIcon headIcon = PLAYER_HEAD_CACHE.get(cacheKey);
+                    if (headIcon != null && headIcon.getImage() != null) {
+                        int headSize = PREVIEW_PLAYER_HEAD_SIZE;
+                        int headX = centerX - (headSize / 2);
+                        int headY = centerY - (headSize / 2);
+                        marker.setColor(new Color(0, 0, 0, 130));
+                        marker.fillRoundRect(headX - 2, headY - 2, headSize + 4, headSize + 4, 6, 6);
+                        marker.drawImage(headIcon.getImage(), headX, headY, null);
+                    } else {
+                        marker.setColor(new Color(0, 0, 0, 120));
+                        marker.fillOval(centerX - 6, centerY - 6, 14, 14);
+                        marker.setColor(new Color(255, 212, 74, 240));
+                        marker.fillOval(centerX - 5, centerY - 5, 12, 12);
+                        marker.setColor(new Color(50, 35, 12, 220));
+                        marker.drawString(obtenerInicial(player.username()), centerX - 3, centerY + 4);
+                    }
+
+                    String label = player.username().length() > 10 ? player.username().substring(0, 10) : player.username();
+                    FontMetrics metrics = marker.getFontMetrics();
+                    int textX = centerX + 9;
+                    int textY = centerY - 8;
+                    int textWidth = metrics.stringWidth(label);
+                    marker.setColor(new Color(0, 0, 0, 150));
+                    marker.fillRoundRect(textX - 3, textY - metrics.getAscent(), textWidth + 6, metrics.getHeight(), 8, 8);
+                    marker.setColor(new Color(255, 244, 204));
+                    marker.drawString(label, textX, textY);
+                }
+            } finally {
+                marker.dispose();
+            }
+        }
+
         private record RenderState(double scale, int drawX, int drawY, int drawWidth, int drawHeight,
                                    double baseX, double baseY, double maxPanX, double maxPanY) {}
     }
@@ -1903,8 +2911,43 @@ public class PanelMundo extends JPanel {
         }
     }
 
-    private record RecentConnection(String username, String timestamp) {}
+    private record RecentConnection(String username, String timestamp, String location, long sortEpochMillis) {
+        private RecentConnection(String username, String timestamp, String location) {
+            this(username, timestamp, location, 0L);
+        }
+    }
 
     private record PreviewGenerationResult(Path outputPath, boolean sinRegiones, BufferedImage preview, PreviewOverlayData overlayData) {}
-    private record PreviewOverlayData(int originBlockX, int originBlockZ, int pixelsPerBlock, MCARenderer.WorldPoint spawnPoint) {}
+    private record PreviewOverlayData(int originBlockX, int originBlockZ, int pixelsPerBlock,
+                                      MCARenderer.WorldPoint spawnPoint, List<PreviewPlayerPoint> playerPoints) {}
+    private record PreviewPlayerPoint(String username, MCARenderer.WorldPoint point) {}
+    private record PreviewPlayerData(String username, MCARenderer.WorldPoint point, FileTime lastSeen) {}
+    private record CroppedPreview(BufferedImage image, int originBlockX, int originBlockZ) {}
+    private record RenderWorldBounds(int minBlockX, int maxBlockX, int minBlockZ, int maxBlockZ) {}
+
+    private static final class ImageSelection implements Transferable {
+        private final Image image;
+
+        private ImageSelection(Image image) {
+            this.image = image;
+        }
+
+        @Override
+        public java.awt.datatransfer.DataFlavor[] getTransferDataFlavors() {
+            return new java.awt.datatransfer.DataFlavor[]{java.awt.datatransfer.DataFlavor.imageFlavor};
+        }
+
+        @Override
+        public boolean isDataFlavorSupported(java.awt.datatransfer.DataFlavor flavor) {
+            return java.awt.datatransfer.DataFlavor.imageFlavor.equals(flavor);
+        }
+
+        @Override
+        public Object getTransferData(java.awt.datatransfer.DataFlavor flavor) throws UnsupportedFlavorException {
+            if (!isDataFlavorSupported(flavor)) {
+                throw new UnsupportedFlavorException(flavor);
+            }
+            return image;
+        }
+    }
 }

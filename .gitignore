@@ -36,3 +36,4 @@ build/
 .DS_Store
 ServerList.json
 dependency-reduced-pom.xml
+.m2/
