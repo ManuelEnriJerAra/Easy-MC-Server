@@ -4,6 +4,7 @@ import static controlador.Utilidades.fromMStoDateString;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 
 import modelo.World;
@@ -17,6 +18,9 @@ import net.querz.nbt.tag.StringTag;
 import net.querz.nbt.tag.Tag;
 
 public class WorldDataReader {
+    private static final Path LEGACY_OVERWORLD_REGION_DIR = Path.of("region");
+    private static final Path NAMESPACED_OVERWORLD_REGION_DIR = Path.of("dimensions", "minecraft", "overworld", "region");
+
     // Minecraft no ha guardado siempre la seed en el mismo sitio.
     // Este reader intenta ocultar esa diferencia para que la UI no tenga que
     // saber si el mundo es legacy o moderno.
@@ -48,6 +52,77 @@ public class WorldDataReader {
     private static CompoundTag getDataTag(World mundo) {
         CompoundTag root = getRootTag(mundo);
         return root == null ? null : root.getCompoundTag("Data");
+    }
+
+    public static String getVersionName(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+
+            CompoundTag versionTag = data.getCompoundTag("Version");
+            if(versionTag == null) return null;
+
+            String versionName = versionTag.getString("Name");
+            return versionName == null || versionName.isBlank() ? null : versionName;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static WorldStorageLayout detectOverworldStorageLayout(World mundo) {
+        Path worldDir = getWorldDirectory(mundo);
+        if(worldDir == null) return WorldStorageLayout.LEGACY;
+
+        Path legacyDir = worldDir.resolve(LEGACY_OVERWORLD_REGION_DIR);
+        Path namespacedDir = worldDir.resolve(NAMESPACED_OVERWORLD_REGION_DIR);
+
+        boolean hasLegacyDir = Files.isDirectory(legacyDir);
+        boolean hasNamespacedDir = Files.isDirectory(namespacedDir);
+        if(hasNamespacedDir && !hasLegacyDir) {
+            return WorldStorageLayout.NAMESPACED;
+        }
+        if(hasLegacyDir && !hasNamespacedDir) {
+            return WorldStorageLayout.LEGACY;
+        }
+
+        // Desde la rama 26.x Mojang movio el Overworld a dimensions/minecraft/overworld.
+        // Si aun no existe la carpeta (por ejemplo, mundo nuevo sin chunks), usamos el
+        // nombre de version de level.dat para decidir que layout esperar.
+        String versionName = getVersionName(mundo);
+        if(usesNamespacedStorage(versionName)) {
+            return WorldStorageLayout.NAMESPACED;
+        }
+
+        return WorldStorageLayout.LEGACY;
+    }
+
+    public static Path getOverworldRegionDirectory(World mundo) {
+        Path worldDir = getWorldDirectory(mundo);
+        if(worldDir == null) return null;
+
+        Path legacyDir = worldDir.resolve(LEGACY_OVERWORLD_REGION_DIR);
+        Path namespacedDir = worldDir.resolve(NAMESPACED_OVERWORLD_REGION_DIR);
+
+        WorldStorageLayout layout = detectOverworldStorageLayout(mundo);
+        if(layout == WorldStorageLayout.NAMESPACED) {
+            return Files.isDirectory(namespacedDir) || !Files.isDirectory(legacyDir) ? namespacedDir : legacyDir;
+        }
+        return Files.isDirectory(legacyDir) || !Files.isDirectory(namespacedDir) ? legacyDir : namespacedDir;
+    }
+
+    private static Path getWorldDirectory(World mundo) {
+        if(mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) return null;
+        return Path.of(mundo.getWorldDir());
+    }
+
+    private static boolean usesNamespacedStorage(String versionName) {
+        if(versionName == null || versionName.isBlank()) return false;
+
+        String normalized = versionName.trim().toLowerCase(Locale.ROOT);
+        return normalized.startsWith("26.")
+                || normalized.startsWith("26w")
+                || normalized.contains("26.1 snapshot")
+                || normalized.contains("snapshot 26");
     }
 
     public static long getActiveTicks(World mundo) {
@@ -165,4 +240,9 @@ public class WorldDataReader {
 
     // Solo necesitamos X y Z para una vista cenital.
     public record SpawnPoint(int x, int z) {}
+
+    public enum WorldStorageLayout {
+        LEGACY,
+        NAMESPACED
+    }
 }

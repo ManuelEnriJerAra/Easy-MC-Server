@@ -17,8 +17,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -56,6 +58,11 @@ public final class MCARenderer {
     private static final int DEFAULT_ARGB = 0xFF1E1E1E;
     // Flag de Querz para leer chunks en modo "raw" y acceder al NBT moderno sin forzar el esquema legacy "Level".
     private static final long RAW_DATA_FLAG = 65_536L;
+    // Logging de depuracion del renderer. Se puede desactivar con -Deasymc.mca.debug=false.
+    private static final boolean DEBUG_LOGGING = Boolean.parseBoolean(System.getProperty("easymc.mca.debug", "true"));
+    private static final int DEBUG_MAX_REASON_LINES = 12;
+    private static final int DEBUG_MAX_CHUNK_LINES = 20;
+    private static final int DEBUG_MAX_SAMPLE_LINES = 10;
     // Lista minima de bloques que siempre queremos tratar como invisibles desde una vista cenital.
     private static final Set<String> TRANSPARENT_BLOCKS = Set.of(
             "minecraft:air",
@@ -99,18 +106,23 @@ public final class MCARenderer {
         RenderOptions options = RenderOptions.defaults();
         RegionCoordinates region = parseRegionCoordinates(normalizedPath);
         MCAFile mcaFile = MCAUtil.read(normalizedPath.toFile(), RAW_DATA_FLAG);
+        DebugTrace debugTrace = DebugTrace.forRegionScan(normalizedPath, region, options);
+        debugTrace.logStart();
 
         for(int localChunkZ = 0; localChunkZ < REGION_CHUNK_SIDE; localChunkZ++) {
             for(int localChunkX = 0; localChunkX < REGION_CHUNK_SIDE; localChunkX++) {
                 Chunk chunk = mcaFile.getChunk(localChunkX, localChunkZ);
                 if(chunk == null) {
+                    debugTrace.onNullChunk(localChunkX, localChunkZ);
                     continue;
                 }
-                if(chunkHasVisibleBlocks(chunk, localChunkX, localChunkZ, region, options)) {
+                if(chunkHasVisibleBlocks(chunk, localChunkX, localChunkZ, region, options, debugTrace)) {
+                    debugTrace.logFinish(true);
                     return true;
                 }
             }
         }
+        debugTrace.logFinish(false);
         return false;
     }
 
@@ -160,6 +172,16 @@ public final class MCARenderer {
         int maxRegionX = coords.stream().max(Comparator.comparingInt(RegionCoordinates::x)).orElseThrow().x();
         int minRegionZ = coords.stream().min(Comparator.comparingInt(RegionCoordinates::z)).orElseThrow().z();
         int maxRegionZ = coords.stream().max(Comparator.comparingInt(RegionCoordinates::z)).orElseThrow().z();
+        debug("renderWorld start regions=%d bounds=[%d..%d,%d..%d] marker=%s yRange=%d..%d pixelsPerBlock=%d",
+                normalizedPaths.size(),
+                minRegionX,
+                maxRegionX,
+                minRegionZ,
+                maxRegionZ,
+                markerPoint == null ? "none" : ("(" + markerPoint.x() + "," + markerPoint.z() + ")"),
+                normalizedOptions.minY(),
+                normalizedOptions.maxY(),
+                normalizedOptions.pixelsPerBlock());
 
         int pixelsPerRegion = REGION_BLOCK_SIDE * normalizedOptions.pixelsPerBlock();
         int width = (maxRegionX - minRegionX + 1) * pixelsPerRegion;
@@ -191,7 +213,9 @@ public final class MCARenderer {
             paintMarker(image, markerPoint, minRegionX, minRegionZ, normalizedOptions);
         }
 
-        return cropToVisibleArea(image, normalizedOptions.defaultArgb());
+        BufferedImage result = cropToVisibleArea(image, normalizedOptions.defaultArgb());
+        debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
+        return result;
     }
 
     // Variante interna para decidir si la region se devuelve recortada o con su tamaño completo de 512x512 bloques.
@@ -199,10 +223,20 @@ public final class MCARenderer {
         Path normalizedPath = validateMcaPath(mcaPath);
         RenderOptions normalizedOptions = options == null ? RenderOptions.defaults() : options.normalized();
         RegionCoordinates region = parseRegionCoordinates(normalizedPath);
+        debug("renderRegion start path=%s region=%s crop=%s yRange=%d..%d pixelsPerBlock=%d ignoreTransparent=%s",
+                normalizedPath,
+                formatRegion(region),
+                cropResult,
+                normalizedOptions.minY(),
+                normalizedOptions.maxY(),
+                normalizedOptions.pixelsPerBlock(),
+                normalizedOptions.ignoreTransparentBlocks());
         MCAFile mcaFile = MCAUtil.read(normalizedPath.toFile(), RAW_DATA_FLAG);
         BufferedImage image = createRegionImage(normalizedOptions);
         paintRegion(mcaFile, image, region, normalizedOptions);
-        return cropResult ? cropToVisibleArea(image, normalizedOptions.defaultArgb()) : image;
+        BufferedImage result = cropResult ? cropToVisibleArea(image, normalizedOptions.defaultArgb()) : image;
+        debug("renderRegion finish path=%s result=%dx%d", normalizedPath, result.getWidth(), result.getHeight());
+        return result;
     }
 
     // Exporta una sola region a PNG con opciones por defecto.
@@ -367,20 +401,28 @@ public final class MCARenderer {
             int localChunkX,
             int localChunkZ,
             RegionCoordinates region,
-            RenderOptions options
+            RenderOptions options,
+            DebugTrace debugTrace
     ) {
         int worldChunkX = region.x() * REGION_CHUNK_SIDE + localChunkX;
         int worldChunkZ = region.z() * REGION_CHUNK_SIDE + localChunkZ;
+        ChunkInspection chunkInspection = inspectChunk(chunk);
+        debugTrace.onChunkStart(localChunkX, localChunkZ, worldChunkX, worldChunkZ, chunkInspection);
 
         for(int localZ = 0; localZ < CHUNK_BLOCK_SIDE; localZ++) {
             for(int localX = 0; localX < CHUNK_BLOCK_SIDE; localX++) {
                 int worldBlockX = worldChunkX * CHUNK_BLOCK_SIDE + localX;
                 int worldBlockZ = worldChunkZ * CHUNK_BLOCK_SIDE + localZ;
-                if(!findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options).isEmpty()) {
+                ColumnDiagnostics diagnostics = new ColumnDiagnostics();
+                TopBlockSample sample = findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+                debugTrace.onColumnScanned(diagnostics);
+                if(!sample.isEmpty()) {
+                    debugTrace.onVisibleColumn(localChunkX, localChunkZ, localX, localZ, sample, diagnostics);
                     return true;
                 }
             }
         }
+        debugTrace.onChunkWithoutVisibleBlocks(localChunkX, localChunkZ, chunkInspection);
         return false;
     }
 
@@ -402,27 +444,50 @@ public final class MCARenderer {
             int worldBlockZ,
             RenderOptions options
     ) {
+        return findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options, null);
+    }
+
+    private TopBlockSample findTopBlock(
+            Chunk chunk,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options,
+            ColumnDiagnostics diagnostics
+    ) {
         CompoundTag root = chunk.getHandle();
         if(root == null) {
+            markReason(diagnostics, "root_null");
             return TopBlockSample.EMPTY;
         }
 
         CompoundTag legacyLevel = root.getCompoundTag("Level");
         if(legacyLevel != null) {
-            return findTopBlockLegacy(legacyLevel, localX, localZ, worldBlockX, worldBlockZ, options);
+            markScheme(diagnostics, "legacy");
+            return findTopBlockLegacy(legacyLevel, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
         }
 
         ListTag<?> sectionsTag = root.getListTag("sections");
         if(sectionsTag == null || sectionsTag.size() == 0) {
+            markScheme(diagnostics, "modern");
+            markReason(diagnostics, "modern_sections_missing");
             return TopBlockSample.EMPTY;
         }
 
+        markScheme(diagnostics, "modern");
+        if(diagnostics != null) {
+            diagnostics.sectionCount = sectionsTag.size();
+        }
         ListTag<CompoundTag> sections = sectionsTag.asCompoundTagList();
         // En chunks modernos Querz guarda el DataVersion en la raiz del chunk.
         // Lo necesitamos porque el empaquetado de block_states cambia segun la version:
         // - versiones antiguas: los indices pueden cruzar el borde entre longs,
         // - versiones nuevas (2527+): cada long se rellena con padding y los indices ya no cruzan.
         int dataVersion = root.getInt("DataVersion");
+        if(diagnostics != null) {
+            diagnostics.dataVersion = dataVersion;
+        }
         for(int y = options.maxY(); y >= options.minY(); y--) {
             CompoundTag section = findSectionForY(sections, y);
             if(section == null) {
@@ -430,11 +495,20 @@ public final class MCARenderer {
             }
             String blockName = getModernBlockNameAt(section, localX, y & 15, localZ, dataVersion);
             if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                if(diagnostics != null && blockName != null && diagnostics.firstTransparentBlock == null) {
+                    diagnostics.firstTransparentBlock = blockName;
+                    diagnostics.firstTransparentY = y;
+                }
                 continue;
             }
             return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ);
         }
 
+        if(diagnostics != null && diagnostics.firstTransparentBlock != null) {
+            markReason(diagnostics, "only_transparent_blocks");
+        } else {
+            markReason(diagnostics, "no_visible_block_in_range");
+        }
         return TopBlockSample.EMPTY;
     }
 
@@ -450,13 +524,18 @@ public final class MCARenderer {
             int localZ,
             int worldBlockX,
             int worldBlockZ,
-            RenderOptions options
+            RenderOptions options,
+            ColumnDiagnostics diagnostics
     ) {
         ListTag<?> sectionsTag = level.getListTag("Sections");
         if(sectionsTag == null || sectionsTag.size() == 0) {
+            markReason(diagnostics, "legacy_sections_missing");
             return TopBlockSample.EMPTY;
         }
 
+        if(diagnostics != null) {
+            diagnostics.sectionCount = sectionsTag.size();
+        }
         ListTag<CompoundTag> sections = sectionsTag.asCompoundTagList();
         for(int y = options.maxY(); y >= options.minY(); y--) {
             CompoundTag section = findSectionForY(sections, y);
@@ -465,11 +544,20 @@ public final class MCARenderer {
             }
             String blockName = getLegacyBlockNameAt(section, localX, y & 15, localZ);
             if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                if(diagnostics != null && blockName != null && diagnostics.firstTransparentBlock == null) {
+                    diagnostics.firstTransparentBlock = blockName;
+                    diagnostics.firstTransparentY = y;
+                }
                 continue;
             }
             return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ);
         }
 
+        if(diagnostics != null && diagnostics.firstTransparentBlock != null) {
+            markReason(diagnostics, "only_transparent_blocks");
+        } else {
+            markReason(diagnostics, "no_visible_block_in_range");
+        }
         return TopBlockSample.EMPTY;
     }
 
@@ -1068,6 +1156,217 @@ public final class MCARenderer {
         // Conveniencia: una muestra vacia significa "no se encontro bloque visible".
         private boolean isEmpty() {
             return blockName == null || blockName.isBlank();
+        }
+    }
+
+    private static void debug(String format, Object... args) {
+        if(!DEBUG_LOGGING) {
+            return;
+        }
+        System.out.println("[MCARender] " + String.format(Locale.ROOT, format, args));
+    }
+
+    private static String formatRegion(RegionCoordinates region) {
+        return region == null ? "?" : "(" + region.x() + "," + region.z() + ")";
+    }
+
+    private static void markReason(ColumnDiagnostics diagnostics, String reason) {
+        if(diagnostics == null || reason == null || reason.isBlank()) {
+            return;
+        }
+        diagnostics.reason = reason;
+    }
+
+    private static void markScheme(ColumnDiagnostics diagnostics, String scheme) {
+        if(diagnostics == null || scheme == null || scheme.isBlank()) {
+            return;
+        }
+        diagnostics.scheme = scheme;
+    }
+
+    private ChunkInspection inspectChunk(Chunk chunk) {
+        CompoundTag root = chunk == null ? null : chunk.getHandle();
+        if(root == null) {
+            return new ChunkInspection("unknown", -1, "root_null");
+        }
+
+        CompoundTag legacyLevel = root.getCompoundTag("Level");
+        if(legacyLevel != null) {
+            ListTag<?> sections = legacyLevel.getListTag("Sections");
+            int sectionCount = sections == null ? 0 : sections.size();
+            return new ChunkInspection("legacy", sectionCount, sectionCount == 0 ? "legacy_sections_missing" : "ok");
+        }
+
+        int dataVersion = root.getInt("DataVersion");
+        ListTag<?> sections = root.getListTag("sections");
+        int sectionCount = sections == null ? 0 : sections.size();
+        return new ChunkInspection("modern(dv=" + dataVersion + ")", sectionCount, sectionCount == 0 ? "modern_sections_missing" : "ok");
+    }
+
+    private static final class ColumnDiagnostics {
+        private String scheme;
+        private String reason;
+        private int sectionCount = -1;
+        private int dataVersion = Integer.MIN_VALUE;
+        private String firstTransparentBlock;
+        private int firstTransparentY = Integer.MIN_VALUE;
+    }
+
+    private record ChunkInspection(String scheme, int sectionCount, String status) {}
+
+    private static final class DebugTrace {
+        private final Path path;
+        private final RegionCoordinates region;
+        private final RenderOptions options;
+        private int nullChunks;
+        private int nonNullChunks;
+        private int scannedColumns;
+        private int chunksWithoutVisibleBlocks;
+        private int chunkLinesLogged;
+        private int sampleLinesLogged;
+        private final Map<String, Integer> reasonCounts = new LinkedHashMap<>();
+        private final Map<String, Integer> schemeCounts = new LinkedHashMap<>();
+
+        private DebugTrace(Path path, RegionCoordinates region, RenderOptions options) {
+            this.path = path;
+            this.region = region;
+            this.options = options;
+        }
+
+        private static DebugTrace forRegionScan(Path path, RegionCoordinates region, RenderOptions options) {
+            return new DebugTrace(path, region, options);
+        }
+
+        private void logStart() {
+            debug("scan start path=%s region=%s yRange=%d..%d ignoreTransparent=%s",
+                    path,
+                    formatRegion(region),
+                    options.minY(),
+                    options.maxY(),
+                    options.ignoreTransparentBlocks());
+        }
+
+        private void onNullChunk(int localChunkX, int localChunkZ) {
+            nullChunks++;
+            recordReason("chunk_null");
+            maybeLogChunk("chunk (%d,%d) world=(%d,%d) status=null",
+                    localChunkX,
+                    localChunkZ,
+                    region.x() * REGION_CHUNK_SIDE + localChunkX,
+                    region.z() * REGION_CHUNK_SIDE + localChunkZ);
+        }
+
+        private void onChunkStart(int localChunkX, int localChunkZ, int worldChunkX, int worldChunkZ, ChunkInspection inspection) {
+            nonNullChunks++;
+            recordScheme(inspection.scheme());
+            if(!"ok".equals(inspection.status())) {
+                recordReason(inspection.status());
+            }
+            maybeLogChunk("chunk (%d,%d) world=(%d,%d) scheme=%s sections=%d status=%s",
+                    localChunkX,
+                    localChunkZ,
+                    worldChunkX,
+                    worldChunkZ,
+                    inspection.scheme(),
+                    inspection.sectionCount(),
+                    inspection.status());
+        }
+
+        private void onColumnScanned(ColumnDiagnostics diagnostics) {
+            scannedColumns++;
+            if(diagnostics == null) {
+                return;
+            }
+            if(diagnostics.scheme != null) {
+                recordScheme(diagnostics.scheme);
+            }
+            if(diagnostics.reason != null) {
+                recordReason(diagnostics.reason);
+            }
+        }
+
+        private void onVisibleColumn(int localChunkX, int localChunkZ, int localX, int localZ, TopBlockSample sample, ColumnDiagnostics diagnostics) {
+            if(sampleLinesLogged >= DEBUG_MAX_SAMPLE_LINES) {
+                return;
+            }
+            sampleLinesLogged++;
+            debug("visible column path=%s chunk=(%d,%d) localBlock=(%d,%d) worldBlock=(%d,%d) block=%s y=%d scheme=%s sections=%d transparentProbe=%s@%s",
+                    path.getFileName(),
+                    localChunkX,
+                    localChunkZ,
+                    localX,
+                    localZ,
+                    sample.worldBlockX(),
+                    sample.worldBlockZ(),
+                    sample.blockName(),
+                    sample.y(),
+                    diagnostics == null ? "?" : fallback(diagnostics.scheme, "?"),
+                    diagnostics == null ? -1 : diagnostics.sectionCount,
+                    diagnostics == null ? "-" : fallback(diagnostics.firstTransparentBlock, "-"),
+                    diagnostics == null || diagnostics.firstTransparentY == Integer.MIN_VALUE ? "-" : Integer.toString(diagnostics.firstTransparentY));
+        }
+
+        private void onChunkWithoutVisibleBlocks(int localChunkX, int localChunkZ, ChunkInspection inspection) {
+            chunksWithoutVisibleBlocks++;
+            maybeLogChunk("chunk (%d,%d) no visible blocks scheme=%s sections=%d",
+                    localChunkX,
+                    localChunkZ,
+                    inspection.scheme(),
+                    inspection.sectionCount());
+        }
+
+        private void logFinish(boolean visibleFound) {
+            debug("scan finish path=%s region=%s visibleFound=%s nonNullChunks=%d nullChunks=%d scannedColumns=%d chunksWithoutVisible=%d",
+                    path,
+                    formatRegion(region),
+                    visibleFound,
+                    nonNullChunks,
+                    nullChunks,
+                    scannedColumns,
+                    chunksWithoutVisibleBlocks);
+            logMap("scheme summary", schemeCounts, DEBUG_MAX_REASON_LINES);
+            logMap("reason summary", reasonCounts, DEBUG_MAX_REASON_LINES);
+        }
+
+        private void maybeLogChunk(String format, Object... args) {
+            if(chunkLinesLogged >= DEBUG_MAX_CHUNK_LINES) {
+                return;
+            }
+            chunkLinesLogged++;
+            debug(format, args);
+        }
+
+        private void recordReason(String reason) {
+            if(reason == null || reason.isBlank()) {
+                return;
+            }
+            reasonCounts.merge(reason, 1, Integer::sum);
+        }
+
+        private void recordScheme(String scheme) {
+            if(scheme == null || scheme.isBlank()) {
+                return;
+            }
+            schemeCounts.merge(scheme, 1, Integer::sum);
+        }
+
+        private void logMap(String label, Map<String, Integer> counts, int maxLines) {
+            if(counts.isEmpty()) {
+                return;
+            }
+            int printed = 0;
+            for(Map.Entry<String, Integer> entry : counts.entrySet()) {
+                if(printed >= maxLines) {
+                    debug("%s ... %d more", label, counts.size() - printed);
+                    break;
+                }
+                printed++;
+                debug("%s %s=%d", label, entry.getKey(), entry.getValue());
+            }
+        }
+
+        private String fallback(String value, String fallback) {
+            return value == null || value.isBlank() ? fallback : value;
         }
     }
 }

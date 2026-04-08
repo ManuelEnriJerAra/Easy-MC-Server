@@ -11,6 +11,8 @@ import modelo.World;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -39,7 +41,7 @@ public class PanelMundo extends JPanel {
     private final JButton exportarButton = new JButton("Exportar mundo");
     private final JButton generarButton = new JButton("Generar nuevo mundo");
     private final JButton generarPreviewButton = new JButton("Generar preview");
-    private final JCheckBox senalarSpawnCheckBox = new JCheckBox("Señalar spawn", true);
+    private final JCheckBox senalarSpawnCheckBox = new JCheckBox("Señalar spawn", false);
     private final JCheckBox generarTodoCheckBox = new JCheckBox("Generar todo", false);
 
     private World mundoActivoActual;
@@ -72,6 +74,7 @@ public class PanelMundo extends JPanel {
         previewImageLabel.setHorizontalAlignment(SwingConstants.CENTER);
         previewImageLabel.setVerticalAlignment(SwingConstants.CENTER);
         previewImageLabel.setPreferredSize(new Dimension(320, 320));
+        instalarMenuContextualPreview();
         seedField.setEditable(false);
         seedField.setFocusable(true);
         seedField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
@@ -425,7 +428,8 @@ public class PanelMundo extends JPanel {
                 MCARenderer.WorldPoint markerPoint = spawnPoint == null
                         ? null
                         : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z());
-                renderer.renderWorldToPng(regionesPreview, outputPath, MCARenderer.RenderOptions.defaults(), markerPoint);
+                BufferedImage preview = renderer.renderWorld(regionesPreview, MCARenderer.RenderOptions.defaults(), markerPoint);
+                guardarPreview(preview, outputPath);
                 return outputPath;
             }
 
@@ -460,9 +464,8 @@ public class PanelMundo extends JPanel {
     }
 
     private List<Path> encontrarRegionesPreview(World mundo, boolean generarTodo) throws Exception {
-        Path worldDir = Path.of(mundo.getWorldDir());
-        Path regionDir = worldDir.resolve("region");
-        if(!Files.isDirectory(regionDir)) {
+        Path regionDir = WorldDataReader.getOverworldRegionDirectory(mundo);
+        if(regionDir == null || !Files.isDirectory(regionDir)) {
             return List.of();
         }
 
@@ -517,6 +520,14 @@ public class PanelMundo extends JPanel {
         return panel;
     }
 
+    private void guardarPreview(BufferedImage image, Path outputPath) throws IOException {
+        Path parent = outputPath.toAbsolutePath().getParent();
+        if(parent != null) {
+            Files.createDirectories(parent);
+        }
+        ImageIO.write(image, "png", outputPath.toFile());
+    }
+
     private void actualizarPreviewSeleccionada() {
         World mundo = getMundoSeleccionadoOActivo();
         if(mundo == null) {
@@ -547,6 +558,81 @@ public class PanelMundo extends JPanel {
     private void mostrarTextoPreview(String texto) {
         previewImageLabel.setIcon(null);
         previewImageLabel.setText(texto);
+    }
+
+    private void instalarMenuContextualPreview() {
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem verArchivoItem = new JMenuItem("Ver archivo");
+        verArchivoItem.addActionListener(e -> abrirPreviewEnExplorador());
+        menu.add(verArchivoItem);
+
+        MouseAdapter popupMouse = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                mostrarPopupSiCorresponde(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                mostrarPopupSiCorresponde(e);
+            }
+
+            private void mostrarPopupSiCorresponde(MouseEvent e) {
+                if(!e.isPopupTrigger()) {
+                    return;
+                }
+                verArchivoItem.setEnabled(existePreviewSeleccionada());
+                menu.show(e.getComponent(), e.getX(), e.getY());
+            }
+        };
+        previewImageLabel.addMouseListener(popupMouse);
+    }
+
+    private boolean existePreviewSeleccionada() {
+        World mundo = getMundoSeleccionadoOActivo();
+        if(mundo == null) {
+            return false;
+        }
+        return Files.isRegularFile(getPreviewPath(mundo));
+    }
+
+    private void abrirPreviewEnExplorador() {
+        World mundo = getMundoSeleccionadoOActivo();
+        if(mundo == null) {
+            JOptionPane.showMessageDialog(this,
+                    "No hay un mundo seleccionado.",
+                    "Ver archivo",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Path previewPath = getPreviewPath(mundo);
+        if(!Files.isRegularFile(previewPath)) {
+            JOptionPane.showMessageDialog(this,
+                    "La preview todavia no existe.",
+                    "Ver archivo",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            if(System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
+                new ProcessBuilder("explorer.exe", "/select,", previewPath.toAbsolutePath().toString()).start();
+                return;
+            }
+
+            Desktop.getDesktop().open(previewPath.toAbsolutePath().getParent().toFile());
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    "No se ha podido abrir el Explorador: " + ex.getMessage(),
+                    "Ver archivo",
+                    JOptionPane.ERROR_MESSAGE);
+        } catch (UnsupportedOperationException ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Este sistema no soporta abrir archivos desde Java.",
+                    "Ver archivo",
+                    JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private Image escalarPreview(BufferedImage image, int maxWidth, int maxHeight) {
