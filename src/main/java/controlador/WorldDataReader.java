@@ -199,10 +199,29 @@ public class WorldDataReader {
 
             IntTag spawnXTag = data.getIntTag("SpawnX");
             IntTag spawnZTag = data.getIntTag("SpawnZ");
-            if(spawnXTag == null || spawnZTag == null) {
-                return null;
+            if(spawnXTag != null && spawnZTag != null) {
+                return new SpawnPoint(spawnXTag.asInt(), spawnZTag.asInt());
             }
-            return new SpawnPoint(spawnXTag.asInt(), spawnZTag.asInt());
+
+            CompoundTag spawnTag = data.getCompoundTag("spawn");
+            if(spawnTag == null) return null;
+
+            int[] spawnPos = spawnTag.getIntArray("pos");
+            if(spawnPos != null && spawnPos.length >= 3) {
+                return new SpawnPoint(spawnPos[0], spawnPos[2]);
+            }
+
+            ListTag<?> spawnPosList = spawnTag.getListTag("pos");
+            if(spawnPosList != null && spawnPosList.size() >= 3) {
+                Tag<?> xTag = spawnPosList.get(0);
+                Tag<?> zTag = spawnPosList.get(2);
+                if(xTag instanceof net.querz.nbt.tag.NumberTag<?> xNumber
+                        && zTag instanceof net.querz.nbt.tag.NumberTag<?> zNumber) {
+                    return new SpawnPoint(xNumber.asInt(), zNumber.asInt());
+                }
+            }
+
+            return null;
         } catch (Exception ex) {
             System.out.println("Ha ocurrido un error accediendo al spawn del mundo: " + mundo.getWorldDir());
             return null;

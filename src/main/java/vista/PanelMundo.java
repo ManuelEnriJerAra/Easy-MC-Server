@@ -80,7 +80,7 @@ public class PanelMundo extends JPanel {
     private final JPopupMenu previewOptionsMenu = new JPopupMenu();
     private final JCheckBox sombreadoMenuItem = new JCheckBox("Sombreado", true);
     private final JCheckBox sombreadoAguaMenuItem = new JCheckBox("Sombreado agua", true);
-    private final JCheckBox colorearBiomasMenuItem = new JCheckBox("Colorear biomas", false);
+    private final JCheckBox colorearBiomasMenuItem = new JCheckBox("Colorear biomas", true);
     private final JCheckBox mostrarSpawnMenuItem = new JCheckBox("Mostrar spawn", false);
     private final JCheckBox limitesChunksMenuItem = new JCheckBox("Límites de chunks", false);
     private final JCheckBox usarTodoMenuItem = new JCheckBox("Mapa completo", false);
@@ -96,7 +96,7 @@ public class PanelMundo extends JPanel {
     private boolean actualizandoComboMundos = false;
     private boolean sombreadoEnPreview = true;
     private boolean sombreadoAguaEnPreview = true;
-    private boolean colorearBiomasEnPreview = false;
+    private boolean colorearBiomasEnPreview = true;
     private boolean mostrarSpawnEnPreview = false;
     private boolean limitesChunksEnPreview = false;
     private boolean usarTodoEnPreview = false;

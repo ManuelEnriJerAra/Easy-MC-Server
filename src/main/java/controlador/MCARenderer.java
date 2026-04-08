@@ -1341,23 +1341,92 @@ public final class MCARenderer {
         String block = blockName.toLowerCase(Locale.ROOT);
         String biome = biomeName.toLowerCase(Locale.ROOT);
 
-        if(block.contains("cherry_leaves")) {
+        if(isCherryFoliageBlock(block)) {
             if(biome.contains("cherry_grove")) {
                 return blendColors(base, new Color(236, 170, 196), 0.78d);
             }
             return blendColors(base, new Color(218, 150, 176), 0.62d);
         }
 
-        if(block.contains("grass") || block.contains("moss")) {
-            return blendColors(base, biomeGrassTint(biome), 0.46d);
+        if(isBiomeWaterTintBlock(block)) {
+            return blendColors(base, biomeWaterTint(biome), biomeWaterTintStrength(block));
         }
-        if(block.contains("leaves") || block.contains("azalea")) {
-            return blendColors(base, biomeFoliageTint(biome), 0.52d);
+        if(isBiomeGrassTintBlock(block)) {
+            return blendColors(base, biomeGrassTint(biome), biomeGrassTintStrength(block));
         }
-        if(isWaterBlock(block)) {
-            return blendColors(base, biomeWaterTint(biome), 0.40d);
+        if(isBiomeFoliageTintBlock(block)) {
+            return blendColors(base, biomeFoliageTint(biome), biomeFoliageTintStrength(block));
         }
         return base;
+    }
+
+    private boolean isBiomeGrassTintBlock(String block) {
+        if(block == null || block.isBlank()) {
+            return false;
+        }
+        return block.contains("grass_block")
+                || block.contains("grass")
+                || block.contains("fern")
+                || block.contains("moss")
+                || block.contains("bush")
+                || block.contains("sweet_berry")
+                || block.contains("sugar_cane")
+                || block.contains("lily_pad")
+                || block.contains("leaf_litter")
+                || block.contains("mangrove_roots");
+    }
+
+    private boolean isBiomeFoliageTintBlock(String block) {
+        if(block == null || block.isBlank()) {
+            return false;
+        }
+        return block.contains("leaves")
+                || block.contains("azalea")
+                || block.contains("vine")
+                || block.contains("sapling")
+                || block.contains("cactus")
+                || block.contains("kelp")
+                || block.contains("seagrass")
+                || block.contains("sea_pickle");
+    }
+
+    private boolean isBiomeWaterTintBlock(String block) {
+        if(block == null || block.isBlank()) {
+            return false;
+        }
+        return isWaterBlock(block)
+                || block.contains("bubble_column")
+                || block.contains("ice")
+                || block.contains("snow");
+    }
+
+    private boolean isCherryFoliageBlock(String block) {
+        if(block == null || block.isBlank()) {
+            return false;
+        }
+        return block.contains("cherry_leaves")
+                || block.contains("pink_petals")
+                || block.contains("flowering_azalea");
+    }
+
+    private double biomeGrassTintStrength(String block) {
+        if(block.contains("moss")) return 0.22d;
+        if(block.contains("lily_pad")) return 0.50d;
+        if(block.contains("sugar_cane") || block.contains("fern") || block.contains("bush")) return 0.58d;
+        return 0.46d;
+    }
+
+    private double biomeFoliageTintStrength(String block) {
+        if(block.contains("vine")) return 0.60d;
+        if(block.contains("azalea")) return 0.56d;
+        if(block.contains("seagrass") || block.contains("kelp")) return 0.42d;
+        return 0.52d;
+    }
+
+    private double biomeWaterTintStrength(String block) {
+        if(block.contains("snow")) return 0.16d;
+        if(block.contains("ice")) return 0.22d;
+        return 0.40d;
     }
 
     private Color biomeGrassTint(String biome) {
