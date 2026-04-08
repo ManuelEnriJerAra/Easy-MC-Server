@@ -1,4 +1,4 @@
-package vista;
+﻿package vista;
 
 import controlador.GestorMundos;
 import controlador.GestorServidores;
@@ -19,6 +19,7 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.DecimalFormat;
@@ -51,6 +52,7 @@ public class PanelMundo extends JPanel {
     private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter FORMATO_CONEXION = DateTimeFormatter.ofPattern("dd/MM/yyyy - HH:mm:ss");
     private static final String WORLD_METADATA_FILE = ".emw-world.properties";
+    private static final String PREVIEW_METADATA_FILE = ".preview-overlay.properties";
     private static final Map<Path, RegionVisibilityCacheEntry> REGION_VISIBILITY_CACHE = new ConcurrentHashMap<>();
 
     private final GestorServidores gestorServidores;
@@ -77,8 +79,11 @@ public class PanelMundo extends JPanel {
     private final JButton previewMenuButton = new JButton("\u2630");
     private final JPopupMenu previewOptionsMenu = new JPopupMenu();
     private final JCheckBox sombreadoMenuItem = new JCheckBox("Sombreado", true);
+    private final JCheckBox sombreadoAguaMenuItem = new JCheckBox("Sombreado agua", true);
+    private final JCheckBox colorearBiomasMenuItem = new JCheckBox("Colorear biomas", false);
     private final JCheckBox mostrarSpawnMenuItem = new JCheckBox("Mostrar spawn", false);
-    private final JCheckBox usarTodoMenuItem = new JCheckBox("Usar todo", false);
+    private final JCheckBox limitesChunksMenuItem = new JCheckBox("Límites de chunks", false);
+    private final JCheckBox usarTodoMenuItem = new JCheckBox("Mapa completo", false);
     private final JLabel pesoMundoLabel = new JLabel("-");
     private final JLabel pesoStatsSavesLabel = new JLabel("Peso stats y saves: -");
     private final JLabel pesoTotalLabel = new JLabel("-");
@@ -90,7 +95,10 @@ public class PanelMundo extends JPanel {
     private World mundoActivoActual;
     private boolean actualizandoComboMundos = false;
     private boolean sombreadoEnPreview = true;
+    private boolean sombreadoAguaEnPreview = true;
+    private boolean colorearBiomasEnPreview = false;
     private boolean mostrarSpawnEnPreview = false;
+    private boolean limitesChunksEnPreview = false;
     private boolean usarTodoEnPreview = false;
     private boolean previewGenerationInProgress = false;
 
@@ -716,6 +724,7 @@ public class PanelMundo extends JPanel {
         setPreviewProgressVisible(true);
         generarPreviewButton.setEnabled(false);
         previewMenuButton.setEnabled(false);
+        long previewStartNanos = System.nanoTime();
         MCARenderer renderer = new MCARenderer();
         WorldDataReader.SpawnPoint spawnPoint = WorldDataReader.getSpawnPoint(mundo);
         SwingWorker<PreviewGenerationResult, Void> worker = new SwingWorker<>() {
@@ -723,17 +732,24 @@ public class PanelMundo extends JPanel {
             protected PreviewGenerationResult doInBackground() throws Exception {
                 List<Path> regionesPreview = encontrarRegionesPreview(mundo, usarTodoEnPreview, spawnPoint);
                 if (regionesPreview.isEmpty()) {
-                    return new PreviewGenerationResult(outputPath, true);
+                    return new PreviewGenerationResult(outputPath, true, null, null);
                 }
-                MCARenderer.WorldPoint markerPoint = mostrarSpawnEnPreview && spawnPoint != null
-                        ? new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z())
-                        : null;
                 MCARenderer.RenderOptions renderOptions = MCARenderer.RenderOptions.defaults()
                         .withShadeByHeight(sombreadoEnPreview)
+                        .withWaterSubsurfaceShading(sombreadoAguaEnPreview)
+                        .withBiomeColoring(colorearBiomasEnPreview)
                         .withPreferSquareCrop(!usarTodoEnPreview);
-                BufferedImage preview = renderer.renderWorld(regionesPreview, renderOptions, markerPoint);
+                MCARenderer.RenderedWorld renderedWorld = renderer.renderWorldWithMetadata(regionesPreview, renderOptions);
+                BufferedImage preview = renderedWorld.image();
                 guardarPreview(preview, outputPath);
-                return new PreviewGenerationResult(outputPath, false);
+                PreviewOverlayData overlayData = new PreviewOverlayData(
+                        renderedWorld.originBlockX(),
+                        renderedWorld.originBlockZ(),
+                        renderedWorld.pixelsPerBlock(),
+                        spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z())
+                );
+                guardarPreviewOverlayData(mundo, overlayData);
+                return new PreviewGenerationResult(outputPath, false, preview, overlayData);
             }
 
             @Override
@@ -753,7 +769,16 @@ public class PanelMundo extends JPanel {
                                 JOptionPane.WARNING_MESSAGE);
                         return;
                     }
-                    actualizarPreviewSeleccionada();
+                    double elapsedSeconds = (System.nanoTime() - previewStartNanos) / 1_000_000_000.0d;
+                    System.out.println(String.format(Locale.ROOT, "[PanelMundo] Preview generated in %.2f seconds", elapsedSeconds));
+                    if (result.preview() != null) {
+                        previewImageLabel.setImage(result.preview());
+                        previewImageLabel.setOverlayData(result.overlayData());
+                        previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
+                        previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
+                    } else {
+                        actualizarPreviewSeleccionada();
+                    }
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                     restaurarPreviewAnteriorSiExiste(habiaPreviewAnterior);
@@ -1050,7 +1075,20 @@ public class PanelMundo extends JPanel {
                 mostrarTextoPreview("No se ha podido leer la preview.");
                 return;
             }
+            PreviewOverlayData overlayData = leerPreviewOverlayData(mundo);
             previewImageLabel.setImage(image);
+            previewImageLabel.setOverlayData(overlayData);
+            previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
+            previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
+            if ((limitesChunksEnPreview || mostrarSpawnEnPreview) && overlayData == null) {
+                System.out.println("[PanelMundo] Overlay metadata missing for preview. Regenerate the preview once to enable local overlays.");
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Esta preview no tiene metadata de superposición.\nRegenera la preview una vez para poder mostrar el spawn o los límites de chunks.",
+                        "Superposiciones no disponibles",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+            }
         } catch (IOException ex) {
             mostrarTextoPreview("No se ha podido leer la preview.");
         }
@@ -1058,6 +1096,9 @@ public class PanelMundo extends JPanel {
 
     private void mostrarTextoPreview(String texto) {
         previewImageLabel.setMessage(texto);
+        previewImageLabel.setOverlayData(null);
+        previewImageLabel.setChunkGridVisible(false);
+        previewImageLabel.setSpawnVisible(false);
     }
 
     private void restaurarPreviewAnteriorSiExiste(boolean habiaPreviewAnterior) {
@@ -1209,6 +1250,77 @@ public class PanelMundo extends JPanel {
         return Path.of(mundo.getWorldDir()).resolve("preview.png");
     }
 
+    private Path getPreviewOverlayMetadataPath(World mundo) {
+        return Path.of(mundo.getWorldDir()).resolve(PREVIEW_METADATA_FILE);
+    }
+
+    private void guardarPreviewOverlayData(World mundo, PreviewOverlayData overlayData) {
+        if (mundo == null || overlayData == null) {
+            return;
+        }
+
+        Properties props = new Properties();
+        props.setProperty("originBlockX", Integer.toString(overlayData.originBlockX()));
+        props.setProperty("originBlockZ", Integer.toString(overlayData.originBlockZ()));
+        props.setProperty("pixelsPerBlock", Integer.toString(overlayData.pixelsPerBlock()));
+        if (overlayData.spawnPoint() != null) {
+            props.setProperty("spawnX", Integer.toString(overlayData.spawnPoint().x()));
+            props.setProperty("spawnZ", Integer.toString(overlayData.spawnPoint().z()));
+        }
+
+        Path metadataPath = getPreviewOverlayMetadataPath(mundo);
+        try (OutputStream out = Files.newOutputStream(metadataPath)) {
+            props.store(out, "Preview overlay metadata");
+        } catch (IOException ex) {
+            System.out.println("No se ha podido guardar la metadata de overlay de la preview: " + metadataPath);
+        }
+    }
+
+    private PreviewOverlayData leerPreviewOverlayData(World mundo) {
+        if (mundo == null) {
+            return null;
+        }
+
+        Path metadataPath = getPreviewOverlayMetadataPath(mundo);
+        if (!Files.isRegularFile(metadataPath)) {
+            return null;
+        }
+
+        Properties props = new Properties();
+        try (InputStream in = Files.newInputStream(metadataPath)) {
+            props.load(in);
+            int originBlockX = Integer.parseInt(props.getProperty("originBlockX"));
+            int originBlockZ = Integer.parseInt(props.getProperty("originBlockZ"));
+            int pixelsPerBlock = Integer.parseInt(props.getProperty("pixelsPerBlock", "1"));
+            String spawnX = props.getProperty("spawnX");
+            String spawnZ = props.getProperty("spawnZ");
+            MCARenderer.WorldPoint spawnPoint = (spawnX != null && spawnZ != null)
+                    ? new MCARenderer.WorldPoint(Integer.parseInt(spawnX), Integer.parseInt(spawnZ))
+                    : null;
+            return new PreviewOverlayData(originBlockX, originBlockZ, pixelsPerBlock, spawnPoint);
+        } catch (IOException | NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private void avisarSuperposicionesNoDisponiblesSiHaceFalta() {
+        if (!limitesChunksEnPreview && !mostrarSpawnEnPreview) {
+            return;
+        }
+
+        World mundo = getMundoSeleccionadoOActivo();
+        if (mundo == null || leerPreviewOverlayData(mundo) != null) {
+            return;
+        }
+
+        JOptionPane.showMessageDialog(
+                this,
+                "Esta preview no tiene metadata de superposición.\nRegenera la preview una vez para poder mostrar el spawn o los límites de chunks.",
+                "Superposiciones no disponibles",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
     private void actualizarTextoBotonPreview() {
         World mundo = getMundoSeleccionadoOActivo();
         boolean existePreview = mundo != null && Files.isRegularFile(getPreviewPath(mundo));
@@ -1269,8 +1381,22 @@ public class PanelMundo extends JPanel {
     private void instalarMenuOpcionesPreview() {
         sombreadoMenuItem.setSelected(sombreadoEnPreview);
         sombreadoMenuItem.addActionListener(e -> sombreadoEnPreview = sombreadoMenuItem.isSelected());
+        sombreadoAguaMenuItem.setSelected(sombreadoAguaEnPreview);
+        sombreadoAguaMenuItem.addActionListener(e -> sombreadoAguaEnPreview = sombreadoAguaMenuItem.isSelected());
+        colorearBiomasMenuItem.setSelected(colorearBiomasEnPreview);
+        colorearBiomasMenuItem.addActionListener(e -> colorearBiomasEnPreview = colorearBiomasMenuItem.isSelected());
         mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
-        mostrarSpawnMenuItem.addActionListener(e -> mostrarSpawnEnPreview = mostrarSpawnMenuItem.isSelected());
+        mostrarSpawnMenuItem.addActionListener(e -> {
+            mostrarSpawnEnPreview = mostrarSpawnMenuItem.isSelected();
+            previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
+            avisarSuperposicionesNoDisponiblesSiHaceFalta();
+        });
+        limitesChunksMenuItem.setSelected(limitesChunksEnPreview);
+        limitesChunksMenuItem.addActionListener(e -> {
+            limitesChunksEnPreview = limitesChunksMenuItem.isSelected();
+            previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
+            avisarSuperposicionesNoDisponiblesSiHaceFalta();
+        });
         usarTodoMenuItem.setSelected(usarTodoEnPreview);
         usarTodoMenuItem.addActionListener(e -> usarTodoEnPreview = usarTodoMenuItem.isSelected());
 
@@ -1283,13 +1409,22 @@ public class PanelMundo extends JPanel {
         stylePreviewOptionCheckBox(mostrarSpawnMenuItem);
         stylePreviewOptionCheckBox(usarTodoMenuItem);
         stylePreviewOptionCheckBox(sombreadoMenuItem);
+        stylePreviewOptionCheckBox(sombreadoAguaMenuItem);
+        stylePreviewOptionCheckBox(colorearBiomasMenuItem);
+        stylePreviewOptionCheckBox(limitesChunksMenuItem);
         optionsPanel.add(createPreviewOptionsSectionLabel("Generación"));
         optionsPanel.add(sombreadoMenuItem);
+        optionsPanel.add(Box.createVerticalStrut(4));
+        optionsPanel.add(sombreadoAguaMenuItem);
+        optionsPanel.add(Box.createVerticalStrut(4));
+        optionsPanel.add(colorearBiomasMenuItem);
         optionsPanel.add(Box.createVerticalStrut(4));
         optionsPanel.add(usarTodoMenuItem);
         optionsPanel.add(Box.createVerticalStrut(10));
         optionsPanel.add(createPreviewOptionsSectionLabel("Superposición"));
         optionsPanel.add(mostrarSpawnMenuItem);
+        optionsPanel.add(Box.createVerticalStrut(4));
+        optionsPanel.add(limitesChunksMenuItem);
 
         previewOptionsMenu.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f));
         previewOptionsMenu.add(optionsPanel);
@@ -1302,7 +1437,10 @@ public class PanelMundo extends JPanel {
             return;
         }
         sombreadoMenuItem.setSelected(sombreadoEnPreview);
+        sombreadoAguaMenuItem.setSelected(sombreadoAguaEnPreview);
+        colorearBiomasMenuItem.setSelected(colorearBiomasEnPreview);
         mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
+        limitesChunksMenuItem.setSelected(limitesChunksEnPreview);
         usarTodoMenuItem.setSelected(usarTodoEnPreview);
         previewOptionsMenu.show(anchor, 0, anchor.getHeight());
     }
@@ -1431,6 +1569,9 @@ public class PanelMundo extends JPanel {
 
     private static final class PreviewImagePanel extends JComponent {
         private BufferedImage image;
+        private PreviewOverlayData overlayData;
+        private boolean chunkGridVisible = false;
+        private boolean spawnVisible = false;
         private String message = "La preview todavía no existe.";
         private double zoom = 1.0d;
         private double panX = 0d;
@@ -1507,8 +1648,24 @@ public class PanelMundo extends JPanel {
             updateCursor();
         }
 
+        private void setOverlayData(PreviewOverlayData overlayData) {
+            this.overlayData = overlayData;
+            repaint();
+        }
+
+        private void setChunkGridVisible(boolean chunkGridVisible) {
+            this.chunkGridVisible = chunkGridVisible;
+            repaint();
+        }
+
+        private void setSpawnVisible(boolean spawnVisible) {
+            this.spawnVisible = spawnVisible;
+            repaint();
+        }
+
         private void clearImage() {
             this.image = null;
+            this.overlayData = null;
             this.message = "";
             resetView();
             updateCursor();
@@ -1516,6 +1673,7 @@ public class PanelMundo extends JPanel {
 
         private void setMessage(String message) {
             this.image = null;
+            this.overlayData = null;
             this.message = message == null ? "" : message;
             resetView();
             updateCursor();
@@ -1608,8 +1766,85 @@ public class PanelMundo extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
                 g2.drawImage(image, state.drawX(), state.drawY(), state.drawWidth(), state.drawHeight(), null);
+                paintChunkGrid(g2, state);
+                paintSpawn(g2, state);
             } finally {
                 g2.dispose();
+            }
+        }
+
+        private void paintChunkGrid(Graphics2D g2, RenderState state) {
+            if (!chunkGridVisible || overlayData == null || state == null) {
+                return;
+            }
+
+            double pixelsPerChunk = overlayData.pixelsPerBlock() * 16d * state.scale();
+            if (pixelsPerChunk < 6d) {
+                return;
+            }
+
+            double firstLineX = state.drawX() - (floorMod(overlayData.originBlockX(), 16) * overlayData.pixelsPerBlock() * state.scale());
+            double firstLineY = state.drawY() - (floorMod(overlayData.originBlockZ(), 16) * overlayData.pixelsPerBlock() * state.scale());
+
+            Graphics2D grid = (Graphics2D) g2.create();
+            try {
+                grid.setClip(state.drawX(), state.drawY(), state.drawWidth(), state.drawHeight());
+                grid.setColor(new Color(255, 255, 255, 72));
+
+                for (double x = firstLineX; x <= state.drawX() + state.drawWidth(); x += pixelsPerChunk) {
+                    int xi = (int) Math.round(x);
+                    grid.drawLine(xi, state.drawY(), xi, state.drawY() + state.drawHeight());
+                }
+                for (double y = firstLineY; y <= state.drawY() + state.drawHeight(); y += pixelsPerChunk) {
+                    int yi = (int) Math.round(y);
+                    grid.drawLine(state.drawX(), yi, state.drawX() + state.drawWidth(), yi);
+                }
+            } finally {
+                grid.dispose();
+            }
+        }
+
+        private int floorMod(int value, int mod) {
+            int result = value % mod;
+            return result < 0 ? result + mod : result;
+        }
+
+        private void paintSpawn(Graphics2D g2, RenderState state) {
+            if (!spawnVisible || overlayData == null || overlayData.spawnPoint() == null || state == null) {
+                return;
+            }
+
+            double relativeBlockX = overlayData.spawnPoint().x() - overlayData.originBlockX();
+            double relativeBlockZ = overlayData.spawnPoint().z() - overlayData.originBlockZ();
+            double imagePixelX = relativeBlockX * overlayData.pixelsPerBlock();
+            double imagePixelY = relativeBlockZ * overlayData.pixelsPerBlock();
+            int centerX = (int) Math.round(state.drawX() + imagePixelX * state.scale());
+            int centerY = (int) Math.round(state.drawY() + imagePixelY * state.scale());
+
+            if (centerX < state.drawX() || centerY < state.drawY()
+                    || centerX >= state.drawX() + state.drawWidth()
+                    || centerY >= state.drawY() + state.drawHeight()) {
+                return;
+            }
+
+            Graphics2D marker = (Graphics2D) g2.create();
+            try {
+                marker.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int arm = 10;
+                int shadowThickness = 4;
+                int mainThickness = 2;
+
+                marker.setColor(new Color(0, 0, 0, 120));
+                marker.setStroke(new BasicStroke(shadowThickness, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                marker.drawLine(centerX - arm, centerY - arm, centerX + arm, centerY + arm);
+                marker.drawLine(centerX - arm, centerY + arm, centerX + arm, centerY - arm);
+
+                marker.setColor(new Color(225, 60, 60, 245));
+                marker.setStroke(new BasicStroke(mainThickness, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                marker.drawLine(centerX - arm, centerY - arm, centerX + arm, centerY + arm);
+                marker.drawLine(centerX - arm, centerY + arm, centerX + arm, centerY - arm);
+            } finally {
+                marker.dispose();
             }
         }
 
@@ -1670,5 +1905,6 @@ public class PanelMundo extends JPanel {
 
     private record RecentConnection(String username, String timestamp) {}
 
-    private record PreviewGenerationResult(Path outputPath, boolean sinRegiones) {}
+    private record PreviewGenerationResult(Path outputPath, boolean sinRegiones, BufferedImage preview, PreviewOverlayData overlayData) {}
+    private record PreviewOverlayData(int originBlockX, int originBlockZ, int pixelsPerBlock, MCARenderer.WorldPoint spawnPoint) {}
 }

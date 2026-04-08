@@ -6,6 +6,7 @@ import net.querz.mca.MCAUtil;
 import net.querz.nbt.tag.CompoundTag;
 import net.querz.nbt.tag.ListTag;
 import net.querz.nbt.tag.LongArrayTag;
+import net.querz.nbt.tag.StringTag;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -147,6 +148,10 @@ public final class MCARenderer {
         return renderWorld(regionPaths, options, null);
     }
 
+    public RenderedWorld renderWorldWithMetadata(List<Path> regionPaths, RenderOptions options) throws IOException {
+        return renderWorldWithMetadata(regionPaths, options, null);
+    }
+
     /**
      * Variante de mosaico que permite marcar un punto especial del mundo, como el spawn.
      *
@@ -156,6 +161,10 @@ public final class MCARenderer {
      * - y no haya que recalcular coordenadas en la UI.
      */
     public BufferedImage renderWorld(List<Path> regionPaths, RenderOptions options, WorldPoint markerPoint) throws IOException {
+        return renderWorldWithMetadata(regionPaths, options, markerPoint).image();
+    }
+
+    public RenderedWorld renderWorldWithMetadata(List<Path> regionPaths, RenderOptions options, WorldPoint markerPoint) throws IOException {
         if(regionPaths == null || regionPaths.isEmpty()) {
             throw new IllegalArgumentException("No hay regiones para renderizar");
         }
@@ -230,8 +239,10 @@ public final class MCARenderer {
 
         Rectangle cropArea = resolveCropArea(image, normalizedOptions);
         BufferedImage result = image.getSubimage(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+        int originBlockX = minRegionX * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.x, normalizedOptions.pixelsPerBlock());
+        int originBlockZ = minRegionZ * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.y, normalizedOptions.pixelsPerBlock());
         debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
-        return result;
+        return new RenderedWorld(result, originBlockX, originBlockZ, normalizedOptions.pixelsPerBlock());
     }
 
     // Variante interna para decidir si la region se devuelve recortada o con su tamaño completo de 512x512 bloques.
@@ -464,17 +475,20 @@ public final class MCARenderer {
      */
     private void paintRegion(MCAFile mcaFile, BufferedImage image, RegionCoordinates region, RenderOptions options) {
         String[][] blockNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
+        String[][] biomeNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
+        String[][] waterFloorNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         int[][] heights = new int[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
+        int[][] waterDepths = new int[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         int tilesPerSide = (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS);
         IntStream.range(0, tilesPerSide * tilesPerSide)
                 .parallel()
                 .forEach(tileIndex -> {
                     int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
                     int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                    sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, heights);
+                    sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
                 });
 
-        paintRegionFromSamples(image, blockNames, heights, options);
+        paintRegionFromSamples(image, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options);
     }
 
     private void sampleChunkTile(
@@ -484,7 +498,10 @@ public final class MCARenderer {
             int startChunkX,
             int startChunkZ,
             String[][] blockNames,
-            int[][] heights
+            String[][] biomeNames,
+            String[][] waterFloorNames,
+            int[][] heights,
+            int[][] waterDepths
     ) {
         int endChunkX = Math.min(REGION_CHUNK_SIDE, startChunkX + REGION_RENDER_TILE_CHUNKS);
         int endChunkZ = Math.min(REGION_CHUNK_SIDE, startChunkZ + REGION_RENDER_TILE_CHUNKS);
@@ -494,7 +511,7 @@ public final class MCARenderer {
                 if(chunk == null) {
                     continue;
                 }
-                sampleChunk(chunk, localChunkX, localChunkZ, region, options, blockNames, heights);
+                sampleChunk(chunk, localChunkX, localChunkZ, region, options, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
             }
         }
     }
@@ -518,7 +535,10 @@ public final class MCARenderer {
             RegionCoordinates region,
             RenderOptions options,
             String[][] blockNames,
-            int[][] heights
+            String[][] biomeNames,
+            String[][] waterFloorNames,
+            int[][] heights,
+            int[][] waterDepths
     ) {
         int worldChunkX = region.x() * REGION_CHUNK_SIDE + localChunkX;
         int worldChunkZ = region.z() * REGION_CHUNK_SIDE + localChunkZ;
@@ -531,15 +551,20 @@ public final class MCARenderer {
                 int worldBlockZ = worldChunkZ * CHUNK_BLOCK_SIDE + localZ;
                 TopBlockSample sample = findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options);
                 blockNames[regionBlockZ + localZ][regionBlockX + localX] = sample.blockName();
+                biomeNames[regionBlockZ + localZ][regionBlockX + localX] = options.biomeColoring()
+                        ? findBiomeName(chunk, localX, localZ, sample.y(), options)
+                        : null;
+                waterFloorNames[regionBlockZ + localZ][regionBlockX + localX] = sample.waterFloorBlockName();
                 heights[regionBlockZ + localZ][regionBlockX + localX] = sample.isEmpty() ? Integer.MIN_VALUE : sample.y();
+                waterDepths[regionBlockZ + localZ][regionBlockX + localX] = sample.waterDepth();
             }
         }
     }
 
-    private void paintRegionFromSamples(BufferedImage image, String[][] blockNames, int[][] heights, RenderOptions options) {
+    private void paintRegionFromSamples(BufferedImage image, String[][] blockNames, String[][] biomeNames, String[][] waterFloorNames, int[][] heights, int[][] waterDepths, RenderOptions options) {
         for(int blockZ = 0; blockZ < REGION_BLOCK_SIDE; blockZ++) {
             for(int blockX = 0; blockX < REGION_BLOCK_SIDE; blockX++) {
-                int argb = resolveBlockColor(blockNames, heights, blockX, blockZ, options);
+                int argb = resolveBlockColor(blockNames, biomeNames, waterFloorNames, heights, waterDepths, blockX, blockZ, options);
                 paintBlock(image, blockX, blockZ, argb, options.pixelsPerBlock());
             }
         }
@@ -701,7 +726,11 @@ public final class MCARenderer {
                 }
                 continue;
             }
-            return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ);
+            if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
+                WaterFloorSample floorSample = findWaterFloorModernSections(sections, dataVersion, localX, localZ, y - 1, options);
+                return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, floorSample.blockName(), floorSample.depth());
+            }
+            return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, null, 0);
         }
 
         if(diagnostics != null && diagnostics.firstTransparentBlock != null) {
@@ -795,7 +824,11 @@ public final class MCARenderer {
                 }
                 continue;
             }
-            return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ);
+            if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
+                WaterFloorSample floorSample = findWaterFloorLegacy(sections, localX, localZ, y - 1, options);
+                return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, floorSample.blockName(), floorSample.depth());
+            }
+            return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, null, 0);
         }
 
         if(diagnostics != null && diagnostics.firstTransparentBlock != null) {
@@ -823,6 +856,42 @@ public final class MCARenderer {
             }
         }
         return null;
+    }
+
+    private WaterFloorSample findWaterFloorModernSections(ListTag<CompoundTag> sections, int dataVersion, int localX, int localZ, int startY, RenderOptions options) {
+        for(int y = startY; y >= options.minY(); y--) {
+            CompoundTag section = findSectionForY(sections, y);
+            if(section == null) {
+                continue;
+            }
+            String blockName = getModernBlockNameAt(section, localX, y & 15, localZ, dataVersion);
+            if(blockName == null || isWaterBlock(blockName)) {
+                continue;
+            }
+            if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                continue;
+            }
+            return new WaterFloorSample(blockName, Math.max(1, startY - y + 1));
+        }
+        return WaterFloorSample.EMPTY;
+    }
+
+    private WaterFloorSample findWaterFloorLegacy(ListTag<CompoundTag> sections, int localX, int localZ, int startY, RenderOptions options) {
+        for(int y = startY; y >= options.minY(); y--) {
+            CompoundTag section = findSectionForY(sections, y);
+            if(section == null) {
+                continue;
+            }
+            String blockName = getLegacyBlockNameAt(section, localX, y & 15, localZ);
+            if(blockName == null || isWaterBlock(blockName)) {
+                continue;
+            }
+            if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                continue;
+            }
+            return new WaterFloorSample(blockName, Math.max(1, startY - y + 1));
+        }
+        return WaterFloorSample.EMPTY;
     }
 
     /**
@@ -913,6 +982,116 @@ public final class MCARenderer {
         }
         int blockData = data != null && data.length > 0 ? nibbleAt(data, index) : 0;
         return legacyBlockName(blockId, blockData);
+    }
+
+    private String findBiomeName(Chunk chunk, int localX, int localZ, int worldY, RenderOptions options) {
+        if(chunk == null || !options.biomeColoring()) {
+            return null;
+        }
+
+        CompoundTag root = chunk.getHandle();
+        if(root == null) {
+            return null;
+        }
+
+        CompoundTag legacyLevel = root.getCompoundTag("Level");
+        if(legacyLevel != null) {
+            ListTag<CompoundTag> sections = getLegacyLevelSections(legacyLevel);
+            if(isModernLevelSections(sections)) {
+                return getModernBiomeName(sections, root.getInt("DataVersion"), localX, worldY, localZ);
+            }
+            return getLegacyBiomeName(legacyLevel, localX, localZ);
+        }
+
+        ListTag<?> sectionsTag = root.getListTag("sections");
+        if(sectionsTag == null || sectionsTag.size() == 0) {
+            return null;
+        }
+        return getModernBiomeName(sectionsTag.asCompoundTagList(), root.getInt("DataVersion"), localX, worldY, localZ);
+    }
+
+    private String getLegacyBiomeName(CompoundTag level, int localX, int localZ) {
+        if(level == null) {
+            return null;
+        }
+        byte[] biomes = level.getByteArray("Biomes");
+        if(biomes == null || biomes.length < 256) {
+            return null;
+        }
+        int index = (localZ << 4) | localX;
+        int biomeId = biomes[index] & 0xFF;
+        return legacyBiomeName(biomeId);
+    }
+
+    private String getModernBiomeName(ListTag<CompoundTag> sections, int dataVersion, int localX, int worldY, int localZ) {
+        CompoundTag section = findSectionForY(sections, worldY);
+        if(section == null) {
+            return null;
+        }
+
+        CompoundTag biomesTag = section.getCompoundTag("biomes");
+        if(biomesTag != null) {
+            return getBiomeNameFromPackedStates(
+                    biomesTag.getListTag("palette"),
+                    biomesTag.getLongArrayTag("data"),
+                    localX >> 2,
+                    (worldY & 15) >> 2,
+                    localZ >> 2,
+                    dataVersion
+            );
+        }
+
+        return getBiomeNameFromPackedStates(
+                section.getListTag("Biomes"),
+                section.getLongArrayTag("BiomeStates"),
+                localX >> 2,
+                (worldY & 15) >> 2,
+                localZ >> 2,
+                dataVersion
+        );
+    }
+
+    private String getBiomeNameFromPackedStates(
+            ListTag<?> paletteTag,
+            LongArrayTag dataTag,
+            int localX,
+            int localY,
+            int localZ,
+            int dataVersion
+    ) {
+        if(paletteTag == null || paletteTag.size() == 0) {
+            return null;
+        }
+
+        ListTag<?> palette = paletteTag;
+        if(palette.size() == 1) {
+            return biomePaletteEntryName(palette.get(0));
+        }
+        if(dataTag == null) {
+            return biomePaletteEntryName(palette.get(0));
+        }
+
+        long[] data = dataTag.getValue();
+        int bitsPerBiome = Math.max(1, ceilLog2(palette.size()));
+        int paletteIndex = readPackedIndex(data, biomeIndex(localX, localY, localZ), bitsPerBiome, dataVersion);
+        if(paletteIndex < 0 || paletteIndex >= palette.size()) {
+            return null;
+        }
+        return biomePaletteEntryName(palette.get(paletteIndex));
+    }
+
+    private String biomePaletteEntryName(Object entry) {
+        if(entry instanceof CompoundTag compound) {
+            return compound.getString("Name");
+        }
+        if(entry instanceof StringTag stringTag) {
+            return stringTag.getValue();
+        }
+        return entry == null ? null : entry.toString();
+    }
+
+    private int biomeIndex(int localX, int localY, int localZ) {
+        return (localY << 4) | (localZ << 2) | localX;
     }
 
     /**
@@ -1038,6 +1217,34 @@ public final class MCARenderer {
         };
     }
 
+    private String legacyBiomeName(int biomeId) {
+        return switch (biomeId) {
+            case 2 -> "minecraft:desert";
+            case 4 -> "minecraft:forest";
+            case 5 -> "minecraft:taiga";
+            case 6 -> "minecraft:swamp";
+            case 12 -> "minecraft:snowy_plains";
+            case 21 -> "minecraft:jungle";
+            case 23 -> "minecraft:sparse_jungle";
+            case 27 -> "minecraft:birch_forest";
+            case 29 -> "minecraft:dark_forest";
+            case 35 -> "minecraft:savanna";
+            case 37 -> "minecraft:badlands";
+            case 45 -> "minecraft:warm_ocean";
+            case 46 -> "minecraft:lukewarm_ocean";
+            case 47 -> "minecraft:deep_lukewarm_ocean";
+            case 48 -> "minecraft:ocean";
+            case 49 -> "minecraft:deep_ocean";
+            case 50 -> "minecraft:cold_ocean";
+            case 51 -> "minecraft:deep_cold_ocean";
+            case 52 -> "minecraft:frozen_ocean";
+            case 53 -> "minecraft:deep_frozen_ocean";
+            case 7, 11 -> "minecraft:river";
+            case 1 -> "minecraft:plains";
+            default -> "minecraft:plains";
+        };
+    }
+
     // Subtabla especifica para lana legacy coloreada.
     private String legacyWoolName(int blockData) {
         return switch (blockData & 15) {
@@ -1068,11 +1275,18 @@ public final class MCARenderer {
      * Si el sombreado por altura esta activo, se aplica una pequena variacion para
      * que la imagen no quede completamente plana.
      */
-    private int resolveBlockColor(String[][] blockNames, int[][] heights, int blockX, int blockZ, RenderOptions options) {
+    private int resolveBlockColor(String[][] blockNames, String[][] biomeNames, String[][] waterFloorNames, int[][] heights, int[][] waterDepths, int blockX, int blockZ, RenderOptions options) {
         String blockName = blockNames[blockZ][blockX];
         Color base = resolveBaseColor(blockName);
         if(base == null) {
             return options.defaultArgb();
+        }
+        String biomeName = biomeNames == null ? null : biomeNames[blockZ][blockX];
+        if(options.biomeColoring()) {
+            base = applyBiomeTint(base, blockName, biomeName);
+        }
+        if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
+            base = resolveWaterSurfaceColor(base, waterFloorNames[blockZ][blockX], waterDepths[blockZ][blockX]);
         }
         if(!options.shadeByHeight()) {
             return base.getRGB();
@@ -1119,12 +1333,100 @@ public final class MCARenderer {
         return applyShade(base, shade).getRGB();
     }
 
+    private Color applyBiomeTint(Color base, String blockName, String biomeName) {
+        if(blockName == null || biomeName == null || biomeName.isBlank()) {
+            return base;
+        }
+
+        String block = blockName.toLowerCase(Locale.ROOT);
+        String biome = biomeName.toLowerCase(Locale.ROOT);
+
+        if(block.contains("cherry_leaves")) {
+            if(biome.contains("cherry_grove")) {
+                return blendColors(base, new Color(236, 170, 196), 0.78d);
+            }
+            return blendColors(base, new Color(218, 150, 176), 0.62d);
+        }
+
+        if(block.contains("grass") || block.contains("moss")) {
+            return blendColors(base, biomeGrassTint(biome), 0.46d);
+        }
+        if(block.contains("leaves") || block.contains("azalea")) {
+            return blendColors(base, biomeFoliageTint(biome), 0.52d);
+        }
+        if(isWaterBlock(block)) {
+            return blendColors(base, biomeWaterTint(biome), 0.40d);
+        }
+        return base;
+    }
+
+    private Color biomeGrassTint(String biome) {
+        if(biome.contains("cherry_grove")) return new Color(131, 184, 108);
+        if(biome.contains("mangrove_swamp")) return new Color(98, 122, 67);
+        if(biome.contains("swamp")) return new Color(108, 128, 78);
+        if(biome.contains("jungle")) return new Color(86, 176, 72);
+        if(biome.contains("bamboo_jungle")) return new Color(98, 184, 84);
+        if(biome.contains("savanna")) return new Color(183, 184, 90);
+        if(biome.contains("badlands")) return new Color(146, 172, 78);
+        if(biome.contains("meadow")) return new Color(124, 196, 110);
+        if(biome.contains("grove")) return new Color(122, 170, 108);
+        if(biome.contains("snowy")) return new Color(128, 170, 126);
+        if(biome.contains("taiga")) return new Color(102, 150, 96);
+        if(biome.contains("dark_forest")) return new Color(76, 118, 58);
+        if(biome.contains("forest")) return new Color(92, 160, 76);
+        return new Color(104, 176, 84);
+    }
+
+    private Color biomeFoliageTint(String biome) {
+        if(biome.contains("cherry_grove")) return new Color(236, 170, 196);
+        if(biome.contains("mangrove_swamp")) return new Color(92, 118, 70);
+        if(biome.contains("swamp")) return new Color(102, 118, 78);
+        if(biome.contains("jungle")) return new Color(64, 146, 62);
+        if(biome.contains("bamboo_jungle")) return new Color(76, 154, 68);
+        if(biome.contains("savanna")) return new Color(164, 170, 88);
+        if(biome.contains("badlands")) return new Color(132, 158, 84);
+        if(biome.contains("snowy")) return new Color(110, 146, 120);
+        if(biome.contains("taiga")) return new Color(84, 124, 86);
+        if(biome.contains("dark_forest")) return new Color(58, 96, 54);
+        return new Color(82, 146, 74);
+    }
+
+    private Color biomeWaterTint(String biome) {
+        if(biome.contains("swamp") || biome.contains("mangrove_swamp")) return new Color(76, 92, 118);
+        if(biome.contains("warm_ocean") || biome.contains("lukewarm_ocean")) return new Color(78, 156, 198);
+        if(biome.contains("cold_ocean") || biome.contains("frozen_ocean")) return new Color(72, 112, 188);
+        if(biome.contains("river")) return new Color(74, 126, 198);
+        return new Color(64, 132, 210);
+    }
+
+    private Color resolveWaterSurfaceColor(Color waterBase, String floorBlockName, int waterDepth) {
+        if(floorBlockName == null || floorBlockName.isBlank() || waterDepth <= 0) {
+            return waterBase;
+        }
+
+        Color floorColor = resolveBaseColor(floorBlockName);
+        if(floorColor == null) {
+            return waterBase;
+        }
+
+        double normalizedDepth = Math.min(1.0d, waterDepth / 8.0d);
+        double floorWeight = 0.58d - (normalizedDepth * 0.34d);
+        floorWeight = Math.max(0.18d, Math.min(0.58d, floorWeight));
+        Color blueTint = new Color(88, 146, 223);
+        Color tintedFloor = blendColors(floorColor, blueTint, 0.42d);
+        return blendColors(waterBase, tintedFloor, floorWeight);
+    }
+
     private int sampleHeight(int[][] heights, int x, int z, int fallback) {
         if(heights == null || z < 0 || z >= heights.length || x < 0 || x >= heights[z].length) {
             return fallback;
         }
         int value = heights[z][x];
         return value == Integer.MIN_VALUE ? fallback : value;
+    }
+
+    private boolean isWaterBlock(String blockName) {
+        return blockName != null && blockName.contains("water");
     }
 
     /**
@@ -1159,6 +1461,15 @@ public final class MCARenderer {
         if(name.contains("glass")) return new Color(200, 220, 235);
         if(name.contains("wool") || name.contains("concrete") || name.contains("concrete_powder")) return colorForDyedBlock(name);
         return new Color(95, 95, 95);
+    }
+
+    private Color blendColors(Color base, Color overlay, double overlayWeight) {
+        double t = Math.max(0d, Math.min(1d, overlayWeight));
+        int r = (int) Math.round(base.getRed() * (1d - t) + overlay.getRed() * t);
+        int g = (int) Math.round(base.getGreen() * (1d - t) + overlay.getGreen() * t);
+        int b = (int) Math.round(base.getBlue() * (1d - t) + overlay.getBlue() * t);
+        int a = (int) Math.round(base.getAlpha() * (1d - t) + overlay.getAlpha() * t);
+        return new Color(clampColor(r), clampColor(g), clampColor(b), clampColor(a));
     }
 
     // Paleta de bloques teñidos.
@@ -1387,15 +1698,19 @@ public final class MCARenderer {
         private final int minY;
         private final int maxY;
         private final boolean shadeByHeight;
+        private final boolean waterSubsurfaceShading;
+        private final boolean biomeColoring;
         private final boolean ignoreTransparentBlocks;
         private final boolean preferSquareCrop;
         private final int defaultArgb;
 
-        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb) {
+        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean waterSubsurfaceShading, boolean biomeColoring, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb) {
             this.pixelsPerBlock = pixelsPerBlock;
             this.minY = minY;
             this.maxY = maxY;
             this.shadeByHeight = shadeByHeight;
+            this.waterSubsurfaceShading = waterSubsurfaceShading;
+            this.biomeColoring = biomeColoring;
             this.ignoreTransparentBlocks = ignoreTransparentBlocks;
             this.preferSquareCrop = preferSquareCrop;
             this.defaultArgb = defaultArgb;
@@ -1403,36 +1718,44 @@ public final class MCARenderer {
 
         // Valores por defecto pensados para mundos modernos, pero validos tambien para muchos casos legacy.
         public static RenderOptions defaults() {
-            return new RenderOptions(1, -64, 319, true, true, true, DEFAULT_ARGB);
+            return new RenderOptions(1, -64, 319, true, false, false, true, true, DEFAULT_ARGB);
         }
 
         // Cambia la escala visual: 1 bloque = N pixeles.
         public RenderOptions withPixelsPerBlock(int pixelsPerBlock) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Cambia el rango vertical explorado al buscar la superficie.
         public RenderOptions withYRange(int minY, int maxY) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Activa o desactiva el sombreado por altura.
         public RenderOptions withShadeByHeight(boolean shadeByHeight) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+        }
+
+        public RenderOptions withWaterSubsurfaceShading(boolean waterSubsurfaceShading) {
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+        }
+
+        public RenderOptions withBiomeColoring(boolean biomeColoring) {
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Permite decidir si se ignoran bloques de detalle/transparencia.
         public RenderOptions withIgnoreTransparentBlocks(boolean ignoreTransparentBlocks) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         public RenderOptions withPreferSquareCrop(boolean preferSquareCrop) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Permite cambiar el color de fondo.
         public RenderOptions withDefaultArgb(int defaultArgb) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Asegura que las opciones tengan valores coherentes antes de usarse internamente.
@@ -1440,7 +1763,7 @@ public final class MCARenderer {
             int normalizedPixels = Math.max(1, pixelsPerBlock);
             int normalizedMinY = minY;
             int normalizedMaxY = Math.max(normalizedMinY, maxY);
-            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
+            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb);
         }
 
         // Getters simples para leer las opciones desde el renderer.
@@ -1448,6 +1771,8 @@ public final class MCARenderer {
         public int minY() { return minY; }
         public int maxY() { return maxY; }
         public boolean shadeByHeight() { return shadeByHeight; }
+        public boolean waterSubsurfaceShading() { return waterSubsurfaceShading; }
+        public boolean biomeColoring() { return biomeColoring; }
         public boolean ignoreTransparentBlocks() { return ignoreTransparentBlocks; }
         public boolean preferSquareCrop() { return preferSquareCrop; }
         public int defaultArgb() { return defaultArgb; }
@@ -1455,6 +1780,8 @@ public final class MCARenderer {
 
     // Coordenadas de una region dentro del mundo. Ejemplo: r.1.-2.mca -> x=1, z=-2.
     private record RegionCoordinates(int x, int z) {}
+
+    public record RenderedWorld(BufferedImage image, int originBlockX, int originBlockZ, int pixelsPerBlock) {}
 
     // Punto absoluto del mundo en el plano X/Z.
     public record WorldPoint(int x, int z) {}
@@ -1470,13 +1797,17 @@ public final class MCARenderer {
      * porque mas tarde el renderer puede necesitar contexto adicional al colorear
      * o depurar una columna concreta del mundo.
      */
-    private record TopBlockSample(String blockName, int y, int worldBlockX, int worldBlockZ) {
-        private static final TopBlockSample EMPTY = new TopBlockSample(null, 0, 0, 0);
+    private record TopBlockSample(String blockName, int y, int worldBlockX, int worldBlockZ, String waterFloorBlockName, int waterDepth) {
+        private static final TopBlockSample EMPTY = new TopBlockSample(null, 0, 0, 0, null, 0);
 
         // Conveniencia: una muestra vacia significa "no se encontro bloque visible".
         private boolean isEmpty() {
             return blockName == null || blockName.isBlank();
         }
+    }
+
+    private record WaterFloorSample(String blockName, int depth) {
+        private static final WaterFloorSample EMPTY = new WaterFloorSample(null, 0);
     }
 
     private static void debug(String format, Object... args) {
