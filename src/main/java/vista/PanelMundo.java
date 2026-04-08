@@ -39,6 +39,8 @@ public class PanelMundo extends JPanel {
     private final JButton exportarButton = new JButton("Exportar mundo");
     private final JButton generarButton = new JButton("Generar nuevo mundo");
     private final JButton generarPreviewButton = new JButton("Generar preview");
+    private final JCheckBox senalarSpawnCheckBox = new JCheckBox("Señalar spawn", true);
+    private final JCheckBox generarTodoCheckBox = new JCheckBox("Generar todo", false);
 
     private World mundoActivoActual;
     private final Runnable onWorldChanged;
@@ -100,6 +102,10 @@ public class PanelMundo extends JPanel {
         styleActionButton(generarButton);
         styleActionButton(generarPreviewButton);
         applyDefaultPrimaryButtonStyle();
+        senalarSpawnCheckBox.setOpaque(false);
+        senalarSpawnCheckBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+        generarTodoCheckBox.setOpaque(false);
+        generarTodoCheckBox.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         mundosCombo.addActionListener(e -> {
             if(actualizandoComboMundos) return;
@@ -368,6 +374,8 @@ public class PanelMundo extends JPanel {
         exportarButton.setEnabled(hayMundos);
         generarButton.setEnabled(hayServidor);
         generarPreviewButton.setEnabled(hayMundos);
+        senalarSpawnCheckBox.setEnabled(hayMundos);
+        generarTodoCheckBox.setEnabled(hayMundos);
         updateUseWorldButtonState();
     }
 
@@ -382,8 +390,9 @@ public class PanelMundo extends JPanel {
         }
 
         List<Path> regionesPreview;
+        boolean generarTodo = generarTodoCheckBox.isSelected();
         try {
-            regionesPreview = encontrarRegionesPreview(mundo);
+            regionesPreview = encontrarRegionesPreview(mundo, generarTodo);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
                     "No se han podido localizar regiones .mca para el mundo seleccionado: " + ex.getMessage(),
@@ -407,7 +416,9 @@ public class PanelMundo extends JPanel {
         MCARenderer renderer = new MCARenderer();
         // Leemos el spawn una sola vez antes de lanzar el worker para que la preview
         // quede ligada al mundo actualmente seleccionado y no a un cambio posterior del combo.
-        WorldDataReader.SpawnPoint spawnPoint = WorldDataReader.getSpawnPoint(mundo);
+        WorldDataReader.SpawnPoint spawnPoint = senalarSpawnCheckBox.isSelected()
+                ? WorldDataReader.getSpawnPoint(mundo)
+                : null;
         SwingWorker<Path, Void> worker = new SwingWorker<>() {
             @Override
             protected Path doInBackground() throws Exception {
@@ -448,7 +459,7 @@ public class PanelMundo extends JPanel {
         worker.execute();
     }
 
-    private List<Path> encontrarRegionesPreview(World mundo) throws Exception {
+    private List<Path> encontrarRegionesPreview(World mundo, boolean generarTodo) throws Exception {
         Path worldDir = Path.of(mundo.getWorldDir());
         Path regionDir = worldDir.resolve("region");
         if(!Files.isDirectory(regionDir)) {
@@ -472,6 +483,10 @@ public class PanelMundo extends JPanel {
                     .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
                     .toList();
 
+            if(generarTodo) {
+                return regiones;
+            }
+
             List<Path> visibles = new java.util.ArrayList<>();
             for(Path region : regiones) {
                 if(renderer.hasVisibleBlocks(region)) {
@@ -493,6 +508,12 @@ public class PanelMundo extends JPanel {
 
         previewImageLabel.setBorder(AppTheme.createRoundedBorder(new Insets(12, 12, 12, 12), 1f));
         panel.add(previewImageLabel, BorderLayout.CENTER);
+
+        JPanel opcionesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        opcionesPanel.setOpaque(false);
+        opcionesPanel.add(senalarSpawnCheckBox);
+        opcionesPanel.add(generarTodoCheckBox);
+        panel.add(opcionesPanel, BorderLayout.SOUTH);
         return panel;
     }
 
