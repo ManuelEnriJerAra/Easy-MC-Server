@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Fichero: GestorMundos.java
  *
  * Autor: Manuel Enrique Jeronimo Aragon

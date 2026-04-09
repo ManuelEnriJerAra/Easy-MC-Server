@@ -1,4 +1,4 @@
-﻿package vista;
+package vista;
 
 import controlador.GestorMundos;
 import controlador.GestorServidores;
