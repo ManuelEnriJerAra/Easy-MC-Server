@@ -158,7 +158,12 @@ public class PanelConfigServidor extends JPanel {
 
         java.util.List<String> keys = new ArrayList<>();
         for(Object k : props.keySet()){
-            if(k != null) keys.add(String.valueOf(k));
+            if(k != null){
+                String key = String.valueOf(k);
+                if(!isManagedInWorldsPanel(key)){
+                    keys.add(key);
+                }
+            }
         }
         Collections.sort(keys);
 
@@ -1066,6 +1071,16 @@ public class PanelConfigServidor extends JPanel {
                  "broadcast-rcon-to-ops", "enable-status", "enable-command-block", "enable-jmx-monitoring", "bug-report-link" -> SECTION_MESSAGES_ADVANCED;
 
             default -> SECTION_OTHER;
+        };
+    }
+
+    private boolean isManagedInWorldsPanel(String key){
+        if(key == null) return false;
+        return switch(key.toLowerCase(Locale.ROOT)){
+            case "level-name", "level-seed", "level-type", "generator-settings", "generate-structures",
+                 "allow-nether", "spawn-protection", "max-world-size", "initial-enabled-packs",
+                 "initial-disabled-packs", "region-file-compression" -> true;
+            default -> false;
         };
     }
 

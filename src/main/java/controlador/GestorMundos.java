@@ -449,11 +449,15 @@ public final class GestorMundos {
         metadata.setProperty("display-name", settings.getNombre());
         metadata.setProperty("level-seed", Objects.toString(settings.getSemilla(), ""));
         metadata.setProperty("level-type", settings.getTipoMundo());
+        metadata.setProperty("generator-settings", Objects.toString(settings.getGeneratorSettings(), ""));
         metadata.setProperty("generate-structures", String.valueOf(settings.isGenerarEstructuras()));
         metadata.setProperty("hardcore", String.valueOf(settings.isHardcore()));
         metadata.setProperty("gamemode", settings.getGamemode());
         metadata.setProperty("difficulty", settings.getDificultad());
         metadata.setProperty("allow-nether", String.valueOf(settings.isPermitirNether()));
+        metadata.setProperty("initial-enabled-packs", Objects.toString(settings.getInitialEnabledPacks(), ""));
+        metadata.setProperty("initial-disabled-packs", Objects.toString(settings.getInitialDisabledPacks(), ""));
+        metadata.setProperty("region-file-compression", Objects.toString(settings.getRegionFileCompression(), ""));
 
         try(FileOutputStream fos = new FileOutputStream(mundoDir.resolve(META_ARCHIVO).toFile())) {
             metadata.store(fos, "Easy MC Server managed world metadata");
@@ -472,11 +476,15 @@ public final class GestorMundos {
 
         copiarPropiedad(metadata, props, "level-seed");
         copiarPropiedad(metadata, props, "level-type");
+        copiarPropiedad(metadata, props, "generator-settings");
         copiarPropiedad(metadata, props, "generate-structures");
         copiarPropiedad(metadata, props, "hardcore");
         copiarPropiedad(metadata, props, "gamemode");
         copiarPropiedad(metadata, props, "difficulty");
         copiarPropiedad(metadata, props, "allow-nether");
+        copiarPropiedad(metadata, props, "initial-enabled-packs");
+        copiarPropiedad(metadata, props, "initial-disabled-packs");
+        copiarPropiedad(metadata, props, "region-file-compression");
     }
 
     // Carga un mundo desde su carpeta usando solo su ruta completa y el nombre de la carpeta.
@@ -555,31 +563,43 @@ public final class GestorMundos {
         private final String nombre;
         private final String semilla;
         private final String tipoMundo;
+        private final String generatorSettings;
         private final boolean generarEstructuras;
         private final boolean hardcore;
         private final String gamemode;
         private final String dificultad;
         private final boolean permitirNether;
+        private final String initialEnabledPacks;
+        private final String initialDisabledPacks;
+        private final String regionFileCompression;
         private final boolean activarAlCrear;
 
         // Construye un conjunto inmutable de opciones para preparar un nuevo mundo.
         public WorldGenerationSettings(String nombre,
                                        String semilla,
                                        String tipoMundo,
+                                       String generatorSettings,
                                        boolean generarEstructuras,
                                        boolean hardcore,
                                        String gamemode,
                                        String dificultad,
                                        boolean permitirNether,
+                                       String initialEnabledPacks,
+                                       String initialDisabledPacks,
+                                       String regionFileCompression,
                                        boolean activarAlCrear) {
             this.nombre = nombre;
             this.semilla = semilla;
             this.tipoMundo = tipoMundo;
+            this.generatorSettings = generatorSettings;
             this.generarEstructuras = generarEstructuras;
             this.hardcore = hardcore;
             this.gamemode = gamemode;
             this.dificultad = dificultad;
             this.permitirNether = permitirNether;
+            this.initialEnabledPacks = initialEnabledPacks;
+            this.initialDisabledPacks = initialDisabledPacks;
+            this.regionFileCompression = regionFileCompression;
             this.activarAlCrear = activarAlCrear;
         }
 
@@ -596,6 +616,11 @@ public final class GestorMundos {
         // Devuelve el tipo de mundo configurado.
         public String getTipoMundo() {
             return tipoMundo;
+        }
+
+        // Devuelve los parametros avanzados del generador del mundo.
+        public String getGeneratorSettings() {
+            return generatorSettings;
         }
 
         // Indica si el mundo debe generarse con estructuras.
@@ -621,6 +646,21 @@ public final class GestorMundos {
         // Indica si el mundo permitira acceder al Nether.
         public boolean isPermitirNether() {
             return permitirNether;
+        }
+
+        // Devuelve los data packs activados en la creacion inicial del mundo.
+        public String getInitialEnabledPacks() {
+            return initialEnabledPacks;
+        }
+
+        // Devuelve los data packs desactivados en la creacion inicial del mundo.
+        public String getInitialDisabledPacks() {
+            return initialDisabledPacks;
+        }
+
+        // Devuelve el metodo de compresion de regiones asociado al mundo.
+        public String getRegionFileCompression() {
+            return regionFileCompression;
         }
 
         // Indica si el mundo debe quedar seleccionado justo despues de crearlo.

@@ -19,14 +19,24 @@ import tools.jackson.databind.ObjectMapper;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.filechooser.FileSystemView;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
+import javax.swing.text.NavigationFilter;
+import javax.swing.text.Position;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -52,6 +62,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -61,6 +72,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class PanelMundo extends JPanel {
+    private static final String[] REGION_FILE_COMPRESSION_OPTIONS = {"deflate", "lz4", "none"};
     private static final int CONNECTION_HEAD_SIZE = 24;
     private static final int PREVIEW_PLAYER_HEAD_SIZE = 24;
     private static final Pattern JOIN = Pattern.compile("([^\\s]+) joined the game");
@@ -74,6 +86,7 @@ public class PanelMundo extends JPanel {
     private static final Map<Path, RegionVisibilityCacheEntry> REGION_VISIBILITY_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, ImageIcon> PLAYER_HEAD_CACHE = new ConcurrentHashMap<>();
     private static final Set<String> PLAYER_HEADS_LOADING = ConcurrentHashMap.newKeySet();
+    private static final Set<PanelMundo> INSTANCIAS_ACTIVAS = java.util.Collections.newSetFromMap(new WeakHashMap<>());
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final GestorServidores gestorServidores;
@@ -90,6 +103,10 @@ public class PanelMundo extends JPanel {
     private final JLabel lastPlayedValueLabel = new JLabel("-");
     private final JLabel versionValueLabel = new JLabel("-");
     private final JLabel tipoMundoValueLabel = new JLabel("-");
+    private final JLabel generatorSettingsValueLabel = new JLabel("-");
+    private final JLabel estructurasValueLabel = new JLabel("-");
+    private final JLabel initialEnabledPacksValueLabel = new JLabel("-");
+    private final JLabel initialDisabledPacksValueLabel = new JLabel("-");
     private final JLabel previewRenderStatusLabel = new JLabel();
     private final JComboBox<World> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
@@ -98,7 +115,12 @@ public class PanelMundo extends JPanel {
     private final JButton exportarButton = new JButton("Exportar mundo");
     private final JButton generarButton = new JButton("Generar nuevo");
     private final JButton generarPreviewButton = new JButton("Generar preview");
+    private final JButton guardarConfiguracionMundoButton = new JButton("Guardar ajustes del mundo");
     private final JButton previewMenuButton = new JButton("\u2630");
+    private final JCheckBox allowNetherCheckBox = new JCheckBox("Permitir Nether");
+    private final JSpinner spawnProtectionSpinner = new JSpinner(new SpinnerNumberModel(16, 0, Integer.MAX_VALUE, 1));
+    private final JSpinner maxWorldSizeSpinner = new JSpinner(new SpinnerNumberModel(29999984, 1, Integer.MAX_VALUE, 1));
+    private final JComboBox<String> regionCompressionCombo = new JComboBox<>(REGION_FILE_COMPRESSION_OPTIONS);
     private JDialog previewOptionsDialog;
     private JPanel previewOptionsPanel;
     private final JCheckBox sombreadoMenuItem = new JCheckBox("Sombreado", true);
@@ -138,28 +160,39 @@ public class PanelMundo extends JPanel {
     private boolean mostrarJugadoresEnPreview = false;
     private boolean limitesChunksEnPreview = false;
     private boolean usarTodoEnPreview = false;
-    private int limiteMaximoRenderPreview = 512;
+    private int limiteMaximoRenderPreview = 256;
     private String centroRenderPreviewId = "spawn";
-    private boolean previewGenerationInProgress = false;
-    private SwingWorker<PreviewGenerationResult, Void> previewGenerationWorker;
+    private static boolean previewGenerationInProgress = false;
+    private static SwingWorker<PreviewGenerationResult, Void> previewGenerationWorker;
     private final AtomicLong previewGenerationSequence = new AtomicLong();
     private boolean previewDisponibleAntesDeGenerar = false;
-    private String previewGenerationServerId;
-    private String previewGenerationServerName;
-    private String previewGenerationWorldDir;
-    private String previewGenerationWorldName;
+    private static String previewGenerationServerId;
+    private static String previewGenerationServerName;
+    private static String previewGenerationWorldDir;
+    private static String previewGenerationWorldName;
+    private boolean updatingWorldSettingsControls = false;
+    private boolean persistedAllowNether = true;
+    private int persistedSpawnProtection = 16;
+    private int persistedMaxWorldSize = 29999984;
+    private String persistedRegionCompression = "deflate";
 
     PanelMundo(GestorServidores gestorServidores, Runnable onWorldChanged) {
         this.gestorServidores = gestorServidores;
         this.onWorldChanged = onWorldChanged;
         setLayout(new BorderLayout());
         setOpaque(false);
+        INSTANCIAS_ACTIVAS.add(this);
+
+        TitledCardPanel section = new TitledCardPanel("Mundos");
+        section.setBorder(BorderFactory.createEmptyBorder());
+        add(section, BorderLayout.CENTER);
 
         styleActionButton(refrescarButton);
         styleActionButton(importarButton);
         styleActionButton(exportarButton);
         styleActionButton(generarButton);
         styleActionButton(generarPreviewButton);
+        styleActionButton(guardarConfiguracionMundoButton);
         stylePreviewOverlayButton(generarPreviewButton);
         stylePreviewMenuButton(previewMenuButton);
         applyDefaultPrimaryButtonStyle();
@@ -174,11 +207,16 @@ public class PanelMundo extends JPanel {
         styleInfoLabel(lastPlayedValueLabel);
         styleInfoLabel(versionValueLabel);
         styleInfoLabel(tipoMundoValueLabel);
+        styleInfoLabel(generatorSettingsValueLabel);
+        styleInfoLabel(estructurasValueLabel);
+        styleInfoLabel(initialEnabledPacksValueLabel);
+        styleInfoLabel(initialDisabledPacksValueLabel);
         styleInfoLabel(pesoMundoValueLabel);
         styleInfoLabel(pesoStatsSavesValueLabel);
         styleInfoLabel(pesoTotalValueLabel);
         stylePreviewStatusLabel(previewRenderStatusLabel);
         instalarInteraccionSeed();
+        configurarControlesAjustesMundo();
 
         conexionesPanel.setOpaque(false);
         conexionesPanel.setLayout(new BoxLayout(conexionesPanel, BoxLayout.Y_AXIS));
@@ -203,6 +241,7 @@ public class PanelMundo extends JPanel {
         });
         generarButton.addActionListener(e -> abrirDialogoNuevoMundo());
         generarPreviewButton.addActionListener(e -> generarPreviewMundoSeleccionado());
+        guardarConfiguracionMundoButton.addActionListener(e -> guardarConfiguracionMundo());
         instalarMenuOpcionesPreview();
 
         JPanel body = new JPanel();
@@ -211,11 +250,12 @@ public class PanelMundo extends JPanel {
         body.setBorder(BorderFactory.createEmptyBorder());
         body.add(crearTarjetaPrincipal());
         body.add(Box.createVerticalStrut(8));
-        body.add(crearTarjetasInferiores());
+        body.add(crearFilaInferior());
 
         add(body, BorderLayout.CENTER);
 
         refrescarDatos();
+        sincronizarEstadoRenderCompartido();
     }
 
     private JPanel crearTarjetaPrincipal() {
@@ -254,6 +294,12 @@ public class PanelMundo extends JPanel {
         infoPanel.add(crearSeedRow());
         infoPanel.add(Box.createVerticalStrut(2));
         infoPanel.add(crearInfoRow("Tipo:", tipoMundoValueLabel));
+        infoPanel.add(Box.createVerticalStrut(8));
+        infoPanel.add(crearInfoRow("Peso mundo:", pesoMundoValueLabel));
+        infoPanel.add(Box.createVerticalStrut(2));
+        infoPanel.add(crearInfoRow("Peso stats y saves:", pesoStatsSavesValueLabel));
+        infoPanel.add(Box.createVerticalStrut(2));
+        infoPanel.add(crearInfoRow("Peso total:", pesoTotalValueLabel));
 
         JPanel accionesPanel = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 2));
         accionesPanel.setOpaque(false);
@@ -263,22 +309,46 @@ public class PanelMundo extends JPanel {
         accionesPanel.add(importarButton);
         accionesPanel.add(exportarButton);
 
-        izquierda.add(titulo);
-        izquierda.add(Box.createVerticalStrut(6));
-        izquierda.add(selectorPanel);
-        izquierda.add(Box.createVerticalStrut(6));
-        izquierda.add(infoPanel);
-        izquierda.add(Box.createVerticalStrut(6));
-        izquierda.add(accionesPanel);
+        JPanel contenidoIzquierdo = new JPanel();
+        contenidoIzquierdo.setOpaque(false);
+        contenidoIzquierdo.setLayout(new BoxLayout(contenidoIzquierdo, BoxLayout.Y_AXIS));
+        contenidoIzquierdo.add(titulo);
+        contenidoIzquierdo.add(Box.createVerticalStrut(6));
+        contenidoIzquierdo.add(selectorPanel);
+        contenidoIzquierdo.add(Box.createVerticalStrut(6));
+        contenidoIzquierdo.add(infoPanel);
 
-        izquierdaWrap.add(izquierda, BorderLayout.NORTH);
+        izquierda.setLayout(new BorderLayout(0, 8));
+        izquierda.add(contenidoIzquierdo, BorderLayout.NORTH);
+        izquierda.add(accionesPanel, BorderLayout.SOUTH);
+
+        izquierdaWrap.add(izquierda, BorderLayout.CENTER);
         card.add(izquierdaWrap, BorderLayout.CENTER);
 
         JPanel previewWrap = new JPanel(new BorderLayout());
         previewWrap.setOpaque(false);
         previewWrap.add(crearPanelPreview(), BorderLayout.NORTH);
         card.add(previewWrap, BorderLayout.EAST);
+        ajustarAlturaTarjetaPrincipal(card);
         return card;
+    }
+
+    private void ajustarAlturaTarjetaPrincipal(JPanel card) {
+        if (card == null) {
+            return;
+        }
+        int previewHeight = Math.max(320, previewImageLabel.getPreferredSize().height);
+        int verticalInsets = 24; // insets de la tarjeta principal (12 arriba + 12 abajo)
+        int targetHeight = previewHeight + verticalInsets;
+        Dimension preferredSize = card.getPreferredSize();
+        if (preferredSize == null) {
+            preferredSize = new Dimension(0, targetHeight);
+        } else {
+            preferredSize = new Dimension(preferredSize.width, targetHeight);
+        }
+        card.setPreferredSize(preferredSize);
+        card.setMinimumSize(new Dimension(0, targetHeight));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, targetHeight));
     }
 
     private JPanel crearSeedRow() {
@@ -297,6 +367,8 @@ public class PanelMundo extends JPanel {
 
         panel.add(tituloLabel, BorderLayout.WEST);
         panel.add(valorLabel, BorderLayout.CENTER);
+        Dimension preferredSize = panel.getPreferredSize();
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
         return panel;
     }
 
@@ -307,32 +379,100 @@ public class PanelMundo extends JPanel {
         return titulo;
     }
 
-    private JPanel crearTarjetasInferiores() {
-        JPanel panel = new JPanel(new GridLayout(1, 2, 12, 0));
+    private JPanel crearFilaInferior() {
+        JPanel panel = new JPanel(new GridBagLayout());
         panel.setOpaque(false);
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        panel.add(crearTarjetaDatos());
-        panel.add(crearTarjetaConexiones());
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridy = 0;
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.weighty = 1.0;
+        gbc.insets = new Insets(0, 0, 0, 0);
+
+        gbc.gridx = 0;
+        gbc.weightx = 0.55;
+        panel.add(crearTarjetaConfiguracionMundo(), gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 0.45;
+        gbc.insets = new Insets(0, 8, 0, 0);
+        panel.add(crearTarjetaConexiones(), gbc);
         return panel;
     }
 
-    private JPanel crearTarjetaDatos() {
+    private JPanel crearTarjetaConfiguracionMundo() {
         CardPanel card = new CardPanel(new BorderLayout(), new Insets(12, 12, 12, 12));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
-        JLabel titulo = crearTituloTarjeta("Datos");
+        JLabel titulo = crearTituloTarjeta("Configuracion del mundo");
         card.add(titulo, BorderLayout.NORTH);
 
-        JPanel contenido = new JPanel();
+        JPanel contenido = new JPanel(new GridLayout(1, 2, 10, 0));
         contenido.setOpaque(false);
-        contenido.setLayout(new BoxLayout(contenido, BoxLayout.Y_AXIS));
-        contenido.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-        contenido.add(crearInfoRow("Peso mundo:", pesoMundoValueLabel));
-        contenido.add(Box.createVerticalStrut(2));
-        contenido.add(crearInfoRow("Peso stats y saves:", pesoStatsSavesValueLabel));
-        contenido.add(Box.createVerticalStrut(2));
-        contenido.add(crearInfoRow("Peso total:", pesoTotalValueLabel));
+        contenido.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+
+        JPanel lectura = new JPanel();
+        lectura.setOpaque(false);
+        lectura.setLayout(new BoxLayout(lectura, BoxLayout.Y_AXIS));
+        lectura.add(crearInfoRow("Generator settings:", generatorSettingsValueLabel));
+        lectura.add(crearInfoRow("Generar estructuras:", estructurasValueLabel));
+
+        lectura.add(crearInfoRow("Initial enabled packs:", initialEnabledPacksValueLabel));
+        lectura.add(crearInfoRow("Initial disabled packs:", initialDisabledPacksValueLabel));
+
+        JPanel ajustes = new JPanel();
+        ajustes.setOpaque(false);
+        ajustes.setLayout(new BoxLayout(ajustes, BoxLayout.Y_AXIS));
+        allowNetherCheckBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+        allowNetherCheckBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, allowNetherCheckBox.getPreferredSize().height));
+        ajustes.add(allowNetherCheckBox);
+        ajustes.add(Box.createVerticalStrut(4));
+        ajustes.add(crearComboRow("Region file compression:", regionCompressionCombo));
+        ajustes.add(Box.createVerticalStrut(4));
+        ajustes.add(crearSpinnerRow("Proteccion del spawn:", spawnProtectionSpinner));
+        ajustes.add(Box.createVerticalStrut(4));
+        ajustes.add(crearSpinnerRow("Tamano maximo del mundo:", maxWorldSizeSpinner));
+        ajustes.add(Box.createVerticalStrut(6));
+        guardarConfiguracionMundoButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        guardarConfiguracionMundoButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, guardarConfiguracionMundoButton.getPreferredSize().height));
+        ajustes.add(guardarConfiguracionMundoButton);
+
+        contenido.add(lectura);
+        contenido.add(ajustes);
         card.add(contenido, BorderLayout.CENTER);
         return card;
+    }
+
+    private JPanel crearSpinnerRow(String labelText, JSpinner spinner) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel label = new JLabel(labelText);
+        label.setFont(label.getFont().deriveFont(Font.BOLD));
+        row.add(label, BorderLayout.WEST);
+        spinner.setMaximumSize(new Dimension(168, 26));
+        spinner.setPreferredSize(new Dimension(168, 26));
+        row.add(spinner, BorderLayout.EAST);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+        return row;
+    }
+
+    private JPanel crearComboRow(String labelText, JComboBox<String> comboBox) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel label = new JLabel(labelText);
+        label.setFont(label.getFont().deriveFont(Font.BOLD));
+        row.add(label, BorderLayout.WEST);
+        comboBox.setMaximumSize(new Dimension(168, 26));
+        comboBox.setPreferredSize(new Dimension(168, 26));
+        row.add(comboBox, BorderLayout.EAST);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+        return row;
     }
 
     private JPanel crearTarjetaConexiones() {
@@ -476,11 +616,23 @@ public class PanelMundo extends JPanel {
     }
 
     private void limpiarVistaSinServidor() {
+        updatingWorldSettingsControls = true;
         tiempoRealValueLabel.setText("-");
         seedValueLabel.setText("-");
         lastPlayedValueLabel.setText("-");
         versionValueLabel.setText("-");
         tipoMundoValueLabel.setText("-");
+        generatorSettingsValueLabel.setText("-");
+        estructurasValueLabel.setText("-");
+        initialEnabledPacksValueLabel.setText("-");
+        initialDisabledPacksValueLabel.setText("-");
+        allowNetherCheckBox.setSelected(false);
+        regionCompressionCombo.setSelectedItem("deflate");
+        spawnProtectionSpinner.setValue(16);
+        maxWorldSizeSpinner.setValue(29999984);
+        updatingWorldSettingsControls = false;
+        markCurrentWorldSettingsAsPersisted();
+        updateWorldSettingsSaveButtonState();
         pesoMundoValueLabel.setText("-");
         pesoStatsSavesValueLabel.setText("-");
         pesoTotalValueLabel.setText("-");
@@ -494,9 +646,11 @@ public class PanelMundo extends JPanel {
     private void actualizarVistaMundos() {
         updateUseWorldButtonState();
         actualizarLabelsDatosServidor();
+        actualizarConfiguracionMundo();
         actualizarPreviewSeleccionada();
         actualizarTextoBotonPreview();
         actualizarIndicadorRenderEnCurso();
+        sincronizarEstadoRenderCompartido();
         actualizarDatosAlmacenamiento();
         actualizarConexionesRecientes();
     }
@@ -525,6 +679,211 @@ public class PanelMundo extends JPanel {
         versionValueLabel.setText(valorOPlaceholder(WorldDataReader.getVersionName(mundo)));
         tipoMundoValueLabel.setText(valorOPlaceholder(leerTipoMundo(mundo)));
         seedValueLabel.setText(valorOPlaceholder(WorldDataReader.getSeed(mundo)));
+    }
+
+    private void actualizarConfiguracionMundo() {
+        Server server = gestorServidores.getServidorSeleccionado();
+        World mundo = getMundoSeleccionadoOActivo();
+        Properties metadata = leerMetadataMundo(mundo);
+        Properties serverProps = leerPropiedadesServidor(server);
+
+        generatorSettingsValueLabel.setText(formatearGeneratorSettings(metadata.getProperty("generator-settings")));
+        estructurasValueLabel.setText(formatearEstructuras(metadata.getProperty("generate-structures")));
+        initialEnabledPacksValueLabel.setText(valorOPlaceholder(metadata.getProperty("initial-enabled-packs")));
+        initialDisabledPacksValueLabel.setText(valorOPlaceholder(metadata.getProperty("initial-disabled-packs")));
+
+        updatingWorldSettingsControls = true;
+        allowNetherCheckBox.setSelected(leerBoolean(serverProps, "allow-nether", true));
+        regionCompressionCombo.setSelectedItem(normalizarRegionCompression(serverProps.getProperty("region-file-compression")));
+        spawnProtectionSpinner.setValue(leerEntero(serverProps, "spawn-protection", 16, 0));
+        maxWorldSizeSpinner.setValue(leerEntero(serverProps, "max-world-size", 29999984, 1));
+        updatingWorldSettingsControls = false;
+        markCurrentWorldSettingsAsPersisted();
+        updateWorldSettingsSaveButtonState();
+    }
+
+    private void guardarConfiguracionMundo() {
+        Server server = gestorServidores.getServidorSeleccionado();
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            JOptionPane.showMessageDialog(this, "No hay un servidor seleccionado.", "Configuracion del mundo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            Properties props = leerPropiedadesServidor(server);
+            props.setProperty("allow-nether", String.valueOf(allowNetherCheckBox.isSelected()));
+            props.setProperty("region-file-compression", String.valueOf(regionCompressionCombo.getSelectedItem()));
+            props.setProperty("spawn-protection", String.valueOf(((Number) spawnProtectionSpinner.getValue()).intValue()));
+            props.setProperty("max-world-size", String.valueOf(((Number) maxWorldSizeSpinner.getValue()).intValue()));
+            guardarPropiedadesServidor(server, props);
+            gestorServidores.guardarServidor(server);
+            actualizarConfiguracionMundo();
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    "No se han podido guardar los ajustes del mundo: " + ex.getMessage(),
+                    "Configuracion del mundo",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void configurarControlesAjustesMundo() {
+        allowNetherCheckBox.setOpaque(false);
+        allowNetherCheckBox.setFocusPainted(false);
+        allowNetherCheckBox.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        allowNetherCheckBox.addActionListener(e -> updateWorldSettingsSaveButtonState());
+        regionCompressionCombo.setOpaque(false);
+        regionCompressionCombo.setFocusable(false);
+        regionCompressionCombo.putClientProperty("JComponent.roundRect", true);
+        regionCompressionCombo.setMaximumSize(new Dimension(180, 30));
+        regionCompressionCombo.setPreferredSize(new Dimension(180, 30));
+        regionCompressionCombo.addActionListener(e -> updateWorldSettingsSaveButtonState());
+        spawnProtectionSpinner.setMaximumSize(new Dimension(180, 30));
+        maxWorldSizeSpinner.setMaximumSize(new Dimension(180, 30));
+        spawnProtectionSpinner.addChangeListener(e -> updateWorldSettingsSaveButtonState());
+        maxWorldSizeSpinner.addChangeListener(e -> updateWorldSettingsSaveButtonState());
+        applyDefaultWorldSettingsSaveButtonStyle();
+        guardarConfiguracionMundoButton.setEnabled(false);
+    }
+
+    private Properties leerMetadataMundo(World mundo) {
+        Properties metadata = new Properties();
+        if (mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) {
+            return metadata;
+        }
+
+        Path metadataPath = Path.of(mundo.getWorldDir()).resolve(WORLD_METADATA_FILE);
+        if (!Files.isRegularFile(metadataPath)) {
+            return metadata;
+        }
+
+        try (InputStream in = Files.newInputStream(metadataPath)) {
+            metadata.load(in);
+        } catch (IOException ignored) {
+        }
+        return metadata;
+    }
+
+    private Properties leerPropiedadesServidor(Server server) {
+        Properties props = new Properties();
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            return props;
+        }
+
+        Path propertiesPath = Path.of(server.getServerDir()).resolve("server.properties");
+        if (!Files.isRegularFile(propertiesPath)) {
+            return props;
+        }
+
+        try (FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
+            props.load(fis);
+        } catch (IOException ignored) {
+        }
+        return props;
+    }
+
+    private void guardarPropiedadesServidor(Server server, Properties props) throws IOException {
+        Path propertiesPath = Path.of(server.getServerDir()).resolve("server.properties");
+        try (FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
+            props.store(fos, null);
+        }
+    }
+
+    private String formatearBoolean(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        return Boolean.parseBoolean(value) ? "Si" : "No";
+    }
+
+    private String formatearEstructuras(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        return Boolean.parseBoolean(value) ? "✓" : "✗";
+    }
+
+    private String formatearGeneratorSettings(String value) {
+        if (value == null || value.isBlank()) {
+            return "{}";
+        }
+        return value;
+    }
+
+    private String normalizarRegionCompression(String value) {
+        if (value == null || value.isBlank()) {
+            return REGION_FILE_COMPRESSION_OPTIONS[0];
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        for (String option : REGION_FILE_COMPRESSION_OPTIONS) {
+            if (option.equals(normalized)) {
+                return option;
+            }
+        }
+        return REGION_FILE_COMPRESSION_OPTIONS[0];
+    }
+
+    private void markCurrentWorldSettingsAsPersisted() {
+        persistedAllowNether = allowNetherCheckBox.isSelected();
+        persistedRegionCompression = String.valueOf(regionCompressionCombo.getSelectedItem());
+        persistedSpawnProtection = ((Number) spawnProtectionSpinner.getValue()).intValue();
+        persistedMaxWorldSize = ((Number) maxWorldSizeSpinner.getValue()).intValue();
+    }
+
+    private boolean hasUnsavedWorldSettingsChanges() {
+        Server server = gestorServidores.getServidorSeleccionado();
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            return false;
+        }
+        return allowNetherCheckBox.isSelected() != persistedAllowNether
+                || !Objects.equals(String.valueOf(regionCompressionCombo.getSelectedItem()), persistedRegionCompression)
+                || ((Number) spawnProtectionSpinner.getValue()).intValue() != persistedSpawnProtection
+                || ((Number) maxWorldSizeSpinner.getValue()).intValue() != persistedMaxWorldSize;
+    }
+
+    private void updateWorldSettingsSaveButtonState() {
+        if (updatingWorldSettingsControls) {
+            return;
+        }
+        boolean hasUnsavedChanges = hasUnsavedWorldSettingsChanges();
+        applyDefaultWorldSettingsSaveButtonStyle();
+        guardarConfiguracionMundoButton.setEnabled(hasUnsavedChanges);
+        if (hasUnsavedChanges) {
+            guardarConfiguracionMundoButton.setBackground(AppTheme.getMainAccent());
+            guardarConfiguracionMundoButton.setForeground(Color.WHITE);
+            guardarConfiguracionMundoButton.setBorder(AppTheme.createAccentBorder(new Insets(6, 12, 6, 12), 1f));
+        }
+        guardarConfiguracionMundoButton.revalidate();
+        guardarConfiguracionMundoButton.repaint();
+    }
+
+    private void applyDefaultWorldSettingsSaveButtonStyle() {
+        styleActionButton(guardarConfiguracionMundoButton);
+    }
+
+    private boolean leerBoolean(Properties props, String key, boolean defaultValue) {
+        if (props == null || key == null) {
+            return defaultValue;
+        }
+        String value = props.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(value.trim());
+    }
+
+    private int leerEntero(Properties props, String key, int defaultValue, int minimum) {
+        if (props == null || key == null) {
+            return defaultValue;
+        }
+        String value = props.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Math.max(minimum, Integer.parseInt(value.trim()));
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
     }
 
     private void actualizarDatosAlmacenamiento() {
@@ -854,12 +1213,18 @@ public class PanelMundo extends JPanel {
         JTextField nombreField = new JTextField(MinecraftConstants.DEFAULT_WORLD_NAME + "-nuevo");
         JTextField semillaField = new JTextField();
         JComboBox<String> tipoBox = new JComboBox<>(MinecraftConstants.WORLD_TYPES.toArray(String[]::new));
+        JTextField generatorSettingsField = new JTextField("{}");
         JComboBox<String> gamemodeBox = new JComboBox<>(MinecraftConstants.GAMEMODES.toArray(String[]::new));
         JComboBox<String> dificultadBox = new JComboBox<>(MinecraftConstants.DIFFICULTIES.toArray(String[]::new));
         JCheckBox estructurasBox = new JCheckBox("Generar estructuras", true);
         JCheckBox hardcoreBox = new JCheckBox("Hardcore", false);
         JCheckBox netherBox = new JCheckBox("Permitir Nether", true);
         JCheckBox activarBox = new JCheckBox("Seleccionar al crear", true);
+        JTextField initialEnabledPacksField = new JTextField();
+        JTextField initialDisabledPacksField = new JTextField();
+        JComboBox<String> regionFileCompressionBox = new JComboBox<>(REGION_FILE_COMPRESSION_OPTIONS);
+        regionFileCompressionBox.setSelectedItem("deflate");
+        instalarCampoGeneratorSettings(generatorSettingsField);
 
         JPanel panel = new JPanel(new GridLayout(0, 1, 0, 6));
         panel.add(new JLabel("Nombre del mundo"));
@@ -868,6 +1233,14 @@ public class PanelMundo extends JPanel {
         panel.add(semillaField);
         panel.add(new JLabel("Tipo de mundo"));
         panel.add(tipoBox);
+        panel.add(new JLabel("Generator settings"));
+        panel.add(generatorSettingsField);
+        panel.add(new JLabel("Initial enabled packs"));
+        panel.add(initialEnabledPacksField);
+        panel.add(new JLabel("Initial disabled packs"));
+        panel.add(initialDisabledPacksField);
+        panel.add(new JLabel("Region file compression"));
+        panel.add(regionFileCompressionBox);
         panel.add(new JLabel("Gamemode por defecto"));
         panel.add(gamemodeBox);
         panel.add(new JLabel("Dificultad"));
@@ -884,11 +1257,15 @@ public class PanelMundo extends JPanel {
                 nombreField.getText(),
                 semillaField.getText(),
                 String.valueOf(tipoBox.getSelectedItem()),
+                normalizarGeneratorSettings(generatorSettingsField.getText()),
                 estructurasBox.isSelected(),
                 hardcoreBox.isSelected(),
                 String.valueOf(gamemodeBox.getSelectedItem()),
                 String.valueOf(dificultadBox.getSelectedItem()),
                 netherBox.isSelected(),
+                initialEnabledPacksField.getText(),
+                initialDisabledPacksField.getText(),
+                String.valueOf(regionFileCompressionBox.getSelectedItem()),
                 activarBox.isSelected()
         );
 
@@ -896,6 +1273,46 @@ public class PanelMundo extends JPanel {
             refrescarDatos();
             notificarCambioDeMundo();
         }
+    }
+
+    private void instalarCampoGeneratorSettings(JTextField field) {
+        field.setColumns(20);
+        field.setToolTipText("Solo puedes editar el contenido interno de las llaves.");
+        ((AbstractDocument) field.getDocument()).setDocumentFilter(new BracketLockedDocumentFilter());
+        field.setNavigationFilter(new BracketLockedNavigationFilter(field));
+        field.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                posicionarCursorDentroDeCorchetes(field);
+            }
+        });
+        field.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                SwingUtilities.invokeLater(() -> posicionarCursorDentroDeCorchetes(field));
+            }
+        });
+        SwingUtilities.invokeLater(() -> posicionarCursorDentroDeCorchetes(field));
+    }
+
+    private void posicionarCursorDentroDeCorchetes(JTextField field) {
+        int max = Math.max(1, field.getDocument().getLength() - 1);
+        int position = Math.max(1, Math.min(field.getCaretPosition(), max));
+        field.setCaretPosition(position);
+    }
+
+    private String normalizarGeneratorSettings(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        if (normalized.length() >= 2 && normalized.startsWith("{") && normalized.endsWith("}")) {
+            String inner = normalized.substring(1, normalized.length() - 1).trim();
+            if (inner.isEmpty()) {
+                return "";
+            }
+        }
+        return normalized;
     }
 
     private void seleccionarMundoEnCombo(World objetivo) {
@@ -927,6 +1344,15 @@ public class PanelMundo extends JPanel {
         generarButton.setEnabled(hayServidor);
         generarPreviewButton.setEnabled(hayMundos);
         previewMenuButton.setEnabled(hayMundos);
+        allowNetherCheckBox.setEnabled(hayServidor);
+        regionCompressionCombo.setEnabled(hayServidor);
+        spawnProtectionSpinner.setEnabled(hayServidor);
+        maxWorldSizeSpinner.setEnabled(hayServidor);
+        if (!hayServidor) {
+            guardarConfiguracionMundoButton.setEnabled(false);
+        } else {
+            updateWorldSettingsSaveButtonState();
+        }
         updateUseWorldButtonState();
     }
 
@@ -971,6 +1397,7 @@ public class PanelMundo extends JPanel {
         setPreviewProgressVisible(true);
         actualizarTextoBotonPreview();
         actualizarIndicadorRenderEnCurso();
+        notificarCambioEstadoRenderCompartido();
         long previewStartNanos = System.nanoTime();
         MCARenderer renderer = new MCARenderer();
         WorldDataReader.SpawnPoint spawnPoint = WorldDataReader.getSpawnPoint(mundo);
@@ -991,17 +1418,6 @@ public class PanelMundo extends JPanel {
                         .withWaterSubsurfaceShading(sombreadoAguaEnPreview)
                         .withBiomeColoring(colorearBiomasEnPreview)
                         .withPreferSquareCrop(!usarTodoEnPreview);
-                if (!usarTodoEnPreview && centerPoint != null && limiteMaximoRenderPreview > 0) {
-                    RenderWorldBounds bounds = resolverLimitesRender(regionesPreview, centerPoint, limiteMaximoRenderPreview);
-                    if (bounds != null) {
-                        renderOptions = renderOptions.withWorldBounds(
-                                bounds.minBlockX(),
-                                bounds.maxBlockX(),
-                                bounds.minBlockZ(),
-                                bounds.maxBlockZ()
-                        );
-                    }
-                }
                 MCARenderer.RenderedWorld renderedWorld = renderer.renderWorldWithMetadata(regionesPreview, renderOptions);
                 if (isCancelled()) {
                     return null;
@@ -1041,6 +1457,7 @@ public class PanelMundo extends JPanel {
                     setPreviewProgressVisible(false);
                     actualizarTextoBotonPreview();
                     actualizarIndicadorRenderEnCurso();
+                    notificarCambioEstadoRenderCompartido();
                 }
                 try {
                     if (isCancelled()) {
@@ -1171,6 +1588,7 @@ public class PanelMundo extends JPanel {
         restaurarPreviewAnteriorSiExiste(previewDisponibleAntesDeGenerar);
         actualizarTextoBotonPreview();
         actualizarIndicadorRenderEnCurso();
+        notificarCambioEstadoRenderCompartido();
     }
 
     private boolean mismoContextoSeleccionado(String expectedServerId, String expectedWorldDir) {
@@ -1679,6 +2097,15 @@ public class PanelMundo extends JPanel {
             return;
         }
 
+        if (previewGenerationInProgress && mismoContextoRenderEnCurso(gestorServidores.getServidorSeleccionado(), mundo)) {
+            previewImageLabel.clearImage();
+            previewImageLabel.setOverlayData(null);
+            previewImageLabel.setChunkGridVisible(false);
+            previewImageLabel.setSpawnVisible(false);
+            previewImageLabel.setPlayersVisible(false);
+            return;
+        }
+
         Path previewPath = getPreviewPath(mundo);
         if (!Files.isRegularFile(previewPath)) {
             mostrarTextoPreview("La preview todavía no existe.");
@@ -1724,7 +2151,26 @@ public class PanelMundo extends JPanel {
             actualizarPreviewSeleccionada();
             return;
         }
-        mostrarTextoPreview("No se ha podido generar la preview.");
+        mostrarTextoPreview("La preview todavÃ­a no existe.");
+    }
+
+    private void sincronizarEstadoRenderCompartido() {
+        World mundo = getMundoSeleccionadoOActivo();
+        boolean mostrarProgreso = previewGenerationInProgress && mismoContextoRenderEnCurso(gestorServidores.getServidorSeleccionado(), mundo);
+        setPreviewProgressVisible(mostrarProgreso);
+        actualizarTextoBotonPreview();
+        actualizarIndicadorRenderEnCurso();
+    }
+
+    private static void notificarCambioEstadoRenderCompartido() {
+        SwingUtilities.invokeLater(() -> {
+            java.util.List<PanelMundo> instancias = new ArrayList<>(INSTANCIAS_ACTIVAS);
+            for (PanelMundo instancia : instancias) {
+                if (instancia != null) {
+                    instancia.sincronizarEstadoRenderCompartido();
+                }
+            }
+        });
     }
 
     private void setPreviewProgressVisible(boolean visible) {
@@ -2001,29 +2447,34 @@ public class PanelMundo extends JPanel {
             if (mismoContextoRenderEnCurso(gestorServidores.getServidorSeleccionado(), mundo)) {
                 generarPreviewButton.setText("Cancelar");
             } else {
-                generarPreviewButton.setText("Render en curso");
+                generarPreviewButton.setText("Generar preview");
             }
+            ajustarAnchoBotonPreview();
             return;
         }
         World mundo = getMundoSeleccionadoOActivo();
         boolean existePreview = mundo != null && Files.isRegularFile(getPreviewPath(mundo));
         generarPreviewButton.setText(existePreview ? "Regenerar preview" : "Generar preview");
+        ajustarAnchoBotonPreview();
     }
 
     private void actualizarIndicadorRenderEnCurso() {
-        if (!previewGenerationInProgress) {
-            previewRenderStatusLabel.setVisible(false);
-            previewRenderStatusLabel.setText("");
-            previewRenderStatusLabel.setToolTipText(null);
-            return;
-        }
+        previewRenderStatusLabel.setVisible(false);
+        previewRenderStatusLabel.setText("");
+        previewRenderStatusLabel.setToolTipText(null);
+    }
 
-        String destino = construirEtiquetaRenderEnCurso();
-        previewRenderStatusLabel.setText("Renderizando: " + destino);
-        previewRenderStatusLabel.setToolTipText(destino);
-        previewRenderStatusLabel.setVisible(true);
-        previewRenderStatusLabel.revalidate();
-        previewRenderStatusLabel.repaint();
+    private void ajustarAnchoBotonPreview() {
+        FontMetrics metrics = generarPreviewButton.getFontMetrics(generarPreviewButton.getFont());
+        int maxTextWidth = Math.max(
+                metrics.stringWidth("Generar preview"),
+                Math.max(metrics.stringWidth("Regenerar preview"), metrics.stringWidth("Cancelar"))
+        );
+        int width = maxTextWidth + 28;
+        int height = Math.max(30, generarPreviewButton.getPreferredSize().height);
+        Dimension fixedSize = new Dimension(width, height);
+        generarPreviewButton.setPreferredSize(fixedSize);
+        generarPreviewButton.setMinimumSize(fixedSize);
     }
 
     private String construirEtiquetaRenderEnCurso() {
@@ -2924,6 +3375,69 @@ public class PanelMundo extends JPanel {
     private record PreviewPlayerData(String username, MCARenderer.WorldPoint point, FileTime lastSeen) {}
     private record CroppedPreview(BufferedImage image, int originBlockX, int originBlockZ) {}
     private record RenderWorldBounds(int minBlockX, int maxBlockX, int minBlockZ, int maxBlockZ) {}
+
+    private static final class BracketLockedNavigationFilter extends NavigationFilter {
+        private final JTextField field;
+
+        private BracketLockedNavigationFilter(JTextField field) {
+            this.field = field;
+        }
+
+        @Override
+        public void setDot(FilterBypass fb, int dot, Position.Bias bias) {
+            fb.setDot(clamp(dot), bias);
+        }
+
+        @Override
+        public void moveDot(FilterBypass fb, int dot, Position.Bias bias) {
+            fb.moveDot(clamp(dot), bias);
+        }
+
+        private int clamp(int dot) {
+            int length = field.getDocument().getLength();
+            int max = Math.max(1, length - 1);
+            return Math.max(1, Math.min(dot, max));
+        }
+    }
+
+    private static final class BracketLockedDocumentFilter extends DocumentFilter {
+        @Override
+        public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr) throws BadLocationException {
+            replace(fb, offset, 0, string, attr);
+        }
+
+        @Override
+        public void remove(FilterBypass fb, int offset, int length) throws BadLocationException {
+            replace(fb, offset, length, "", null);
+        }
+
+        @Override
+        public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs) throws BadLocationException {
+            String current = asegurarCorchetes(fb.getDocument().getText(0, fb.getDocument().getLength()));
+            String replacement = construirReemplazo(current, offset, length, text);
+            fb.replace(0, fb.getDocument().getLength(), replacement, attrs);
+        }
+
+        private String construirReemplazo(String current, int offset, int length, String text) {
+            int contentStart = 1;
+            int contentEnd = current.length() - 1;
+            int start = Math.max(contentStart, Math.min(offset, contentEnd));
+            int end = Math.max(start, Math.min(offset + Math.max(0, length), contentEnd));
+            String incoming = text == null ? "" : text.replace("[", "").replace("]", "");
+            return current.substring(0, start) + incoming + current.substring(end);
+        }
+
+        private String asegurarCorchetes(String value) {
+            String sanitized = value == null ? "" : value;
+            if (sanitized.length() < 2) {
+                return "{}";
+            }
+            String inner = sanitized.substring(1, sanitized.length() - 1)
+                    .replace("{", "")
+                    .replace("}", "");
+            return "{" + inner + "}";
+        }
+    }
 
     private static final class ImageSelection implements Transferable {
         private final Image image;
