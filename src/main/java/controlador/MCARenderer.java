@@ -26,12 +26,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.Arrays;
-import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -230,9 +232,30 @@ public final class MCARenderer {
                 normalizedOptions.maxY(),
                 normalizedOptions.pixelsPerBlock());
 
-        int pixelsPerRegion = REGION_BLOCK_SIDE * normalizedOptions.pixelsPerBlock();
-        int width = (maxRegionX - minRegionX + 1) * pixelsPerRegion;
-        int height = (maxRegionZ - minRegionZ + 1) * pixelsPerRegion;
+        int pixelsPerBlock = normalizedOptions.pixelsPerBlock();
+        int pixelsPerRegion = REGION_BLOCK_SIDE * pixelsPerBlock;
+        int availableMinBlockX = minRegionX * REGION_BLOCK_SIDE;
+        int availableMaxBlockX = ((maxRegionX + 1) * REGION_BLOCK_SIDE) - 1;
+        int availableMinBlockZ = minRegionZ * REGION_BLOCK_SIDE;
+        int availableMaxBlockZ = ((maxRegionZ + 1) * REGION_BLOCK_SIDE) - 1;
+        int canvasOriginBlockX = availableMinBlockX;
+        int canvasOriginBlockZ = availableMinBlockZ;
+        int canvasWidthBlocks = (maxRegionX - minRegionX + 1) * REGION_BLOCK_SIDE;
+        int canvasHeightBlocks = (maxRegionZ - minRegionZ + 1) * REGION_BLOCK_SIDE;
+        if(normalizedOptions.hasWorldBounds()) {
+            int boundedMinBlockX = Math.max(availableMinBlockX, normalizedOptions.minWorldBlockX());
+            int boundedMaxBlockX = Math.min(availableMaxBlockX, normalizedOptions.maxWorldBlockX());
+            int boundedMinBlockZ = Math.max(availableMinBlockZ, normalizedOptions.minWorldBlockZ());
+            int boundedMaxBlockZ = Math.min(availableMaxBlockZ, normalizedOptions.maxWorldBlockZ());
+            if(boundedMinBlockX <= boundedMaxBlockX && boundedMinBlockZ <= boundedMaxBlockZ) {
+                canvasOriginBlockX = boundedMinBlockX;
+                canvasOriginBlockZ = boundedMinBlockZ;
+                canvasWidthBlocks = (boundedMaxBlockX - boundedMinBlockX) + 1;
+                canvasHeightBlocks = (boundedMaxBlockZ - boundedMinBlockZ) + 1;
+            }
+        }
+        int width = Math.max(1, canvasWidthBlocks * pixelsPerBlock);
+        int height = Math.max(1, canvasHeightBlocks * pixelsPerBlock);
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         if(progressListener != null) {
             progressListener.onCanvasInitialized(width, height, normalizedOptions.defaultArgb(), normalizedPaths.size());
@@ -242,81 +265,80 @@ public final class MCARenderer {
         try {
             g2.setColor(new Color(normalizedOptions.defaultArgb(), true));
             g2.fillRect(0, 0, width, height);
-            if(progressListener != null && progressListener.supportsChunkUpdates()) {
-                emitChunkAnimationPass(
-                        normalizedPaths,
-                        coords,
-                        normalizedOptions,
-                        progressListener,
-                        minRegionX,
-                        minRegionZ,
-                        pixelsPerRegion
-                );
-            }
-
-            List<RenderedRegion> renderedRegions = runWithWorldRenderPool(() -> IntStream.range(0, normalizedPaths.size()).parallel()
-                    .mapToObj(i -> {
-                        try {
-                            // Muy importante: al componer varias regiones no debemos recortar cada una por separado.
-                            // Si lo hiciésemos, cada imagen regional tendría un tamaño distinto y al dibujarla en su
-                            // "slot" de 512x512 se desplazaría, provocando cortes rectos o mezclas entre previews.
-                            RenderedRegionResult regionResult = renderRegion(normalizedPaths.get(i), normalizedOptions, false);
-                            return new RenderedRegion(coords.get(i), regionResult.image(), regionResult.stats());
-                        } catch(IOException ex) {
-                            throw new RegionRenderRuntimeException(ex);
-                        }
-                    })
-                    .toList());
-
+            final int renderCanvasOriginBlockX = canvasOriginBlockX;
+            final int renderCanvasOriginBlockZ = canvasOriginBlockZ;
+            final int renderCanvasWidthBlocks = canvasWidthBlocks;
+            final int renderCanvasHeightBlocks = canvasHeightBlocks;
             long composeStart = System.nanoTime();
-            long sampleNanos = 0L;
-            long paintNanos = 0L;
-            long cropNanos = 0L;
-            int composedRegions = 0;
-            for(RenderedRegion renderedRegion : renderedRegions) {
+            long[] sampleNanos = {0L};
+            long[] paintNanos = {0L};
+            long[] cropNanos = {0L};
+            int[] composedRegions = {0};
+            renderWorldRegions(normalizedPaths, coords, normalizedOptions, renderedRegion -> {
                 RegionCoordinates region = renderedRegion.region();
-                int drawX = (region.x() - minRegionX) * pixelsPerRegion;
-                int drawY = (region.z() - minRegionZ) * pixelsPerRegion;
-                g2.drawImage(renderedRegion.image(), drawX, drawY, null);
-                sampleNanos += renderedRegion.stats().sampleNanos();
-                paintNanos += renderedRegion.stats().paintNanos();
-                cropNanos += renderedRegion.stats().cropNanos();
-                composedRegions++;
+                int regionOriginBlockX = region.x() * REGION_BLOCK_SIDE;
+                int regionOriginBlockZ = region.z() * REGION_BLOCK_SIDE;
+                int drawX = (regionOriginBlockX - renderCanvasOriginBlockX) * pixelsPerBlock;
+                int drawY = (regionOriginBlockZ - renderCanvasOriginBlockZ) * pixelsPerBlock;
+                BufferedImage regionImage = renderedRegion.image();
+                if(normalizedOptions.hasWorldBounds()) {
+                    int overlapMinBlockX = Math.max(regionOriginBlockX, renderCanvasOriginBlockX);
+                    int overlapMaxBlockX = Math.min(regionOriginBlockX + REGION_BLOCK_SIDE - 1, renderCanvasOriginBlockX + renderCanvasWidthBlocks - 1);
+                    int overlapMinBlockZ = Math.max(regionOriginBlockZ, renderCanvasOriginBlockZ);
+                    int overlapMaxBlockZ = Math.min(regionOriginBlockZ + REGION_BLOCK_SIDE - 1, renderCanvasOriginBlockZ + renderCanvasHeightBlocks - 1);
+                    if(overlapMinBlockX > overlapMaxBlockX || overlapMinBlockZ > overlapMaxBlockZ) {
+                        return;
+                    }
+                    int srcX = (overlapMinBlockX - regionOriginBlockX) * pixelsPerBlock;
+                    int srcY = (overlapMinBlockZ - regionOriginBlockZ) * pixelsPerBlock;
+                    int srcWidth = ((overlapMaxBlockX - overlapMinBlockX) + 1) * pixelsPerBlock;
+                    int srcHeight = ((overlapMaxBlockZ - overlapMinBlockZ) + 1) * pixelsPerBlock;
+                    drawX = (overlapMinBlockX - renderCanvasOriginBlockX) * pixelsPerBlock;
+                    drawY = (overlapMinBlockZ - renderCanvasOriginBlockZ) * pixelsPerBlock;
+                    g2.drawImage(regionImage, drawX, drawY, drawX + srcWidth, drawY + srcHeight, srcX, srcY, srcX + srcWidth, srcY + srcHeight, null);
+                    regionImage = regionImage.getSubimage(srcX, srcY, srcWidth, srcHeight);
+                } else {
+                    g2.drawImage(regionImage, drawX, drawY, null);
+                }
+                sampleNanos[0] += renderedRegion.stats().sampleNanos();
+                paintNanos[0] += renderedRegion.stats().paintNanos();
+                cropNanos[0] += renderedRegion.stats().cropNanos();
+                composedRegions[0]++;
                 if(progressListener != null) {
                     long partialComposeNanos = System.nanoTime() - composeStart;
                     progressListener.onRegionComposed(
                             drawX,
                             drawY,
-                            renderedRegion.image(),
-                            composedRegions,
-                            renderedRegions.size(),
-                            new RenderStats(sampleNanos, paintNanos, partialComposeNanos, cropNanos, 0L)
+                            regionImage,
+                            composedRegions[0],
+                            normalizedPaths.size(),
+                            new RenderStats(sampleNanos[0], paintNanos[0], partialComposeNanos, cropNanos[0], 0L)
                     );
                 }
-            }
+            });
             long composeNanos = System.nanoTime() - composeStart;
             long markerNanos = 0L;
             long worldCropNanos = 0L;
 
             if(markerPoint != null) {
                 long markerStart = System.nanoTime();
-                paintMarker(image, markerPoint, minRegionX, minRegionZ, normalizedOptions);
+                paintMarker(image, markerPoint, canvasOriginBlockX, canvasOriginBlockZ, normalizedOptions);
                 markerNanos = System.nanoTime() - markerStart;
             }
 
             long cropStart = System.nanoTime();
-            Rectangle cropArea = resolveCropArea(image, normalizedOptions);
+            Rectangle cropArea = resolveCropArea(image, normalizedOptions, canvasOriginBlockX, canvasOriginBlockZ);
             BufferedImage result = image.getSubimage(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
             worldCropNanos = System.nanoTime() - cropStart;
-            int originBlockX = minRegionX * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.x, normalizedOptions.pixelsPerBlock());
-            int originBlockZ = minRegionZ * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.y, normalizedOptions.pixelsPerBlock());
+            int originBlockX = canvasOriginBlockX + Math.floorDiv(cropArea.x, pixelsPerBlock);
+            int originBlockZ = canvasOriginBlockZ + Math.floorDiv(cropArea.y, pixelsPerBlock);
             debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
             return new RenderedWorld(
                     result,
                     originBlockX,
                     originBlockZ,
                     normalizedOptions.pixelsPerBlock(),
-                    new RenderStats(sampleNanos, paintNanos, composeNanos, cropNanos + worldCropNanos, markerNanos)
+                    new RenderStats(sampleNanos[0], paintNanos[0], composeNanos, cropNanos[0] + worldCropNanos, markerNanos)
             );
         } catch(RegionRenderRuntimeException ex) {
             throw ex.ioException();
@@ -325,33 +347,40 @@ public final class MCARenderer {
         }
     }
 
-    private <T> T runWithWorldRenderPool(Callable<T> task) throws IOException {
-        if(task == null) {
-            throw new IllegalArgumentException("task no puede ser null");
+    private void renderWorldRegions(List<Path> normalizedPaths,
+                                    List<RegionCoordinates> coords,
+                                    RenderOptions normalizedOptions,
+                                    Consumer<RenderedRegion> onRegionReady) throws IOException {
+        if(normalizedPaths == null || coords == null || normalizedOptions == null) {
+            throw new IllegalArgumentException("Los argumentos del render por regiones no pueden ser null");
         }
-        if(WORLD_RENDER_PARALLELISM <= 1) {
-            try {
-                return task.call();
-            } catch(RegionRenderRuntimeException ex) {
-                throw ex.ioException();
-            } catch(IOException ex) {
-                throw ex;
-            } catch(Exception ex) {
-                throw new IOException("Error ejecutando el render MCA", ex);
-            }
+        if(normalizedPaths.size() != coords.size()) {
+            throw new IllegalArgumentException("Las rutas y coordenadas de regiones no coinciden");
         }
 
-        ForkJoinPool pool = new ForkJoinPool(WORLD_RENDER_PARALLELISM);
+        int regionCount = normalizedPaths.size();
+        if(regionCount == 0) {
+            return;
+        }
+        List<Integer> regionOrder = buildRegionRenderOrder(coords, normalizedOptions);
+        if(normalizedOptions.spiralTraversal() || WORLD_RENDER_PARALLELISM <= 1 || regionCount == 1) {
+            for(int i : regionOrder) {
+                onRegionReady.accept(renderSingleWorldRegion(normalizedPaths, coords, normalizedOptions, i));
+            }
+            return;
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(WORLD_RENDER_PARALLELISM);
+        CompletionService<RenderedRegion> completionService = new ExecutorCompletionService<>(executor);
         try {
-            return pool.submit(() -> {
-                try {
-                    return task.call();
-                } catch(RegionRenderRuntimeException ex) {
-                    throw ex;
-                } catch(Exception ex) {
-                    throw new RuntimeException(ex);
-                }
-            }).get();
+            for(int i = 0; i < regionCount; i++) {
+                final int regionIndex = i;
+                completionService.submit(() -> renderSingleWorldRegion(normalizedPaths, coords, normalizedOptions, regionIndex));
+            }
+            for(int i = 0; i < regionCount; i++) {
+                Future<RenderedRegion> future = completionService.take();
+                onRegionReady.accept(future.get());
+            }
         } catch(InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new IOException("Render MCA interrumpido", ex);
@@ -368,41 +397,82 @@ public final class MCARenderer {
             }
             throw new IOException("Error ejecutando el render MCA en paralelo", cause);
         } finally {
-            pool.shutdown();
+            executor.shutdownNow();
         }
     }
 
-    private void emitChunkAnimationPass(List<Path> normalizedPaths,
-                                        List<RegionCoordinates> coords,
-                                        RenderOptions options,
-                                        WorldRenderProgressListener progressListener,
-                                        int minRegionX,
-                                        int minRegionZ,
-                                        int pixelsPerRegion) throws IOException {
-        int totalChunks = normalizedPaths.size() * REGION_CHUNK_SIDE * REGION_CHUNK_SIDE;
-        int[] chunksCompleted = {0};
-        for(int i = 0; i < normalizedPaths.size(); i++) {
-            RegionCoordinates regionCoords = coords.get(i);
-            renderRegion(
-                    normalizedPaths.get(i),
-                    options,
-                    false,
-                    (localChunkX, localChunkZ, chunkImage) -> {
-                        int chunkPixelSide = CHUNK_BLOCK_SIDE * options.pixelsPerBlock();
-                        int drawX = ((regionCoords.x() - minRegionX) * pixelsPerRegion) + (localChunkX * chunkPixelSide);
-                        int drawY = ((regionCoords.z() - minRegionZ) * pixelsPerRegion) + (localChunkZ * chunkPixelSide);
-                        chunksCompleted[0]++;
-                        progressListener.onChunkComposed(
-                                drawX,
-                                drawY,
-                                chunkImage,
-                                chunksCompleted[0],
-                                totalChunks,
-                                RenderStats.EMPTY
-                        );
-                    }
-            );
+    private RenderedRegion renderSingleWorldRegion(List<Path> normalizedPaths,
+                                                   List<RegionCoordinates> coords,
+                                                   RenderOptions normalizedOptions,
+                                                   int index) {
+        try {
+            // Muy importante: al componer varias regiones no debemos recortar cada una por separado.
+            // Si lo hiciésemos, cada imagen regional tendría un tamaño distinto y al dibujarla en su
+            // "slot" de 512x512 se desplazaría, provocando cortes rectos o mezclas entre previews.
+            RenderedRegionResult regionResult = renderRegion(normalizedPaths.get(index), normalizedOptions, false);
+            return new RenderedRegion(coords.get(index), regionResult.image(), regionResult.stats());
+        } catch(IOException ex) {
+            throw new RegionRenderRuntimeException(ex);
         }
+    }
+
+    private List<Integer> buildRegionRenderOrder(List<RegionCoordinates> coords, RenderOptions options) {
+        List<Integer> order = IntStream.range(0, coords == null ? 0 : coords.size()).boxed().toList();
+        if(coords == null || coords.isEmpty() || options == null || !options.spiralTraversal()) {
+            return order;
+        }
+        int centerRegionX = Math.floorDiv(options.spiralCenterBlockX(), REGION_BLOCK_SIDE);
+        int centerRegionZ = Math.floorDiv(options.spiralCenterBlockZ(), REGION_BLOCK_SIDE);
+        Map<RegionCoordinates, Integer> indexByRegion = new HashMap<>();
+        int maxRadius = 0;
+        for(int i = 0; i < coords.size(); i++) {
+            RegionCoordinates region = coords.get(i);
+            indexByRegion.put(region, i);
+            maxRadius = Math.max(maxRadius, Math.max(Math.abs(region.x() - centerRegionX), Math.abs(region.z() - centerRegionZ)));
+        }
+
+        List<Integer> spiralOrder = new ArrayList<>(order.size());
+        for(int radius = 0; radius <= maxRadius; radius++) {
+            for(RegionCoordinates region : buildRegionSpiralRing(centerRegionX, centerRegionZ, radius)) {
+                Integer index = indexByRegion.get(region);
+                if(index != null) {
+                    spiralOrder.add(index);
+                }
+            }
+        }
+        if(spiralOrder.size() != order.size()) {
+            for(Integer index : order) {
+                if(!spiralOrder.contains(index)) {
+                    spiralOrder.add(index);
+                }
+            }
+        }
+        return spiralOrder;
+    }
+
+    private List<RegionCoordinates> buildRegionSpiralRing(int centerRegionX, int centerRegionZ, int radius) {
+        if(radius <= 0) {
+            return List.of(new RegionCoordinates(centerRegionX, centerRegionZ));
+        }
+        List<RegionCoordinates> ring = new ArrayList<>(radius * 8);
+        int minX = centerRegionX - radius;
+        int maxX = centerRegionX + radius;
+        int minZ = centerRegionZ - radius;
+        int maxZ = centerRegionZ + radius;
+
+        for(int x = minX; x <= maxX; x++) {
+            ring.add(new RegionCoordinates(x, minZ));
+        }
+        for(int z = minZ + 1; z <= maxZ; z++) {
+            ring.add(new RegionCoordinates(maxX, z));
+        }
+        for(int x = maxX - 1; x >= minX; x--) {
+            ring.add(new RegionCoordinates(x, maxZ));
+        }
+        for(int z = maxZ - 1; z > minZ; z--) {
+            ring.add(new RegionCoordinates(minX, z));
+        }
+        return ring;
     }
 
     // Variante interna para decidir si la region se devuelve recortada o con su tamaño completo de 512x512 bloques.
@@ -433,13 +503,6 @@ public final class MCARenderer {
     }
 
     private RenderedRegionResult renderRegion(Path mcaPath, RenderOptions options, boolean cropResult) throws IOException {
-        return renderRegion(mcaPath, options, cropResult, null);
-    }
-
-    private RenderedRegionResult renderRegion(Path mcaPath,
-                                              RenderOptions options,
-                                              boolean cropResult,
-                                              RegionChunkProgressListener chunkProgressListener) throws IOException {
         Path normalizedPath = validateMcaPath(mcaPath);
         RenderOptions normalizedOptions = options == null ? RenderOptions.defaults() : options.normalized();
         RegionCoordinates region = parseRegionCoordinates(normalizedPath);
@@ -454,12 +517,12 @@ public final class MCARenderer {
         MCAFile mcaFile = MCAUtil.read(normalizedPath.toFile(), RAW_DATA_FLAG);
         BufferedImage image = createRegionImage(normalizedOptions);
         fillImageBackground(image, normalizedOptions.defaultArgb());
-        RegionPaintStats paintStats = paintRegion(mcaFile, image, region, normalizedOptions, cropResult, chunkProgressListener);
+        RegionPaintStats paintStats = paintRegion(mcaFile, image, region, normalizedOptions, cropResult);
         long cropNanos = 0L;
         BufferedImage result = image;
         if(cropResult) {
             long cropStart = System.nanoTime();
-            result = cropToVisibleArea(image, normalizedOptions);
+            result = cropToVisibleArea(image, normalizedOptions, region.x() * REGION_BLOCK_SIDE, region.z() * REGION_BLOCK_SIDE);
             cropNanos = System.nanoTime() - cropStart;
         }
         debug("renderRegion finish path=%s result=%dx%d", normalizedPath, result.getWidth(), result.getHeight());
@@ -526,19 +589,28 @@ public final class MCARenderer {
         return image.getSubimage(visibleArea.x, visibleArea.y, visibleArea.width, visibleArea.height);
     }
 
-    private BufferedImage cropToVisibleArea(BufferedImage image, RenderOptions options) {
-        Rectangle cropArea = resolveCropArea(image, options);
+    private BufferedImage cropToVisibleArea(BufferedImage image, RenderOptions options, int originBlockX, int originBlockZ) {
+        Rectangle cropArea = resolveCropArea(image, options, originBlockX, originBlockZ);
         return image.getSubimage(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
     }
 
-    private Rectangle resolveCropArea(BufferedImage image, RenderOptions options) {
+    private Rectangle resolveCropArea(BufferedImage image, RenderOptions options, int originBlockX, int originBlockZ) {
         if(options != null && options.hasWorldBounds()) {
-            // Si ya se ha pedido una ventana concreta del mundo, evitamos recentrados "inteligentes"
-            // como el crop cuadrado, pero aun asi quitamos bordes totalmente vacios para no dejar
-            // franjas negras innecesarias cuando la zona pedida cae cerca de regiones incompletas.
+            Rectangle squareArea = findLargestSquareWithoutEmptyChunks(image, options.defaultArgb(), options.pixelsPerBlock());
+            if(squareArea != null) {
+                return squareArea;
+            }
             Rectangle visibleArea = findVisibleBounds(image, options.defaultArgb());
             if(visibleArea != null) {
                 return visibleArea;
+            }
+            int pixelsPerBlock = Math.max(1, options.pixelsPerBlock());
+            int cropX = Math.max(0, (options.minWorldBlockX() - originBlockX) * pixelsPerBlock);
+            int cropY = Math.max(0, (options.minWorldBlockZ() - originBlockZ) * pixelsPerBlock);
+            int cropWidth = Math.min(image.getWidth() - cropX, ((options.maxWorldBlockX() - options.minWorldBlockX()) + 1) * pixelsPerBlock);
+            int cropHeight = Math.min(image.getHeight() - cropY, ((options.maxWorldBlockZ() - options.minWorldBlockZ()) + 1) * pixelsPerBlock);
+            if(cropWidth > 0 && cropHeight > 0) {
+                return new Rectangle(cropX, cropY, cropWidth, cropHeight);
             }
             return new Rectangle(0, 0, image.getWidth(), image.getHeight());
         }
@@ -686,8 +758,7 @@ public final class MCARenderer {
                                          BufferedImage image,
                                          RegionCoordinates region,
                                          RenderOptions options,
-                                         boolean allowParallelTiles,
-                                         RegionChunkProgressListener chunkProgressListener) throws IOException {
+                                         boolean allowParallelTiles) throws IOException {
         String[][] blockNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         String[][] biomeNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         String[][] waterFloorNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
@@ -698,22 +769,21 @@ public final class MCARenderer {
         }
         int tilesPerSide = (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS);
         int tileCount = tilesPerSide * tilesPerSide;
-        boolean chunkProgressEnabled = chunkProgressListener != null;
         long sampleStart = System.nanoTime();
-        if(!chunkProgressEnabled && allowParallelTiles && REGION_TILE_PARALLELISM > 1 && tileCount > 1) {
+        if(allowParallelTiles && REGION_TILE_PARALLELISM > 1 && tileCount > 1) {
             runWithRegionTilePool(tileCount, () -> IntStream.range(0, tileCount)
                     .parallel()
                     .forEach(tileIndex -> {
                         int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
                         int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                        sampleChunkTile(mcaFile, image, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths, chunkProgressListener);
+                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
                     }));
         } else {
             IntStream.range(0, tileCount)
                     .forEach(tileIndex -> {
                         int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
                         int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                        sampleChunkTile(mcaFile, image, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths, chunkProgressListener);
+                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
                     });
         }
         long sampleNanos = System.nanoTime() - sampleStart;
@@ -726,7 +796,6 @@ public final class MCARenderer {
 
     private void sampleChunkTile(
             MCAFile mcaFile,
-            BufferedImage image,
             RegionCoordinates region,
             RenderOptions options,
             int startChunkX,
@@ -735,8 +804,7 @@ public final class MCARenderer {
             String[][] biomeNames,
             String[][] waterFloorNames,
             int[][] heights,
-            int[][] waterDepths,
-            RegionChunkProgressListener chunkProgressListener
+            int[][] waterDepths
     ) {
         int endChunkX = Math.min(REGION_CHUNK_SIDE, startChunkX + REGION_RENDER_TILE_CHUNKS);
         int endChunkZ = Math.min(REGION_CHUNK_SIDE, startChunkZ + REGION_RENDER_TILE_CHUNKS);
@@ -750,13 +818,6 @@ public final class MCARenderer {
                     continue;
                 }
                 sampleChunk(chunk, localChunkX, localChunkZ, region, options, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
-                if(chunkProgressListener != null) {
-                    if(!chunkHasVisibleSamples(heights, localChunkX, localChunkZ)) {
-                        continue;
-                    }
-                    paintChunkFromSamples(image, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options, localChunkX, localChunkZ);
-                    chunkProgressListener.onChunkRendered(localChunkX, localChunkZ, copyChunkImage(image, options, localChunkX, localChunkZ));
-                }
             }
         }
     }
@@ -861,69 +922,6 @@ public final class MCARenderer {
                 paintBlock(image, blockX, blockZ, argb, options.pixelsPerBlock());
             }
         }
-    }
-
-    private void paintChunkFromSamples(BufferedImage image,
-                                       String[][] blockNames,
-                                       String[][] biomeNames,
-                                       String[][] waterFloorNames,
-                                       int[][] heights,
-                                       int[][] waterDepths,
-                                       RenderOptions options,
-                                       int localChunkX,
-                                       int localChunkZ) {
-        int startBlockX = localChunkX * CHUNK_BLOCK_SIDE;
-        int startBlockZ = localChunkZ * CHUNK_BLOCK_SIDE;
-        int endBlockX = startBlockX + CHUNK_BLOCK_SIDE;
-        int endBlockZ = startBlockZ + CHUNK_BLOCK_SIDE;
-        RenderColorCache colorCache = new RenderColorCache();
-        boolean fastPlainColorPath = !options.biomeColoring() && !options.waterSubsurfaceShading();
-        for(int blockZ = startBlockZ; blockZ < endBlockZ; blockZ++) {
-            String previousBlockName = null;
-            Color previousBaseColor = null;
-            for(int blockX = startBlockX; blockX < endBlockX; blockX++) {
-                int argb = fastPlainColorPath
-                        ? resolveBlockColorPlain(blockNames, heights, blockX, blockZ, options, colorCache, previousBlockName, previousBaseColor)
-                        : resolveBlockColor(blockNames, biomeNames, waterFloorNames, heights, waterDepths, blockX, blockZ, options, colorCache);
-                if(fastPlainColorPath) {
-                    previousBlockName = blockNames[blockZ][blockX];
-                    previousBaseColor = previousBlockName == null ? null : resolveBaseColorCached(previousBlockName, colorCache);
-                }
-                paintBlock(image, blockX, blockZ, argb, options.pixelsPerBlock());
-            }
-        }
-    }
-
-    private BufferedImage copyChunkImage(BufferedImage image, RenderOptions options, int localChunkX, int localChunkZ) {
-        int pixelSide = CHUNK_BLOCK_SIDE * Math.max(1, options.pixelsPerBlock());
-        int startX = localChunkX * pixelSide;
-        int startY = localChunkZ * pixelSide;
-        BufferedImage chunkImage = new BufferedImage(pixelSide, pixelSide, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g2 = chunkImage.createGraphics();
-        try {
-            g2.drawImage(image, 0, 0, pixelSide, pixelSide, startX, startY, startX + pixelSide, startY + pixelSide, null);
-        } finally {
-            g2.dispose();
-        }
-        return chunkImage;
-    }
-
-    private boolean chunkHasVisibleSamples(int[][] heights, int localChunkX, int localChunkZ) {
-        if(heights == null || heights.length == 0) {
-            return false;
-        }
-        int startBlockX = localChunkX * CHUNK_BLOCK_SIDE;
-        int startBlockZ = localChunkZ * CHUNK_BLOCK_SIDE;
-        int endBlockX = Math.min(startBlockX + CHUNK_BLOCK_SIDE, heights[0].length);
-        int endBlockZ = Math.min(startBlockZ + CHUNK_BLOCK_SIDE, heights.length);
-        for(int blockZ = startBlockZ; blockZ < endBlockZ; blockZ++) {
-            for(int blockX = startBlockX; blockX < endBlockX; blockX++) {
-                if(heights[blockZ][blockX] != Integer.MIN_VALUE) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     private void paintRegionFromSamplesSinglePixel(
@@ -2406,12 +2404,10 @@ public final class MCARenderer {
     private void paintMarker(
             BufferedImage image,
             WorldPoint markerPoint,
-            int minRegionX,
-            int minRegionZ,
+            int worldOriginBlockX,
+            int worldOriginBlockZ,
             RenderOptions options
     ) {
-        int worldOriginBlockX = minRegionX * REGION_BLOCK_SIDE;
-        int worldOriginBlockZ = minRegionZ * REGION_BLOCK_SIDE;
         int markerPixelX = (markerPoint.x() - worldOriginBlockX) * options.pixelsPerBlock();
         int markerPixelY = (markerPoint.z() - worldOriginBlockZ) * options.pixelsPerBlock();
 
@@ -2533,9 +2529,13 @@ public final class MCARenderer {
         private final Integer maxWorldBlockX;
         private final Integer minWorldBlockZ;
         private final Integer maxWorldBlockZ;
+        private final boolean spiralTraversal;
+        private final Integer spiralCenterBlockX;
+        private final Integer spiralCenterBlockZ;
 
         private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean waterSubsurfaceShading, boolean biomeColoring, boolean neighborHeightHints, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb,
-                              Integer minWorldBlockX, Integer maxWorldBlockX, Integer minWorldBlockZ, Integer maxWorldBlockZ) {
+                              Integer minWorldBlockX, Integer maxWorldBlockX, Integer minWorldBlockZ, Integer maxWorldBlockZ,
+                              boolean spiralTraversal, Integer spiralCenterBlockX, Integer spiralCenterBlockZ) {
             this.pixelsPerBlock = pixelsPerBlock;
             this.minY = minY;
             this.maxY = maxY;
@@ -2550,52 +2550,55 @@ public final class MCARenderer {
             this.maxWorldBlockX = maxWorldBlockX;
             this.minWorldBlockZ = minWorldBlockZ;
             this.maxWorldBlockZ = maxWorldBlockZ;
+            this.spiralTraversal = spiralTraversal;
+            this.spiralCenterBlockX = spiralCenterBlockX;
+            this.spiralCenterBlockZ = spiralCenterBlockZ;
         }
 
         // Valores por defecto pensados para mundos modernos, pero validos tambien para muchos casos legacy.
         public static RenderOptions defaults() {
-            return new RenderOptions(1, -64, 319, true, false, false, false, true, true, DEFAULT_ARGB, null, null, null, null);
+            return new RenderOptions(1, -64, 319, true, false, false, false, true, true, DEFAULT_ARGB, null, null, null, null, false, null, null);
         }
 
         // Cambia la escala visual: 1 bloque = N pixeles.
         public RenderOptions withPixelsPerBlock(int pixelsPerBlock) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         // Cambia el rango vertical explorado al buscar la superficie.
         public RenderOptions withYRange(int minY, int maxY) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         // Activa o desactiva el sombreado por altura.
         public RenderOptions withShadeByHeight(boolean shadeByHeight) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         public RenderOptions withWaterSubsurfaceShading(boolean waterSubsurfaceShading) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         public RenderOptions withBiomeColoring(boolean biomeColoring) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         public RenderOptions withNeighborHeightHints(boolean neighborHeightHints) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         // Permite decidir si se ignoran bloques de detalle/transparencia.
         public RenderOptions withIgnoreTransparentBlocks(boolean ignoreTransparentBlocks) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         public RenderOptions withPreferSquareCrop(boolean preferSquareCrop) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         // Permite cambiar el color de fondo.
         public RenderOptions withDefaultArgb(int defaultArgb) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ, spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         public RenderOptions withWorldBounds(int minWorldBlockX, int maxWorldBlockX, int minWorldBlockZ, int maxWorldBlockZ) {
@@ -2603,7 +2606,14 @@ public final class MCARenderer {
                     Math.min(minWorldBlockX, maxWorldBlockX),
                     Math.max(minWorldBlockX, maxWorldBlockX),
                     Math.min(minWorldBlockZ, maxWorldBlockZ),
-                    Math.max(minWorldBlockZ, maxWorldBlockZ));
+                    Math.max(minWorldBlockZ, maxWorldBlockZ),
+                    spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
+        }
+
+        public RenderOptions withSpiralTraversal(int centerBlockX, int centerBlockZ) {
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
+                    minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ,
+                    true, centerBlockX, centerBlockZ);
         }
 
         // Asegura que las opciones tengan valores coherentes antes de usarse internamente.
@@ -2612,7 +2622,8 @@ public final class MCARenderer {
             int normalizedMinY = minY;
             int normalizedMaxY = Math.max(normalizedMinY, maxY);
             return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
-                    minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+                    minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ,
+                    spiralTraversal, spiralCenterBlockX, spiralCenterBlockZ);
         }
 
         // Getters simples para leer las opciones desde el renderer.
@@ -2631,6 +2642,9 @@ public final class MCARenderer {
         public int maxWorldBlockX() { return maxWorldBlockX == null ? Integer.MAX_VALUE : maxWorldBlockX; }
         public int minWorldBlockZ() { return minWorldBlockZ == null ? Integer.MIN_VALUE : minWorldBlockZ; }
         public int maxWorldBlockZ() { return maxWorldBlockZ == null ? Integer.MAX_VALUE : maxWorldBlockZ; }
+        public boolean spiralTraversal() { return spiralTraversal; }
+        public int spiralCenterBlockX() { return spiralCenterBlockX == null ? 0 : spiralCenterBlockX; }
+        public int spiralCenterBlockZ() { return spiralCenterBlockZ == null ? 0 : spiralCenterBlockZ; }
     }
 
     // Coordenadas de una region dentro del mundo. Ejemplo: r.1.-2.mca -> x=1, z=-2.
@@ -2647,22 +2661,6 @@ public final class MCARenderer {
                               int regionsCompleted,
                               int totalRegions,
                               RenderStats partialStats);
-
-        default boolean supportsChunkUpdates() {
-            return false;
-        }
-
-        default void onChunkComposed(int drawX,
-                                     int drawY,
-                                     BufferedImage chunkImage,
-                                     int chunksCompleted,
-                                     int totalChunks,
-                                     RenderStats partialStats) {
-        }
-    }
-
-    private interface RegionChunkProgressListener {
-        void onChunkRendered(int localChunkX, int localChunkZ, BufferedImage chunkImage);
     }
 
     public record RenderStats(long sampleNanos, long paintNanos, long composeNanos, long cropNanos, long markerNanos) {

@@ -140,8 +140,8 @@ public class PanelMundo extends JPanel {
     private final JCheckBox colorearBiomasMenuItem = new JCheckBox("Colorear biomas", true);
     private final JCheckBox calcularVecinoMenuItem = new JCheckBox("Calcular vecino", false);
     private final JCheckBox espiralPreviewMenuItem = new JCheckBox("Espiral centrada", false);
-    private final JCheckBox tiempoRealPreviewMenuItem = new JCheckBox("Render en tiempo real", false);
-    private final JCheckBox animacionChunksPreviewMenuItem = new JCheckBox("Animación por chunks", false);
+    private final JCheckBox renderEspiralPreviewMenuItem = new JCheckBox("Render espiral (prueba)", false);
+    private final JCheckBox tiempoRealPreviewMenuItem = new JCheckBox("Renderizado en tiempo real", false);
     private final JCheckBox mostrarSpawnMenuItem = new JCheckBox("Mostrar spawn", false);
     private final JCheckBox mostrarJugadoresMenuItem = new JCheckBox("Mostrar jugadores", false);
     private final JCheckBox limitesChunksMenuItem = new JCheckBox("Límites de chunks", false);
@@ -174,14 +174,15 @@ public class PanelMundo extends JPanel {
     private boolean colorearBiomasEnPreview = true;
     private boolean calcularVecinoEnPreview = false;
     private boolean espiralCentradaEnPreview = false;
+    private boolean renderEspiralEnPreview = false;
     private boolean renderTiempoRealEnPreview = false;
-    private boolean animacionChunksEnPreview = false;
     private boolean mostrarSpawnEnPreview = false;
     private boolean mostrarJugadoresEnPreview = false;
     private boolean limitesChunksEnPreview = false;
     private boolean usarTodoEnPreview = false;
     private int limiteMaximoRenderPreview = 256;
     private static final int EMPTY_SPIRAL_RINGS_TO_STOP = 2;
+    private static final int PREVIEW_RENDER_MARGIN_BLOCKS = MCARenderer.CHUNK_BLOCK_SIDE;
     private String centroRenderPreviewId = "spawn";
     private static boolean previewGenerationInProgress = false;
     private static SwingWorker<PreviewGenerationResult, PreviewGenerationUpdate> previewGenerationWorker;
@@ -1737,26 +1738,34 @@ public class PanelMundo extends JPanel {
                 if (regionesPreview.isEmpty()) {
                     return new PreviewGenerationResult(outputPath, true, null, null, null);
                 }
+                RenderWorldBounds targetRenderBounds = usarTodoEnPreview
+                        ? null
+                        : resolverLimitesRender(regionesPreview, centerPoint, limiteMaximoRenderPreview);
+                RenderWorldBounds renderBounds = expandirLimitesRender(regionesPreview, targetRenderBounds, PREVIEW_RENDER_MARGIN_BLOCKS);
                 MCARenderer.RenderOptions renderOptions = MCARenderer.RenderOptions.defaults()
                         .withShadeByHeight(sombreadoEnPreview)
                         .withWaterSubsurfaceShading(sombreadoAguaEnPreview)
                         .withBiomeColoring(colorearBiomasEnPreview)
                         .withNeighborHeightHints(calcularVecinoEnPreview)
                         .withPreferSquareCrop(!usarTodoEnPreview);
+                if (renderBounds != null) {
+                    renderOptions = renderOptions.withWorldBounds(
+                            renderBounds.minBlockX(),
+                            renderBounds.maxBlockX(),
+                            renderBounds.minBlockZ(),
+                            renderBounds.maxBlockZ()
+                    );
+                }
+                if (renderEspiralEnPreview && centerPoint != null) {
+                    renderOptions = renderOptions.withSpiralTraversal(centerPoint.x(), centerPoint.z());
+                }
                 MCARenderer.WorldRenderProgressListener progressListener = null;
-                if (renderTiempoRealEnPreview || animacionChunksEnPreview) {
+                if (renderTiempoRealEnPreview) {
                     progressListener = new MCARenderer.WorldRenderProgressListener() {
-                        @Override
-                        public boolean supportsChunkUpdates() {
-                            return animacionChunksEnPreview;
-                        }
-
                         @Override
                         public void onCanvasInitialized(int width, int height, int defaultArgb, int totalRegions) {
                             if (!isCancelled()) {
-                                String statusText = animacionChunksEnPreview
-                                        ? construirTextoProgresoChunks(0, totalRegions * 1024, 0.0d)
-                                        : construirTextoProgresoRender(0, totalRegions, 0.0d);
+                                String statusText = construirTextoProgresoRender(0, totalRegions, 0.0d);
                                 publish(PreviewGenerationUpdate.initialization(width, height, defaultArgb, totalRegions, statusText));
                             }
                         }
@@ -1777,30 +1786,15 @@ public class PanelMundo extends JPanel {
                                 ));
                             }
                         }
-
-                        @Override
-                        public void onChunkComposed(int drawX, int drawY, BufferedImage chunkImage, int chunksCompleted, int totalChunks, MCARenderer.RenderStats partialStats) {
-                            if (!isCancelled()) {
-                                double elapsedSeconds = (System.nanoTime() - previewStartNanos) / 1_000_000_000.0d;
-                                publish(PreviewGenerationUpdate.chunk(
-                                        drawX,
-                                        drawY,
-                                        chunkImage,
-                                        chunksCompleted,
-                                        totalChunks,
-                                        elapsedSeconds,
-                                        partialStats,
-                                        construirTextoProgresoChunks(chunksCompleted, totalChunks, elapsedSeconds)
-                                ));
-                            }
-                        }
                     };
                 }
                 MCARenderer.RenderedWorld renderedWorld = renderer.renderWorldWithMetadata(regionesPreview, renderOptions, null, progressListener);
                 if (isCancelled()) {
                     return null;
                 }
-                CroppedPreview croppedPreview = usarTodoEnPreview
+                CroppedPreview croppedPreview = (!usarTodoEnPreview && targetRenderBounds != null)
+                        ? recortarPreviewAObjetivo(renderedWorld, targetRenderBounds)
+                        : usarTodoEnPreview
                         ? new CroppedPreview(renderedWorld.image(), renderedWorld.originBlockX(), renderedWorld.originBlockZ())
                         : recortarPreviewPorLimite(renderedWorld, centerPoint, limiteMaximoRenderPreview);
                 BufferedImage preview = croppedPreview.image();
@@ -2102,6 +2096,13 @@ public class PanelMundo extends JPanel {
                     .toList();
         }
 
+        if (renderEspiralEnPreview) {
+            List<Path> regionesContinuas = seleccionarRegionesCuadradoContinuo(candidatas, centerPoint, limiteMaximoRender);
+            if (!regionesContinuas.isEmpty()) {
+                return regionesContinuas;
+            }
+        }
+
         if (espiralCentradaEnPreview) {
             List<Path> regionesEspiral = seleccionarRegionesEnEspiral(candidatas, centerPoint, limiteMaximoRender);
             if (!regionesEspiral.isEmpty()) {
@@ -2231,6 +2232,70 @@ public class PanelMundo extends JPanel {
                 .toList();
     }
 
+    private List<Path> seleccionarRegionesCuadradoContinuo(List<RegionPreviewCandidate> candidatas, MCARenderer.WorldPoint centerPoint, int limiteMaximoRender) {
+        if (candidatas == null || candidatas.isEmpty() || centerPoint == null || limiteMaximoRender <= 0) {
+            return List.of();
+        }
+
+        Map<RegionKey, RegionPreviewCandidate> porClave = new HashMap<>();
+        for (RegionPreviewCandidate candidata : candidatas) {
+            porClave.put(candidata.key(), candidata);
+        }
+
+        int centerRegionX = Math.floorDiv(centerPoint.x(), MCARenderer.REGION_BLOCK_SIDE);
+        int centerRegionZ = Math.floorDiv(centerPoint.z(), MCARenderer.REGION_BLOCK_SIDE);
+        int requestedMinBlockX = centerPoint.x() - (limiteMaximoRender / 2);
+        int requestedMaxBlockX = requestedMinBlockX + limiteMaximoRender - 1;
+        int requestedMinBlockZ = centerPoint.z() - (limiteMaximoRender / 2);
+        int requestedMaxBlockZ = requestedMinBlockZ + limiteMaximoRender - 1;
+        int requestedMinRegionX = Math.floorDiv(requestedMinBlockX, MCARenderer.REGION_BLOCK_SIDE);
+        int requestedMaxRegionX = Math.floorDiv(requestedMaxBlockX, MCARenderer.REGION_BLOCK_SIDE);
+        int requestedMinRegionZ = Math.floorDiv(requestedMinBlockZ, MCARenderer.REGION_BLOCK_SIDE);
+        int requestedMaxRegionZ = Math.floorDiv(requestedMaxBlockZ, MCARenderer.REGION_BLOCK_SIDE);
+        int maxRadius = Math.max(
+                Math.max(Math.abs(requestedMinRegionX - centerRegionX), Math.abs(requestedMaxRegionX - centerRegionX)),
+                Math.max(Math.abs(requestedMinRegionZ - centerRegionZ), Math.abs(requestedMaxRegionZ - centerRegionZ))
+        );
+
+        LinkedHashMap<RegionKey, RegionPreviewCandidate> seleccionadas = new LinkedHashMap<>();
+        for (int radius = 0; radius <= maxRadius; radius++) {
+            List<RegionKey> ringKeys = construirAnilloEspiral(new RegionKey(centerRegionX, centerRegionZ), radius);
+            boolean ringCompleto = true;
+            for (RegionKey key : ringKeys) {
+                if (key.regionX() < requestedMinRegionX || key.regionX() > requestedMaxRegionX
+                        || key.regionZ() < requestedMinRegionZ || key.regionZ() > requestedMaxRegionZ) {
+                    continue;
+                }
+                RegionPreviewCandidate candidata = porClave.get(key);
+                if (candidata == null) {
+                    ringCompleto = false;
+                    break;
+                }
+            }
+            if (!ringCompleto) {
+                break;
+            }
+            for (RegionKey key : ringKeys) {
+                if (key.regionX() < requestedMinRegionX || key.regionX() > requestedMaxRegionX
+                        || key.regionZ() < requestedMinRegionZ || key.regionZ() > requestedMaxRegionZ) {
+                    continue;
+                }
+                RegionPreviewCandidate candidata = porClave.get(key);
+                if (candidata != null) {
+                    seleccionadas.putIfAbsent(key, candidata);
+                }
+            }
+        }
+
+        if (seleccionadas.isEmpty()) {
+            return List.of();
+        }
+
+        return seleccionadas.values().stream()
+                .map(RegionPreviewCandidate::path)
+                .toList();
+    }
+
     private List<RegionKey> construirAnilloEspiral(RegionKey centerRegion, int radius) {
         if (centerRegion == null) {
             return List.of();
@@ -2304,6 +2369,68 @@ public class PanelMundo extends JPanel {
         }
 
         return new RenderWorldBounds(minBlockX, maxBlockX, minBlockZ, maxBlockZ);
+    }
+
+    private RenderWorldBounds expandirLimitesRender(List<Path> regionesPreview, RenderWorldBounds baseBounds, int marginBlocks) {
+        if (regionesPreview == null || regionesPreview.isEmpty() || baseBounds == null || marginBlocks <= 0) {
+            return baseBounds;
+        }
+
+        int minRegionX = Integer.MAX_VALUE;
+        int maxRegionX = Integer.MIN_VALUE;
+        int minRegionZ = Integer.MAX_VALUE;
+        int maxRegionZ = Integer.MIN_VALUE;
+        for (Path region : regionesPreview) {
+            RegionPreviewCandidate candidate = parsearRegionPreview(region);
+            if (candidate == null) {
+                continue;
+            }
+            minRegionX = Math.min(minRegionX, candidate.regionX());
+            maxRegionX = Math.max(maxRegionX, candidate.regionX());
+            minRegionZ = Math.min(minRegionZ, candidate.regionZ());
+            maxRegionZ = Math.max(maxRegionZ, candidate.regionZ());
+        }
+        if (minRegionX == Integer.MAX_VALUE) {
+            return baseBounds;
+        }
+
+        int availableMinBlockX = minRegionX * MCARenderer.REGION_BLOCK_SIDE;
+        int availableMaxBlockX = ((maxRegionX + 1) * MCARenderer.REGION_BLOCK_SIDE) - 1;
+        int availableMinBlockZ = minRegionZ * MCARenderer.REGION_BLOCK_SIDE;
+        int availableMaxBlockZ = ((maxRegionZ + 1) * MCARenderer.REGION_BLOCK_SIDE) - 1;
+
+        return new RenderWorldBounds(
+                Math.max(availableMinBlockX, baseBounds.minBlockX() - marginBlocks),
+                Math.min(availableMaxBlockX, baseBounds.maxBlockX() + marginBlocks),
+                Math.max(availableMinBlockZ, baseBounds.minBlockZ() - marginBlocks),
+                Math.min(availableMaxBlockZ, baseBounds.maxBlockZ() + marginBlocks)
+        );
+    }
+
+    private CroppedPreview recortarPreviewAObjetivo(MCARenderer.RenderedWorld renderedWorld, RenderWorldBounds targetBounds) {
+        if (renderedWorld == null || renderedWorld.image() == null || targetBounds == null) {
+            return new CroppedPreview(
+                    renderedWorld == null ? null : renderedWorld.image(),
+                    renderedWorld == null ? 0 : renderedWorld.originBlockX(),
+                    renderedWorld == null ? 0 : renderedWorld.originBlockZ()
+            );
+        }
+
+        BufferedImage image = renderedWorld.image();
+        int pixelsPerBlock = Math.max(1, renderedWorld.pixelsPerBlock());
+        int cropX = Math.max(0, (targetBounds.minBlockX() - renderedWorld.originBlockX()) * pixelsPerBlock);
+        int cropY = Math.max(0, (targetBounds.minBlockZ() - renderedWorld.originBlockZ()) * pixelsPerBlock);
+        int cropWidth = Math.min(image.getWidth() - cropX, ((targetBounds.maxBlockX() - targetBounds.minBlockX()) + 1) * pixelsPerBlock);
+        int cropHeight = Math.min(image.getHeight() - cropY, ((targetBounds.maxBlockZ() - targetBounds.minBlockZ()) + 1) * pixelsPerBlock);
+        if (cropWidth <= 0 || cropHeight <= 0) {
+            return new CroppedPreview(image, renderedWorld.originBlockX(), renderedWorld.originBlockZ());
+        }
+
+        return new CroppedPreview(
+                image.getSubimage(cropX, cropY, cropWidth, cropHeight),
+                targetBounds.minBlockX(),
+                targetBounds.minBlockZ()
+        );
     }
 
     private boolean regionIntersectsWindow(RegionPreviewCandidate candidate, int minBlockX, int maxBlockX, int minBlockZ, int maxBlockZ) {
@@ -3001,14 +3128,6 @@ public class PanelMundo extends JPanel {
         return "Renderizando... " + tiempo + " (" + regionesCompletadas + "/" + totalRegiones + ")";
     }
 
-    private String construirTextoProgresoChunks(int chunksCompletados, int totalChunks, double elapsedSeconds) {
-        String tiempo = formatearDuracionRender(elapsedSeconds);
-        if (totalChunks <= 0) {
-            return "Renderizando chunks... " + tiempo;
-        }
-        return "Renderizando chunks... " + tiempo + " (" + chunksCompletados + "/" + totalChunks + ")";
-    }
-
     private void ajustarAnchoBotonPreview() {
         FontMetrics metrics = generarPreviewButton.getFontMetrics(generarPreviewButton.getFont());
         int maxTextWidth = Math.max(
@@ -3154,24 +3273,10 @@ public class PanelMundo extends JPanel {
         calcularVecinoMenuItem.addActionListener(e -> calcularVecinoEnPreview = calcularVecinoMenuItem.isSelected());
         espiralPreviewMenuItem.setSelected(espiralCentradaEnPreview);
         espiralPreviewMenuItem.addActionListener(e -> espiralCentradaEnPreview = espiralPreviewMenuItem.isSelected());
+        renderEspiralPreviewMenuItem.setSelected(renderEspiralEnPreview);
+        renderEspiralPreviewMenuItem.addActionListener(e -> renderEspiralEnPreview = renderEspiralPreviewMenuItem.isSelected());
         tiempoRealPreviewMenuItem.setSelected(renderTiempoRealEnPreview);
-        tiempoRealPreviewMenuItem.addActionListener(e -> {
-            renderTiempoRealEnPreview = tiempoRealPreviewMenuItem.isSelected();
-            if (!renderTiempoRealEnPreview && animacionChunksEnPreview) {
-                animacionChunksEnPreview = false;
-                animacionChunksPreviewMenuItem.setSelected(false);
-            }
-            animacionChunksPreviewMenuItem.setEnabled(renderTiempoRealEnPreview || animacionChunksEnPreview);
-        });
-        animacionChunksPreviewMenuItem.setSelected(animacionChunksEnPreview);
-        animacionChunksPreviewMenuItem.addActionListener(e -> {
-            animacionChunksEnPreview = animacionChunksPreviewMenuItem.isSelected();
-            if (animacionChunksEnPreview && !renderTiempoRealEnPreview) {
-                renderTiempoRealEnPreview = true;
-                tiempoRealPreviewMenuItem.setSelected(true);
-            }
-            animacionChunksPreviewMenuItem.setEnabled(renderTiempoRealEnPreview || animacionChunksEnPreview);
-        });
+        tiempoRealPreviewMenuItem.addActionListener(e -> renderTiempoRealEnPreview = tiempoRealPreviewMenuItem.isSelected());
         mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
         mostrarSpawnMenuItem.addActionListener(e -> {
             mostrarSpawnEnPreview = mostrarSpawnMenuItem.isSelected();
@@ -3219,8 +3324,8 @@ public class PanelMundo extends JPanel {
         stylePreviewOptionCheckBox(colorearBiomasMenuItem);
         stylePreviewOptionCheckBox(calcularVecinoMenuItem);
         stylePreviewOptionCheckBox(espiralPreviewMenuItem);
+        stylePreviewOptionCheckBox(renderEspiralPreviewMenuItem);
         stylePreviewOptionCheckBox(tiempoRealPreviewMenuItem);
-        stylePreviewOptionCheckBox(animacionChunksPreviewMenuItem);
         stylePreviewOptionCheckBox(mostrarJugadoresMenuItem);
         stylePreviewOptionCheckBox(limitesChunksMenuItem);
         leftColumn.add(createPreviewOptionsSectionLabel("Generación"));
@@ -3249,9 +3354,9 @@ public class PanelMundo extends JPanel {
         rightColumn.add(Box.createVerticalStrut(4));
         rightColumn.add(espiralPreviewMenuItem);
         rightColumn.add(Box.createVerticalStrut(4));
-        rightColumn.add(tiempoRealPreviewMenuItem);
+        rightColumn.add(renderEspiralPreviewMenuItem);
         rightColumn.add(Box.createVerticalStrut(4));
-        rightColumn.add(animacionChunksPreviewMenuItem);
+        rightColumn.add(tiempoRealPreviewMenuItem);
         rightColumn.add(Box.createVerticalGlue());
 
         optionsPanel.add(leftColumn);
@@ -3285,9 +3390,8 @@ public class PanelMundo extends JPanel {
         colorearBiomasMenuItem.setSelected(colorearBiomasEnPreview);
         calcularVecinoMenuItem.setSelected(calcularVecinoEnPreview);
         espiralPreviewMenuItem.setSelected(espiralCentradaEnPreview);
+        renderEspiralPreviewMenuItem.setSelected(renderEspiralEnPreview);
         tiempoRealPreviewMenuItem.setSelected(renderTiempoRealEnPreview);
-        animacionChunksPreviewMenuItem.setSelected(animacionChunksEnPreview);
-        animacionChunksPreviewMenuItem.setEnabled(renderTiempoRealEnPreview || animacionChunksEnPreview);
         mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
         mostrarJugadoresMenuItem.setSelected(mostrarJugadoresEnPreview);
         limitesChunksMenuItem.setSelected(limitesChunksEnPreview);
@@ -4059,16 +4163,6 @@ public class PanelMundo extends JPanel {
             return new PreviewGenerationUpdate(false, 0, 0, 0, drawX, drawY, regionImage, regionsCompleted, totalRegions, elapsedSeconds, partialStats, statusText);
         }
 
-        private static PreviewGenerationUpdate chunk(int drawX,
-                                                     int drawY,
-                                                     BufferedImage regionImage,
-                                                     int regionsCompleted,
-                                                     int totalRegions,
-                                                     double elapsedSeconds,
-                                                     MCARenderer.RenderStats partialStats,
-                                                     String statusText) {
-            return new PreviewGenerationUpdate(false, 0, 0, 0, drawX, drawY, regionImage, regionsCompleted, totalRegions, elapsedSeconds, partialStats, statusText);
-        }
     }
 
     private record PreviewGenerationResult(Path outputPath, boolean sinRegiones, BufferedImage preview, PreviewOverlayData overlayData, MCARenderer.RenderStats stats) {}
