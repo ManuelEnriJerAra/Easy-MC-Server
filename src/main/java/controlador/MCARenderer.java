@@ -18,12 +18,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Arrays;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -64,11 +72,29 @@ public final class MCARenderer {
     // Flag de Querz para leer chunks en modo "raw" y acceder al NBT moderno sin forzar el esquema legacy "Level".
     private static final long RAW_DATA_FLAG = 65_536L;
     // Logging de depuracion del renderer. Se puede desactivar con -Deasymc.mca.debug=false.
-    private static final boolean DEBUG_LOGGING = Boolean.parseBoolean(System.getProperty("easymc.mca.debug", "true"));
+    private static final boolean DEBUG_LOGGING = Boolean.parseBoolean(System.getProperty("easymc.mca.debug", "false"));
     private static final int DEBUG_MAX_REASON_LINES = 12;
     private static final int DEBUG_MAX_CHUNK_LINES = 20;
     private static final int DEBUG_MAX_SAMPLE_LINES = 10;
     private static final int REGION_RENDER_TILE_CHUNKS = 4;
+    private static final int WORLD_RENDER_PARALLELISM = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() - 1));
+    private static final int REGION_TILE_PARALLELISM = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() - 1));
+    private static final double SHADE_LIGHT_X = -0.5828079709722181d;
+    private static final double SHADE_LIGHT_Y = -0.5828079709722181d;
+    private static final double SHADE_LIGHT_Z = 0.5727599000930402d;
+    private static final double SHADE_DOT_MIN = -0.9d;
+    private static final double SHADE_DOT_MAX = 0.9d;
+    private static final double SHADE_INTENSITY_MIN = 0d;
+    private static final double SHADE_INTENSITY_MAX = 1d;
+    private static final double SHADE_MIDPOINT = 0.72d;
+    private static final double SHADE_SCALE = 62d;
+    private static final double WATER_SHADE_EXAGGERATION = 0.18d;
+    private static final double WATER_SHADE_AMBIENT = 0.80d;
+    private static final double WATER_SHADE_CONTRAST = 0.20d;
+    private static final double LAND_SHADE_EXAGGERATION = 0.38d;
+    private static final double LAND_SHADE_AMBIENT = 0.62d;
+    private static final double LAND_SHADE_CONTRAST = 0.38d;
+    private static final int NEIGHBOR_HINT_UPWARD_MARGIN = 10;
     // Lista minima de bloques que siempre queremos tratar como invisibles desde una vista cenital.
     private static final Set<String> TRANSPARENT_BLOCKS = Set.of(
             "minecraft:air",
@@ -97,7 +123,7 @@ public final class MCARenderer {
      * 7. Recorta la imagen para eliminar bordes totalmente vacios.
      */
     public BufferedImage renderRegion(Path mcaPath, RenderOptions options) throws IOException {
-        return renderRegion(mcaPath, options, true);
+        return renderRegion(mcaPath, options, true).image();
     }
 
     /**
@@ -207,48 +233,136 @@ public final class MCARenderer {
             g2.setColor(new Color(normalizedOptions.defaultArgb(), true));
             g2.fillRect(0, 0, width, height);
 
-            List<RenderedRegion> renderedRegions = IntStream.range(0, normalizedPaths.size())
+            List<RenderedRegion> renderedRegions = runWithWorldRenderPool(() -> IntStream.range(0, normalizedPaths.size()).parallel()
                     .mapToObj(i -> {
                         try {
                             // Muy importante: al componer varias regiones no debemos recortar cada una por separado.
                             // Si lo hiciésemos, cada imagen regional tendría un tamaño distinto y al dibujarla en su
                             // "slot" de 512x512 se desplazaría, provocando cortes rectos o mezclas entre previews.
-                            BufferedImage regionImage = renderRegion(normalizedPaths.get(i), normalizedOptions, false);
-                            return new RenderedRegion(coords.get(i), regionImage);
+                            RenderedRegionResult regionResult = renderRegion(normalizedPaths.get(i), normalizedOptions, false);
+                            return new RenderedRegion(coords.get(i), regionResult.image(), regionResult.stats());
                         } catch(IOException ex) {
                             throw new RegionRenderRuntimeException(ex);
                         }
                     })
-                    .toList();
+                    .toList());
 
+            long composeStart = System.nanoTime();
             for(RenderedRegion renderedRegion : renderedRegions) {
                 RegionCoordinates region = renderedRegion.region();
                 int drawX = (region.x() - minRegionX) * pixelsPerRegion;
                 int drawY = (region.z() - minRegionZ) * pixelsPerRegion;
                 g2.drawImage(renderedRegion.image(), drawX, drawY, null);
             }
+            long composeNanos = System.nanoTime() - composeStart;
+            long sampleNanos = renderedRegions.stream().mapToLong(renderedRegion -> renderedRegion.stats().sampleNanos()).sum();
+            long paintNanos = renderedRegions.stream().mapToLong(renderedRegion -> renderedRegion.stats().paintNanos()).sum();
+            long cropNanos = renderedRegions.stream().mapToLong(renderedRegion -> renderedRegion.stats().cropNanos()).sum();
+            long markerNanos = 0L;
+            long worldCropNanos = 0L;
+
+            if(markerPoint != null) {
+                long markerStart = System.nanoTime();
+                paintMarker(image, markerPoint, minRegionX, minRegionZ, normalizedOptions);
+                markerNanos = System.nanoTime() - markerStart;
+            }
+
+            long cropStart = System.nanoTime();
+            Rectangle cropArea = resolveCropArea(image, normalizedOptions);
+            BufferedImage result = image.getSubimage(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+            worldCropNanos = System.nanoTime() - cropStart;
+            int originBlockX = minRegionX * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.x, normalizedOptions.pixelsPerBlock());
+            int originBlockZ = minRegionZ * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.y, normalizedOptions.pixelsPerBlock());
+            debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
+            return new RenderedWorld(
+                    result,
+                    originBlockX,
+                    originBlockZ,
+                    normalizedOptions.pixelsPerBlock(),
+                    new RenderStats(sampleNanos, paintNanos, composeNanos, cropNanos + worldCropNanos, markerNanos)
+            );
         } catch(RegionRenderRuntimeException ex) {
             throw ex.ioException();
         } finally {
             g2.dispose();
         }
+    }
 
-        if(markerPoint != null) {
-            // El marcador se pinta sobre el mosaico completo, en coordenadas absolutas del mundo.
-            // Asi no depende del recorte posterior ni de como se escale la preview en Swing.
-            paintMarker(image, markerPoint, minRegionX, minRegionZ, normalizedOptions);
+    private <T> T runWithWorldRenderPool(Callable<T> task) throws IOException {
+        if(task == null) {
+            throw new IllegalArgumentException("task no puede ser null");
+        }
+        if(WORLD_RENDER_PARALLELISM <= 1) {
+            try {
+                return task.call();
+            } catch(RegionRenderRuntimeException ex) {
+                throw ex.ioException();
+            } catch(IOException ex) {
+                throw ex;
+            } catch(Exception ex) {
+                throw new IOException("Error ejecutando el render MCA", ex);
+            }
         }
 
-        Rectangle cropArea = resolveCropArea(image, normalizedOptions);
-        BufferedImage result = image.getSubimage(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
-        int originBlockX = minRegionX * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.x, normalizedOptions.pixelsPerBlock());
-        int originBlockZ = minRegionZ * REGION_BLOCK_SIDE + Math.floorDiv(cropArea.y, normalizedOptions.pixelsPerBlock());
-        debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
-        return new RenderedWorld(result, originBlockX, originBlockZ, normalizedOptions.pixelsPerBlock());
+        ForkJoinPool pool = new ForkJoinPool(WORLD_RENDER_PARALLELISM);
+        try {
+            return pool.submit(() -> {
+                try {
+                    return task.call();
+                } catch(RegionRenderRuntimeException ex) {
+                    throw ex;
+                } catch(Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            }).get();
+        } catch(InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Render MCA interrumpido", ex);
+        } catch(ExecutionException ex) {
+            Throwable cause = ex.getCause();
+            if(cause instanceof RegionRenderRuntimeException regionRenderRuntimeException) {
+                throw regionRenderRuntimeException.ioException();
+            }
+            if(cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if(cause instanceof RuntimeException runtimeException && runtimeException.getCause() instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Error ejecutando el render MCA en paralelo", cause);
+        } finally {
+            pool.shutdown();
+        }
     }
 
     // Variante interna para decidir si la region se devuelve recortada o con su tamaño completo de 512x512 bloques.
-    private BufferedImage renderRegion(Path mcaPath, RenderOptions options, boolean cropResult) throws IOException {
+    private void runWithRegionTilePool(int tileCount, Runnable task) throws IOException {
+        if(task == null) {
+            throw new IllegalArgumentException("task no puede ser null");
+        }
+        if(REGION_TILE_PARALLELISM <= 1 || tileCount <= 1) {
+            task.run();
+            return;
+        }
+
+        ForkJoinPool pool = new ForkJoinPool(REGION_TILE_PARALLELISM);
+        try {
+            pool.submit(task).get();
+        } catch(InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Render MCA interrumpido durante el muestreo por tiles", ex);
+        } catch(ExecutionException ex) {
+            Throwable cause = ex.getCause();
+            if(cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IOException("Error ejecutando el muestreo MCA por tiles", cause);
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    private RenderedRegionResult renderRegion(Path mcaPath, RenderOptions options, boolean cropResult) throws IOException {
         Path normalizedPath = validateMcaPath(mcaPath);
         RenderOptions normalizedOptions = options == null ? RenderOptions.defaults() : options.normalized();
         RegionCoordinates region = parseRegionCoordinates(normalizedPath);
@@ -263,10 +377,16 @@ public final class MCARenderer {
         MCAFile mcaFile = MCAUtil.read(normalizedPath.toFile(), RAW_DATA_FLAG);
         BufferedImage image = createRegionImage(normalizedOptions);
         fillImageBackground(image, normalizedOptions.defaultArgb());
-        paintRegion(mcaFile, image, region, normalizedOptions);
-        BufferedImage result = cropResult ? cropToVisibleArea(image, normalizedOptions) : image;
+        RegionPaintStats paintStats = paintRegion(mcaFile, image, region, normalizedOptions, cropResult);
+        long cropNanos = 0L;
+        BufferedImage result = image;
+        if(cropResult) {
+            long cropStart = System.nanoTime();
+            result = cropToVisibleArea(image, normalizedOptions);
+            cropNanos = System.nanoTime() - cropStart;
+        }
         debug("renderRegion finish path=%s result=%dx%d", normalizedPath, result.getWidth(), result.getHeight());
-        return result;
+        return new RenderedRegionResult(result, new RenderStats(paintStats.sampleNanos(), paintStats.paintNanos(), 0L, cropNanos, 0L));
     }
 
     // Exporta una sola region a PNG con opciones por defecto.
@@ -485,21 +605,40 @@ public final class MCARenderer {
      * - A partir de esos indices locales mas las coordenadas regionales, luego calculamos
      *   las coordenadas globales reales del chunk y del bloque.
      */
-    private void paintRegion(MCAFile mcaFile, BufferedImage image, RegionCoordinates region, RenderOptions options) {
+    private RegionPaintStats paintRegion(MCAFile mcaFile, BufferedImage image, RegionCoordinates region, RenderOptions options, boolean allowParallelTiles) throws IOException {
         String[][] blockNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         String[][] biomeNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         String[][] waterFloorNames = new String[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         int[][] heights = new int[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
         int[][] waterDepths = new int[REGION_BLOCK_SIDE][REGION_BLOCK_SIDE];
+        for(int row = 0; row < REGION_BLOCK_SIDE; row++) {
+            Arrays.fill(heights[row], Integer.MIN_VALUE);
+        }
         int tilesPerSide = (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS);
-        IntStream.range(0, tilesPerSide * tilesPerSide)
-                .forEach(tileIndex -> {
-                    int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                    int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                    sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
-                });
+        int tileCount = tilesPerSide * tilesPerSide;
+        long sampleStart = System.nanoTime();
+        if(allowParallelTiles && REGION_TILE_PARALLELISM > 1 && tileCount > 1) {
+            runWithRegionTilePool(tileCount, () -> IntStream.range(0, tileCount)
+                    .parallel()
+                    .forEach(tileIndex -> {
+                        int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
+                        int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
+                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
+                    }));
+        } else {
+            IntStream.range(0, tileCount)
+                    .forEach(tileIndex -> {
+                        int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
+                        int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
+                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
+                    });
+        }
+        long sampleNanos = System.nanoTime() - sampleStart;
 
+        long paintStart = System.nanoTime();
         paintRegionFromSamples(image, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options);
+        long paintNanos = System.nanoTime() - paintStart;
+        return new RegionPaintStats(sampleNanos, paintNanos);
     }
 
     private void sampleChunkTile(
@@ -554,6 +693,10 @@ public final class MCARenderer {
             int[][] heights,
             int[][] waterDepths
     ) {
+        ChunkData chunkData = resolveChunkData(chunk);
+        if(chunkData.root() == null) {
+            return;
+        }
         int worldChunkX = region.x() * REGION_CHUNK_SIDE + localChunkX;
         int worldChunkZ = region.z() * REGION_CHUNK_SIDE + localChunkZ;
         int regionBlockZ = localChunkZ * CHUNK_BLOCK_SIDE;
@@ -577,14 +720,19 @@ public final class MCARenderer {
             for(int localX = startLocalX; localX < endLocalX; localX++) {
                 int worldBlockX = worldChunkX * CHUNK_BLOCK_SIDE + localX;
                 int worldBlockZ = worldChunkZ * CHUNK_BLOCK_SIDE + localZ;
-                TopBlockSample sample = findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options);
-                blockNames[regionBlockZ + localZ][regionBlockX + localX] = sample.blockName();
+                int currentBlockX = regionBlockX + localX;
+                int currentBlockZ = regionBlockZ + localZ;
+                int neighborHintY = options.neighborHeightHints()
+                        ? estimateNeighborHintY(heights, currentBlockX, currentBlockZ)
+                        : Integer.MIN_VALUE;
+                TopBlockSample sample = findTopBlock(chunkData, localX, localZ, worldBlockX, worldBlockZ, options, neighborHintY);
+                blockNames[currentBlockZ][currentBlockX] = sample.blockName();
                 biomeNames[regionBlockZ + localZ][regionBlockX + localX] = options.biomeColoring()
-                        ? findBiomeName(chunk, localX, localZ, sample.y(), options)
+                        ? findBiomeName(chunkData, localX, localZ, sample.y(), options)
                         : null;
                 waterFloorNames[regionBlockZ + localZ][regionBlockX + localX] = sample.waterFloorBlockName();
-                heights[regionBlockZ + localZ][regionBlockX + localX] = sample.isEmpty() ? Integer.MIN_VALUE : sample.y();
-                waterDepths[regionBlockZ + localZ][regionBlockX + localX] = sample.waterDepth();
+                heights[currentBlockZ][currentBlockX] = sample.isEmpty() ? Integer.MIN_VALUE : sample.y();
+                waterDepths[currentBlockZ][currentBlockX] = sample.waterDepth();
             }
         }
     }
@@ -606,11 +754,48 @@ public final class MCARenderer {
     }
 
     private void paintRegionFromSamples(BufferedImage image, String[][] blockNames, String[][] biomeNames, String[][] waterFloorNames, int[][] heights, int[][] waterDepths, RenderOptions options) {
+        RenderColorCache colorCache = new RenderColorCache();
+        boolean fastPlainColorPath = !options.biomeColoring() && !options.waterSubsurfaceShading();
+        if(options.pixelsPerBlock() == 1) {
+            paintRegionFromSamplesSinglePixel(image, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options, colorCache, fastPlainColorPath);
+            return;
+        }
+
         for(int blockZ = 0; blockZ < REGION_BLOCK_SIDE; blockZ++) {
             for(int blockX = 0; blockX < REGION_BLOCK_SIDE; blockX++) {
-                int argb = resolveBlockColor(blockNames, biomeNames, waterFloorNames, heights, waterDepths, blockX, blockZ, options);
+                int argb = fastPlainColorPath
+                        ? resolveBlockColorPlain(blockNames, heights, blockX, blockZ, options, colorCache, null, null)
+                        : resolveBlockColor(blockNames, biomeNames, waterFloorNames, heights, waterDepths, blockX, blockZ, options, colorCache);
                 paintBlock(image, blockX, blockZ, argb, options.pixelsPerBlock());
             }
+        }
+    }
+
+    private void paintRegionFromSamplesSinglePixel(
+            BufferedImage image,
+            String[][] blockNames,
+            String[][] biomeNames,
+            String[][] waterFloorNames,
+            int[][] heights,
+            int[][] waterDepths,
+            RenderOptions options,
+            RenderColorCache colorCache,
+            boolean fastPlainColorPath
+    ) {
+        int[] rowPixels = new int[REGION_BLOCK_SIDE];
+        for(int blockZ = 0; blockZ < REGION_BLOCK_SIDE; blockZ++) {
+            String previousBlockName = null;
+            Color previousBaseColor = null;
+            for(int blockX = 0; blockX < REGION_BLOCK_SIDE; blockX++) {
+                rowPixels[blockX] = fastPlainColorPath
+                        ? resolveBlockColorPlain(blockNames, heights, blockX, blockZ, options, colorCache, previousBlockName, previousBaseColor)
+                        : resolveBlockColor(blockNames, biomeNames, waterFloorNames, heights, waterDepths, blockX, blockZ, options, colorCache);
+                if(fastPlainColorPath) {
+                    previousBlockName = blockNames[blockZ][blockX];
+                    previousBaseColor = resolveBaseColorCached(previousBlockName, colorCache);
+                }
+            }
+            image.setRGB(0, blockZ, REGION_BLOCK_SIDE, 1, rowPixels, 0, REGION_BLOCK_SIDE);
         }
     }
 
@@ -628,6 +813,7 @@ public final class MCARenderer {
     ) {
         int worldChunkX = region.x() * REGION_CHUNK_SIDE + localChunkX;
         int worldChunkZ = region.z() * REGION_CHUNK_SIDE + localChunkZ;
+        ChunkData chunkData = resolveChunkData(chunk);
         ChunkInspection chunkInspection = inspectChunk(chunk);
         debugTrace.onChunkStart(localChunkX, localChunkZ, worldChunkX, worldChunkZ, chunkInspection);
 
@@ -636,7 +822,7 @@ public final class MCARenderer {
                 int worldBlockX = worldChunkX * CHUNK_BLOCK_SIDE + localX;
                 int worldBlockZ = worldChunkZ * CHUNK_BLOCK_SIDE + localZ;
                 ColumnDiagnostics diagnostics = new ColumnDiagnostics();
-                TopBlockSample sample = findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+                TopBlockSample sample = findTopBlock(chunkData, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
                 debugTrace.onColumnScanned(diagnostics);
                 if(!sample.isEmpty()) {
                     debugTrace.onVisibleColumn(localChunkX, localChunkZ, localX, localZ, sample, diagnostics);
@@ -666,7 +852,7 @@ public final class MCARenderer {
             int worldBlockZ,
             RenderOptions options
     ) {
-        return findTopBlock(chunk, localX, localZ, worldBlockX, worldBlockZ, options, null);
+        return findTopBlock(resolveChunkData(chunk), localX, localZ, worldBlockX, worldBlockZ, options, null);
     }
 
     private TopBlockSample findTopBlock(
@@ -678,56 +864,34 @@ public final class MCARenderer {
             RenderOptions options,
             ColumnDiagnostics diagnostics
     ) {
-        CompoundTag root = chunk.getHandle();
-        if(root == null) {
-            markReason(diagnostics, "root_null");
-            return TopBlockSample.EMPTY;
-        }
-
-        CompoundTag legacyLevel = root.getCompoundTag("Level");
-        if(legacyLevel != null) {
-            ListTag<CompoundTag> levelSections = getLegacyLevelSections(legacyLevel);
-            if(isModernLevelSections(levelSections)) {
-                markScheme(diagnostics, "modern_level");
-                int dataVersion = root.getInt("DataVersion");
-                debug("modern_level detected dv=%d sections=%d rootKeys=%s levelKeys=%s",
-                        dataVersion,
-                        levelSections == null ? 0 : levelSections.size(),
-                        root.keySet(),
-                        legacyLevel.keySet());
-                if(diagnostics != null) {
-                    diagnostics.dataVersion = dataVersion;
-                    diagnostics.sectionCount = levelSections == null ? 0 : levelSections.size();
-                }
-                return findTopBlockModernSections(levelSections, dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
-            }
-
-            markScheme(diagnostics, "legacy");
-            return findTopBlockLegacy(legacyLevel, root.getInt("DataVersion"), localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
-        }
-
-        ListTag<?> sectionsTag = root.getListTag("sections");
-        if(sectionsTag == null || sectionsTag.size() == 0) {
-            markScheme(diagnostics, "modern");
-            markReason(diagnostics, "modern_sections_missing");
-            return TopBlockSample.EMPTY;
-        }
-
-        markScheme(diagnostics, "modern");
-        if(diagnostics != null) {
-            diagnostics.sectionCount = sectionsTag.size();
-        }
-        ListTag<CompoundTag> sections = sectionsTag.asCompoundTagList();
-        int dataVersion = root.getInt("DataVersion");
-        if(diagnostics != null) {
-            diagnostics.dataVersion = dataVersion;
-        }
-        return findTopBlockModernSections(sections, dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+        return findTopBlock(resolveChunkData(chunk), localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
     }
 
-    private TopBlockSample findTopBlockModernSections(
-            ListTag<CompoundTag> sections,
-            int dataVersion,
+    private TopBlockSample findTopBlock(
+            ChunkData chunkData,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options
+    ) {
+        return findTopBlock(chunkData, localX, localZ, worldBlockX, worldBlockZ, options, Integer.MIN_VALUE, null);
+    }
+
+    private TopBlockSample findTopBlock(
+            ChunkData chunkData,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options,
+            int neighborHintY
+    ) {
+        return findTopBlock(chunkData, localX, localZ, worldBlockX, worldBlockZ, options, neighborHintY, null);
+    }
+
+    private TopBlockSample findTopBlock(
+            ChunkData chunkData,
             int localX,
             int localZ,
             int worldBlockX,
@@ -735,52 +899,177 @@ public final class MCARenderer {
             RenderOptions options,
             ColumnDiagnostics diagnostics
     ) {
-        if(sections == null || sections.size() == 0) {
+        return findTopBlock(chunkData, localX, localZ, worldBlockX, worldBlockZ, options, Integer.MIN_VALUE, diagnostics);
+    }
+
+    private TopBlockSample findTopBlock(
+            ChunkData chunkData,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options,
+            int neighborHintY,
+            ColumnDiagnostics diagnostics
+    ) {
+        if(chunkData == null || chunkData.root() == null) {
+            markReason(diagnostics, "root_null");
+            return TopBlockSample.EMPTY;
+        }
+        int hintedStartY = estimateTopSearchStartY(chunkData, localX, localZ, options, neighborHintY);
+
+        if(chunkData.legacyLevel() != null) {
+            if(chunkData.modernLevel()) {
+                markScheme(diagnostics, "modern_level");
+                int dataVersion = chunkData.dataVersion();
+                debug("modern_level detected dv=%d sections=%d rootKeys=%s levelKeys=%s",
+                        dataVersion,
+                        chunkData.sectionCount(),
+                        chunkData.root().keySet(),
+                        chunkData.legacyLevel().keySet());
+                if(diagnostics != null) {
+                    diagnostics.dataVersion = dataVersion;
+                    diagnostics.sectionCount = chunkData.sectionCount();
+                }
+                return findTopBlockModernSections(chunkData.sectionLookup(), dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics, hintedStartY);
+            }
+
+            markScheme(diagnostics, "legacy");
+            return findTopBlockLegacy(chunkData.legacyLevel(), chunkData.dataVersion(), chunkData.sectionLookup(), localX, localZ, worldBlockX, worldBlockZ, options, diagnostics, hintedStartY);
+        }
+
+        if(chunkData.sectionLookup() == null || chunkData.sectionCount() == 0) {
+            markScheme(diagnostics, "modern");
             markReason(diagnostics, "modern_sections_missing");
             return TopBlockSample.EMPTY;
         }
 
-        for(int y = options.maxY(); y >= options.minY(); y--) {
-            CompoundTag section = findSectionForY(sections, y);
-            if(section == null) {
-                continue;
+        markScheme(diagnostics, "modern");
+        if(diagnostics != null) {
+            diagnostics.sectionCount = chunkData.sectionCount();
+            diagnostics.dataVersion = chunkData.dataVersion();
+        }
+        return findTopBlockModernSections(chunkData.sectionLookup(), chunkData.dataVersion(), localX, localZ, worldBlockX, worldBlockZ, options, diagnostics, hintedStartY);
+    }
+
+    private TopBlockSample findTopBlockModernSections(
+            ChunkSectionLookup sectionLookup,
+            int dataVersion,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options,
+            ColumnDiagnostics diagnostics,
+            int hintedStartY
+    ) {
+        if(sectionLookup == null || sectionLookup.isEmpty()) {
+            markReason(diagnostics, "modern_sections_missing");
+            return TopBlockSample.EMPTY;
+        }
+
+        TopBlockSample sample = findTopBlockModernSectionsInRange(
+                sectionLookup,
+                dataVersion,
+                localX,
+                localZ,
+                worldBlockX,
+                worldBlockZ,
+                options,
+                diagnostics,
+                hintedStartY,
+                options.minY()
+        );
+        if(!sample.isEmpty()) {
+            return sample;
+        }
+        if(hintedStartY < options.maxY()) {
+            sample = findTopBlockModernSectionsInRange(
+                    sectionLookup,
+                    dataVersion,
+                    localX,
+                    localZ,
+                    worldBlockX,
+                    worldBlockZ,
+                    options,
+                    diagnostics,
+                    options.maxY(),
+                    hintedStartY + 1
+            );
+            if(!sample.isEmpty()) {
+                return sample;
             }
-            String blockName = getModernBlockNameAt(section, localX, y & 15, localZ, dataVersion);
-            if(diagnostics != null && diagnostics.firstTransparentBlock == null && blockName != null) {
-                if("modern_level".equals(diagnostics.scheme)) {
-                    debug("modern_level sample worldBlock=(%d,%d) y=%d block=%s sectionKeys=%s",
-                            worldBlockX,
-                            worldBlockZ,
-                            y,
-                            blockName,
-                            section.keySet());
-                } else if(diagnostics.scheme != null && diagnostics.scheme.startsWith("modern(")) {
-                    debug("modern sample worldBlock=(%d,%d) y=%d block=%s sectionKeys=%s",
-                            worldBlockX,
-                            worldBlockZ,
-                            y,
-                            blockName,
-                            section.keySet());
-                }
-            }
-            if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
-                if(diagnostics != null && blockName != null && diagnostics.firstTransparentBlock == null) {
-                    diagnostics.firstTransparentBlock = blockName;
-                    diagnostics.firstTransparentY = y;
-                }
-                continue;
-            }
-            if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
-                WaterFloorSample floorSample = findWaterFloorModernSections(sections, dataVersion, localX, localZ, y - 1, options);
-                return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, floorSample.blockName(), floorSample.depth());
-            }
-            return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, null, 0);
         }
 
         if(diagnostics != null && diagnostics.firstTransparentBlock != null) {
             markReason(diagnostics, "only_transparent_blocks");
         } else {
             markReason(diagnostics, "no_visible_block_in_range");
+        }
+        return TopBlockSample.EMPTY;
+    }
+
+    private TopBlockSample findTopBlockModernSectionsInRange(
+            ChunkSectionLookup sectionLookup,
+            int dataVersion,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options,
+            ColumnDiagnostics diagnostics,
+            int maxY,
+            int minY
+    ) {
+        if(maxY < minY) {
+            return TopBlockSample.EMPTY;
+        }
+
+        int searchMaxY = clampInt(maxY, options.minY(), options.maxY());
+        int searchMinY = clampInt(minY, options.minY(), options.maxY());
+        int maxSectionY = Math.floorDiv(searchMaxY, 16);
+        int minSectionY = Math.floorDiv(searchMinY, 16);
+        for(int sectionY = maxSectionY; sectionY >= minSectionY; sectionY--) {
+            CompoundTag section = sectionLookup.findSectionBySectionY(sectionY);
+            if(section == null) {
+                continue;
+            }
+
+            int startLocalY = sectionY == maxSectionY ? Math.floorMod(searchMaxY, 16) : 15;
+            int endLocalY = sectionY == minSectionY ? Math.floorMod(searchMinY, 16) : 0;
+            for(int localY = startLocalY; localY >= endLocalY; localY--) {
+                int y = (sectionY * 16) + localY;
+                String blockName = getModernBlockNameAt(section, localX, localY, localZ, dataVersion);
+                if(diagnostics != null && diagnostics.firstTransparentBlock == null && blockName != null) {
+                    if("modern_level".equals(diagnostics.scheme)) {
+                        debug("modern_level sample worldBlock=(%d,%d) y=%d block=%s sectionKeys=%s",
+                                worldBlockX,
+                                worldBlockZ,
+                                y,
+                                blockName,
+                                section.keySet());
+                    } else if(diagnostics.scheme != null && diagnostics.scheme.startsWith("modern(")) {
+                        debug("modern sample worldBlock=(%d,%d) y=%d block=%s sectionKeys=%s",
+                                worldBlockX,
+                                worldBlockZ,
+                                y,
+                                blockName,
+                                section.keySet());
+                    }
+                }
+                if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                    if(diagnostics != null && blockName != null && diagnostics.firstTransparentBlock == null) {
+                        diagnostics.firstTransparentBlock = blockName;
+                        diagnostics.firstTransparentY = y;
+                    }
+                    continue;
+                }
+                if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
+                    WaterFloorSample floorSample = findWaterFloorModernSections(sectionLookup, dataVersion, localX, localZ, y - 1, options);
+                    return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, floorSample.blockName(), floorSample.depth());
+                }
+                return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, null, 0);
+            }
         }
         return TopBlockSample.EMPTY;
     }
@@ -827,58 +1116,116 @@ public final class MCARenderer {
     private TopBlockSample findTopBlockLegacy(
             CompoundTag level,
             int dataVersion,
+            ChunkSectionLookup sectionLookup,
             int localX,
             int localZ,
             int worldBlockX,
             int worldBlockZ,
             RenderOptions options,
-            ColumnDiagnostics diagnostics
+            ColumnDiagnostics diagnostics,
+            int hintedStartY
     ) {
-        ListTag<?> sectionsTag = level.getListTag("Sections");
-        if(sectionsTag == null || sectionsTag.size() == 0) {
+        if(sectionLookup == null || sectionLookup.isEmpty()) {
             markReason(diagnostics, "legacy_sections_missing");
             return TopBlockSample.EMPTY;
         }
 
         if(diagnostics != null) {
-            diagnostics.sectionCount = sectionsTag.size();
+            diagnostics.sectionCount = sectionLookup.sectionCount();
         }
-        ListTag<CompoundTag> sections = sectionsTag.asCompoundTagList();
-        if(isModernLevelSections(sections)) {
+        if(isModernLevelSections(sectionLookup.sections())) {
             debug("legacy fallback switched to modern_level dv=%d sections=%d levelKeys=%s",
                     dataVersion,
-                    sections.size(),
+                    sectionLookup.sectionCount(),
                     level.keySet());
             if(diagnostics != null) {
                 diagnostics.dataVersion = dataVersion;
                 diagnostics.scheme = "modern_level";
             }
-            return findTopBlockModernSections(sections, dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics);
+            return findTopBlockModernSections(sectionLookup, dataVersion, localX, localZ, worldBlockX, worldBlockZ, options, diagnostics, hintedStartY);
         }
-        for(int y = options.maxY(); y >= options.minY(); y--) {
-            CompoundTag section = findSectionForY(sections, y);
-            if(section == null) {
-                continue;
+        TopBlockSample sample = findTopBlockLegacyInRange(
+                sectionLookup,
+                localX,
+                localZ,
+                worldBlockX,
+                worldBlockZ,
+                options,
+                diagnostics,
+                hintedStartY,
+                options.minY()
+        );
+        if(!sample.isEmpty()) {
+            return sample;
+        }
+        if(hintedStartY < options.maxY()) {
+            sample = findTopBlockLegacyInRange(
+                    sectionLookup,
+                    localX,
+                    localZ,
+                    worldBlockX,
+                    worldBlockZ,
+                    options,
+                    diagnostics,
+                    options.maxY(),
+                    hintedStartY + 1
+            );
+            if(!sample.isEmpty()) {
+                return sample;
             }
-            String blockName = getLegacyBlockNameAt(section, localX, y & 15, localZ);
-            if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
-                if(diagnostics != null && blockName != null && diagnostics.firstTransparentBlock == null) {
-                    diagnostics.firstTransparentBlock = blockName;
-                    diagnostics.firstTransparentY = y;
-                }
-                continue;
-            }
-            if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
-                WaterFloorSample floorSample = findWaterFloorLegacy(sections, localX, localZ, y - 1, options);
-                return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, floorSample.blockName(), floorSample.depth());
-            }
-            return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, null, 0);
         }
 
         if(diagnostics != null && diagnostics.firstTransparentBlock != null) {
             markReason(diagnostics, "only_transparent_blocks");
         } else {
             markReason(diagnostics, "no_visible_block_in_range");
+        }
+        return TopBlockSample.EMPTY;
+    }
+
+    private TopBlockSample findTopBlockLegacyInRange(
+            ChunkSectionLookup sectionLookup,
+            int localX,
+            int localZ,
+            int worldBlockX,
+            int worldBlockZ,
+            RenderOptions options,
+            ColumnDiagnostics diagnostics,
+            int maxY,
+            int minY
+    ) {
+        if(maxY < minY) {
+            return TopBlockSample.EMPTY;
+        }
+
+        int searchMaxY = clampInt(maxY, options.minY(), options.maxY());
+        int searchMinY = clampInt(minY, options.minY(), options.maxY());
+        int maxSectionY = Math.floorDiv(searchMaxY, 16);
+        int minSectionY = Math.floorDiv(searchMinY, 16);
+        for(int sectionY = maxSectionY; sectionY >= minSectionY; sectionY--) {
+            CompoundTag section = sectionLookup.findSectionBySectionY(sectionY);
+            if(section == null) {
+                continue;
+            }
+
+            int startLocalY = sectionY == maxSectionY ? Math.floorMod(searchMaxY, 16) : 15;
+            int endLocalY = sectionY == minSectionY ? Math.floorMod(searchMinY, 16) : 0;
+            for(int localY = startLocalY; localY >= endLocalY; localY--) {
+                int y = (sectionY * 16) + localY;
+                String blockName = getLegacyBlockNameAt(section, localX, localY, localZ);
+                if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                    if(diagnostics != null && blockName != null && diagnostics.firstTransparentBlock == null) {
+                        diagnostics.firstTransparentBlock = blockName;
+                        diagnostics.firstTransparentY = y;
+                    }
+                    continue;
+                }
+                if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
+                    WaterFloorSample floorSample = findWaterFloorLegacy(sectionLookup, localX, localZ, y - 1, options);
+                    return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, floorSample.blockName(), floorSample.depth());
+                }
+                return new TopBlockSample(blockName, y, worldBlockX, worldBlockZ, null, 0);
+            }
         }
         return TopBlockSample.EMPTY;
     }
@@ -902,38 +1249,140 @@ public final class MCARenderer {
         return null;
     }
 
-    private WaterFloorSample findWaterFloorModernSections(ListTag<CompoundTag> sections, int dataVersion, int localX, int localZ, int startY, RenderOptions options) {
-        for(int y = startY; y >= options.minY(); y--) {
-            CompoundTag section = findSectionForY(sections, y);
+    private ChunkData resolveChunkData(Chunk chunk) {
+        if(chunk == null) {
+            return ChunkData.EMPTY;
+        }
+
+        CompoundTag root = chunk.getHandle();
+        if(root == null) {
+            return ChunkData.EMPTY;
+        }
+
+        int dataVersion = root.getInt("DataVersion");
+        CompoundTag legacyLevel = root.getCompoundTag("Level");
+        if(legacyLevel != null) {
+            ListTag<CompoundTag> levelSections = getLegacyLevelSections(legacyLevel);
+            boolean modernLevel = isModernLevelSections(levelSections);
+            return new ChunkData(
+                    root,
+                    legacyLevel,
+                    dataVersion,
+                    modernLevel,
+                    ChunkSectionLookup.from(levelSections)
+            );
+        }
+
+        ListTag<?> sectionsTag = root.getListTag("sections");
+        ListTag<CompoundTag> sections = sectionsTag == null || sectionsTag.size() == 0 ? null : sectionsTag.asCompoundTagList();
+        return new ChunkData(
+                root,
+                null,
+                dataVersion,
+                false,
+                ChunkSectionLookup.from(sections)
+        );
+    }
+
+    private int estimateTopSearchStartY(ChunkData chunkData, int localX, int localZ, RenderOptions options, int neighborHintY) {
+        if(options == null || !options.neighborHeightHints()) {
+            return options == null ? Integer.MAX_VALUE : options.maxY();
+        }
+        int hintedStartY = Integer.MIN_VALUE;
+        if(neighborHintY != Integer.MIN_VALUE) {
+            hintedStartY = clampInt(neighborHintY + NEIGHBOR_HINT_UPWARD_MARGIN, options.minY(), options.maxY());
+        }
+        if(chunkData == null || chunkData.root() == null) {
+            return hintedStartY == Integer.MIN_VALUE ? options.maxY() : hintedStartY;
+        }
+
+        CompoundTag heightmaps = chunkData.root().getCompoundTag("Heightmaps");
+        if(heightmaps == null && chunkData.legacyLevel() != null) {
+            heightmaps = chunkData.legacyLevel().getCompoundTag("Heightmaps");
+        }
+        if(heightmaps == null || chunkData.sectionLookup() == null || chunkData.sectionLookup().isEmpty()) {
+            return hintedStartY == Integer.MIN_VALUE ? options.maxY() : hintedStartY;
+        }
+
+        LongArrayTag heightmapTag = preferredHeightmap(heightmaps);
+        if(heightmapTag == null || heightmapTag.getValue() == null || heightmapTag.getValue().length == 0) {
+            return hintedStartY == Integer.MIN_VALUE ? options.maxY() : hintedStartY;
+        }
+
+        int worldHeight = chunkData.sectionLookup().worldHeight();
+        int bitsPerEntry = Math.max(1, ceilLog2(worldHeight + 1));
+        int packedIndex = (localZ << 4) | localX;
+        int rawHeight = readPackedIndex(heightmapTag.getValue(), packedIndex, bitsPerEntry, chunkData.dataVersion());
+        int estimatedY = chunkData.sectionLookup().minBlockY() + rawHeight - 1;
+        int clampedHeightmapY = clampInt(estimatedY, options.minY(), options.maxY());
+        return hintedStartY == Integer.MIN_VALUE ? clampedHeightmapY : Math.max(hintedStartY, clampedHeightmapY);
+    }
+
+    private LongArrayTag preferredHeightmap(CompoundTag heightmaps) {
+        if(heightmaps == null) {
+            return null;
+        }
+        LongArrayTag tag = heightmaps.getLongArrayTag("WORLD_SURFACE");
+        if(tag != null) {
+            return tag;
+        }
+        tag = heightmaps.getLongArrayTag("WORLD_SURFACE_WG");
+        if(tag != null) {
+            return tag;
+        }
+        tag = heightmaps.getLongArrayTag("MOTION_BLOCKING");
+        if(tag != null) {
+            return tag;
+        }
+        return heightmaps.getLongArrayTag("MOTION_BLOCKING_NO_LEAVES");
+    }
+
+    private WaterFloorSample findWaterFloorModernSections(ChunkSectionLookup sectionLookup, int dataVersion, int localX, int localZ, int startY, RenderOptions options) {
+        int maxSectionY = Math.floorDiv(startY, 16);
+        int minSectionY = Math.floorDiv(options.minY(), 16);
+        for(int sectionY = maxSectionY; sectionY >= minSectionY; sectionY--) {
+            CompoundTag section = sectionLookup.findSectionBySectionY(sectionY);
             if(section == null) {
                 continue;
             }
-            String blockName = getModernBlockNameAt(section, localX, y & 15, localZ, dataVersion);
-            if(blockName == null || isWaterBlock(blockName)) {
-                continue;
+            int startLocalY = sectionY == maxSectionY ? Math.floorMod(startY, 16) : 15;
+            int endLocalY = sectionY == minSectionY ? Math.floorMod(options.minY(), 16) : 0;
+            for(int localY = startLocalY; localY >= endLocalY; localY--) {
+                int y = (sectionY * 16) + localY;
+                String blockName = getModernBlockNameAt(section, localX, localY, localZ, dataVersion);
+                if(blockName == null || isWaterBlock(blockName)) {
+                    continue;
+                }
+                if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                    continue;
+                }
+                return new WaterFloorSample(blockName, Math.max(1, startY - y + 1));
             }
-            if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
-                continue;
-            }
-            return new WaterFloorSample(blockName, Math.max(1, startY - y + 1));
         }
         return WaterFloorSample.EMPTY;
     }
 
-    private WaterFloorSample findWaterFloorLegacy(ListTag<CompoundTag> sections, int localX, int localZ, int startY, RenderOptions options) {
-        for(int y = startY; y >= options.minY(); y--) {
-            CompoundTag section = findSectionForY(sections, y);
+    private WaterFloorSample findWaterFloorLegacy(ChunkSectionLookup sectionLookup, int localX, int localZ, int startY, RenderOptions options) {
+        int maxSectionY = Math.floorDiv(startY, 16);
+        int minSectionY = Math.floorDiv(options.minY(), 16);
+        for(int sectionY = maxSectionY; sectionY >= minSectionY; sectionY--) {
+            CompoundTag section = sectionLookup.findSectionBySectionY(sectionY);
             if(section == null) {
                 continue;
             }
-            String blockName = getLegacyBlockNameAt(section, localX, y & 15, localZ);
-            if(blockName == null || isWaterBlock(blockName)) {
-                continue;
+            int startLocalY = sectionY == maxSectionY ? Math.floorMod(startY, 16) : 15;
+            int endLocalY = sectionY == minSectionY ? Math.floorMod(options.minY(), 16) : 0;
+            for(int localY = startLocalY; localY >= endLocalY; localY--) {
+                int y = (sectionY * 16) + localY;
+                String blockName = getLegacyBlockNameAt(section, localX, localY, localZ);
+                if(blockName == null || isWaterBlock(blockName)) {
+                    continue;
+                }
+                if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
+                    continue;
+                }
+                return new WaterFloorSample(blockName, Math.max(1, startY - y + 1));
             }
-            if(options.ignoreTransparentBlocks() && isTransparentBlock(blockName)) {
-                continue;
-            }
-            return new WaterFloorSample(blockName, Math.max(1, startY - y + 1));
         }
         return WaterFloorSample.EMPTY;
     }
@@ -1029,29 +1478,25 @@ public final class MCARenderer {
     }
 
     private String findBiomeName(Chunk chunk, int localX, int localZ, int worldY, RenderOptions options) {
-        if(chunk == null || !options.biomeColoring()) {
+        return findBiomeName(resolveChunkData(chunk), localX, localZ, worldY, options);
+    }
+
+    private String findBiomeName(ChunkData chunkData, int localX, int localZ, int worldY, RenderOptions options) {
+        if(chunkData == null || chunkData.root() == null || !options.biomeColoring()) {
             return null;
         }
 
-        CompoundTag root = chunk.getHandle();
-        if(root == null) {
-            return null;
-        }
-
-        CompoundTag legacyLevel = root.getCompoundTag("Level");
-        if(legacyLevel != null) {
-            ListTag<CompoundTag> sections = getLegacyLevelSections(legacyLevel);
-            if(isModernLevelSections(sections)) {
-                return getModernBiomeName(sections, root.getInt("DataVersion"), localX, worldY, localZ);
+        if(chunkData.legacyLevel() != null) {
+            if(chunkData.modernLevel()) {
+                return getModernBiomeName(chunkData.sectionLookup(), chunkData.dataVersion(), localX, worldY, localZ);
             }
-            return getLegacyBiomeName(legacyLevel, localX, localZ);
+            return getLegacyBiomeName(chunkData.legacyLevel(), localX, localZ);
         }
 
-        ListTag<?> sectionsTag = root.getListTag("sections");
-        if(sectionsTag == null || sectionsTag.size() == 0) {
+        if(chunkData.sectionLookup() == null || chunkData.sectionCount() == 0) {
             return null;
         }
-        return getModernBiomeName(sectionsTag.asCompoundTagList(), root.getInt("DataVersion"), localX, worldY, localZ);
+        return getModernBiomeName(chunkData.sectionLookup(), chunkData.dataVersion(), localX, worldY, localZ);
     }
 
     private String getLegacyBiomeName(CompoundTag level, int localX, int localZ) {
@@ -1067,8 +1512,8 @@ public final class MCARenderer {
         return legacyBiomeName(biomeId);
     }
 
-    private String getModernBiomeName(ListTag<CompoundTag> sections, int dataVersion, int localX, int worldY, int localZ) {
-        CompoundTag section = findSectionForY(sections, worldY);
+    private String getModernBiomeName(ChunkSectionLookup sectionLookup, int dataVersion, int localX, int worldY, int localZ) {
+        CompoundTag section = sectionLookup == null ? null : sectionLookup.findSectionForY(worldY);
         if(section == null) {
             return null;
         }
@@ -1136,6 +1581,25 @@ public final class MCARenderer {
 
     private int biomeIndex(int localX, int localY, int localZ) {
         return (localY << 4) | (localZ << 2) | localX;
+    }
+
+    private int estimateNeighborHintY(int[][] heights, int blockX, int blockZ) {
+        int left = sampleHintHeight(heights, blockX - 1, blockZ);
+        int up = sampleHintHeight(heights, blockX, blockZ - 1);
+        if(left == Integer.MIN_VALUE) {
+            return up;
+        }
+        if(up == Integer.MIN_VALUE) {
+            return left;
+        }
+        return Math.max(left, up);
+    }
+
+    private int sampleHintHeight(int[][] heights, int blockX, int blockZ) {
+        if(heights == null || blockZ < 0 || blockZ >= heights.length || blockX < 0 || blockX >= heights[blockZ].length) {
+            return Integer.MIN_VALUE;
+        }
+        return heights[blockZ][blockX];
     }
 
     /**
@@ -1319,18 +1783,18 @@ public final class MCARenderer {
      * Si el sombreado por altura esta activo, se aplica una pequena variacion para
      * que la imagen no quede completamente plana.
      */
-    private int resolveBlockColor(String[][] blockNames, String[][] biomeNames, String[][] waterFloorNames, int[][] heights, int[][] waterDepths, int blockX, int blockZ, RenderOptions options) {
+    private int resolveBlockColor(String[][] blockNames, String[][] biomeNames, String[][] waterFloorNames, int[][] heights, int[][] waterDepths, int blockX, int blockZ, RenderOptions options, RenderColorCache colorCache) {
         String blockName = blockNames[blockZ][blockX];
-        Color base = resolveBaseColor(blockName);
+        Color base = resolveBaseColorCached(blockName, colorCache);
         if(base == null) {
             return options.defaultArgb();
         }
         String biomeName = biomeNames == null ? null : biomeNames[blockZ][blockX];
         if(options.biomeColoring()) {
-            base = applyBiomeTint(base, blockName, biomeName);
+            base = applyBiomeTintCached(base, blockName, biomeName, colorCache);
         }
         if(options.waterSubsurfaceShading() && isWaterBlock(blockName)) {
-            base = resolveWaterSurfaceColor(base, waterFloorNames[blockZ][blockX], waterDepths[blockZ][blockX]);
+            base = resolveWaterSurfaceColorCached(base, waterFloorNames[blockZ][blockX], waterDepths[blockZ][blockX], colorCache);
         }
         if(!options.shadeByHeight()) {
             return base.getRGB();
@@ -1345,36 +1809,121 @@ public final class MCARenderer {
         int east = sampleHeight(heights, blockX + 1, blockZ, center);
         int north = sampleHeight(heights, blockX, blockZ - 1, center);
         int south = sampleHeight(heights, blockX, blockZ + 1, center);
+        boolean waterBlock = blockName != null && blockName.contains("water");
+        int shade = calculateHeightShade(
+                west,
+                east,
+                north,
+                south,
+                waterBlock ? WATER_SHADE_EXAGGERATION : LAND_SHADE_EXAGGERATION,
+                waterBlock ? WATER_SHADE_AMBIENT : LAND_SHADE_AMBIENT,
+                waterBlock ? WATER_SHADE_CONTRAST : LAND_SHADE_CONTRAST
+        );
+        return applyShade(base, shade).getRGB();
+    }
 
+    private int resolveBlockColorPlain(
+            String[][] blockNames,
+            int[][] heights,
+            int blockX,
+            int blockZ,
+            RenderOptions options,
+            RenderColorCache colorCache,
+            String previousBlockName,
+            Color previousBaseColor
+    ) {
+        String blockName = blockNames[blockZ][blockX];
+        Color base = Objects.equals(blockName, previousBlockName) ? previousBaseColor : resolveBaseColorCached(blockName, colorCache);
+        if(base == null) {
+            return options.defaultArgb();
+        }
+        if(!options.shadeByHeight()) {
+            return base.getRGB();
+        }
+
+        int center = heights[blockZ][blockX];
+        if(center == Integer.MIN_VALUE) {
+            return base.getRGB();
+        }
+
+        int west = sampleHeight(heights, blockX - 1, blockZ, center);
+        int east = sampleHeight(heights, blockX + 1, blockZ, center);
+        int north = sampleHeight(heights, blockX, blockZ - 1, center);
+        int south = sampleHeight(heights, blockX, blockZ + 1, center);
+        int shade = calculateHeightShade(
+                west,
+                east,
+                north,
+                south,
+                LAND_SHADE_EXAGGERATION,
+                LAND_SHADE_AMBIENT,
+                LAND_SHADE_CONTRAST
+        );
+        return applyShade(base, shade).getRGB();
+    }
+
+    private int calculateHeightShade(int west, int east, int north, int south, double exaggeration, double ambient, double contrast) {
         double dx = (east - west) * 0.5d;
         double dz = (south - north) * 0.5d;
-        double exaggeration = blockName != null && blockName.contains("water") ? 0.18d : 0.38d;
-
         double nx = -dx * exaggeration;
         double ny = -dz * exaggeration;
-        double nz = 1.0d;
-        double normalLength = Math.sqrt((nx * nx) + (ny * ny) + (nz * nz));
+        double normalLength = Math.sqrt((nx * nx) + (ny * ny) + 1.0d);
         if(normalLength <= 0d) {
-            return base.getRGB();
+            return 0;
         }
         nx /= normalLength;
         ny /= normalLength;
-        nz /= normalLength;
+        double nz = 1.0d / normalLength;
 
-        double lightX = -0.58d;
-        double lightY = -0.58d;
-        double lightZ = 0.57d;
-        double lightLength = Math.sqrt((lightX * lightX) + (lightY * lightY) + (lightZ * lightZ));
-        lightX /= lightLength;
-        lightY /= lightLength;
-        lightZ /= lightLength;
+        double dot = (nx * SHADE_LIGHT_X) + (ny * SHADE_LIGHT_Y) + (nz * SHADE_LIGHT_Z);
+        double intensity = clamp(ambient + (clamp(dot, SHADE_DOT_MIN, SHADE_DOT_MAX) * contrast), SHADE_INTENSITY_MIN, SHADE_INTENSITY_MAX);
+        return (int) Math.round((intensity - SHADE_MIDPOINT) * SHADE_SCALE);
+    }
 
-        double dot = (nx * lightX) + (ny * lightY) + (nz * lightZ);
-        double ambient = blockName != null && blockName.contains("water") ? 0.80d : 0.62d;
-        double contrast = blockName != null && blockName.contains("water") ? 0.20d : 0.38d;
-        double intensity = Math.max(0d, Math.min(1d, ambient + (Math.max(-0.9d, Math.min(0.9d, dot)) * contrast)));
-        int shade = (int) Math.round((intensity - 0.72d) * 62d);
-        return applyShade(base, shade).getRGB();
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private Color resolveBaseColorCached(String blockName, RenderColorCache colorCache) {
+        if(colorCache == null) {
+            return resolveBaseColor(blockName);
+        }
+        if(colorCache.baseColors.containsKey(blockName)) {
+            return colorCache.baseColors.get(blockName);
+        }
+        Color resolved = resolveBaseColor(blockName);
+        colorCache.baseColors.put(blockName, resolved);
+        return resolved;
+    }
+
+    private Color applyBiomeTintCached(Color base, String blockName, String biomeName, RenderColorCache colorCache) {
+        if(colorCache == null || base == null || blockName == null || biomeName == null || biomeName.isBlank()) {
+            return applyBiomeTint(base, blockName, biomeName);
+        }
+        BiomeTintKey key = new BiomeTintKey(blockName, biomeName, base.getRGB());
+        if(colorCache.biomeTints.containsKey(key)) {
+            return colorCache.biomeTints.get(key);
+        }
+        Color resolved = applyBiomeTint(base, blockName, biomeName);
+        colorCache.biomeTints.put(key, resolved);
+        return resolved;
+    }
+
+    private Color resolveWaterSurfaceColorCached(Color waterBase, String floorBlockName, int waterDepth, RenderColorCache colorCache) {
+        if(colorCache == null || waterBase == null) {
+            return resolveWaterSurfaceColor(waterBase, floorBlockName, waterDepth);
+        }
+        WaterSurfaceKey key = new WaterSurfaceKey(waterBase.getRGB(), floorBlockName, waterDepth);
+        if(colorCache.waterSurfaces.containsKey(key)) {
+            return colorCache.waterSurfaces.get(key);
+        }
+        Color resolved = resolveWaterSurfaceColor(waterBase, floorBlockName, waterDepth);
+        colorCache.waterSurfaces.put(key, resolved);
+        return resolved;
     }
 
     private Color applyBiomeTint(Color base, String blockName, String biomeName) {
@@ -1821,6 +2370,7 @@ public final class MCARenderer {
         private final boolean shadeByHeight;
         private final boolean waterSubsurfaceShading;
         private final boolean biomeColoring;
+        private final boolean neighborHeightHints;
         private final boolean ignoreTransparentBlocks;
         private final boolean preferSquareCrop;
         private final int defaultArgb;
@@ -1829,7 +2379,7 @@ public final class MCARenderer {
         private final Integer minWorldBlockZ;
         private final Integer maxWorldBlockZ;
 
-        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean waterSubsurfaceShading, boolean biomeColoring, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb,
+        private RenderOptions(int pixelsPerBlock, int minY, int maxY, boolean shadeByHeight, boolean waterSubsurfaceShading, boolean biomeColoring, boolean neighborHeightHints, boolean ignoreTransparentBlocks, boolean preferSquareCrop, int defaultArgb,
                               Integer minWorldBlockX, Integer maxWorldBlockX, Integer minWorldBlockZ, Integer maxWorldBlockZ) {
             this.pixelsPerBlock = pixelsPerBlock;
             this.minY = minY;
@@ -1837,6 +2387,7 @@ public final class MCARenderer {
             this.shadeByHeight = shadeByHeight;
             this.waterSubsurfaceShading = waterSubsurfaceShading;
             this.biomeColoring = biomeColoring;
+            this.neighborHeightHints = neighborHeightHints;
             this.ignoreTransparentBlocks = ignoreTransparentBlocks;
             this.preferSquareCrop = preferSquareCrop;
             this.defaultArgb = defaultArgb;
@@ -1848,48 +2399,52 @@ public final class MCARenderer {
 
         // Valores por defecto pensados para mundos modernos, pero validos tambien para muchos casos legacy.
         public static RenderOptions defaults() {
-            return new RenderOptions(1, -64, 319, true, false, false, true, true, DEFAULT_ARGB, null, null, null, null);
+            return new RenderOptions(1, -64, 319, true, false, false, false, true, true, DEFAULT_ARGB, null, null, null, null);
         }
 
         // Cambia la escala visual: 1 bloque = N pixeles.
         public RenderOptions withPixelsPerBlock(int pixelsPerBlock) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Cambia el rango vertical explorado al buscar la superficie.
         public RenderOptions withYRange(int minY, int maxY) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Activa o desactiva el sombreado por altura.
         public RenderOptions withShadeByHeight(boolean shadeByHeight) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         public RenderOptions withWaterSubsurfaceShading(boolean waterSubsurfaceShading) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         public RenderOptions withBiomeColoring(boolean biomeColoring) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+        }
+
+        public RenderOptions withNeighborHeightHints(boolean neighborHeightHints) {
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Permite decidir si se ignoran bloques de detalle/transparencia.
         public RenderOptions withIgnoreTransparentBlocks(boolean ignoreTransparentBlocks) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         public RenderOptions withPreferSquareCrop(boolean preferSquareCrop) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         // Permite cambiar el color de fondo.
         public RenderOptions withDefaultArgb(int defaultArgb) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb, minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
         public RenderOptions withWorldBounds(int minWorldBlockX, int maxWorldBlockX, int minWorldBlockZ, int maxWorldBlockZ) {
-            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
+            return new RenderOptions(pixelsPerBlock, minY, maxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
                     Math.min(minWorldBlockX, maxWorldBlockX),
                     Math.max(minWorldBlockX, maxWorldBlockX),
                     Math.min(minWorldBlockZ, maxWorldBlockZ),
@@ -1901,7 +2456,7 @@ public final class MCARenderer {
             int normalizedPixels = Math.max(1, pixelsPerBlock);
             int normalizedMinY = minY;
             int normalizedMaxY = Math.max(normalizedMinY, maxY);
-            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
+            return new RenderOptions(normalizedPixels, normalizedMinY, normalizedMaxY, shadeByHeight, waterSubsurfaceShading, biomeColoring, neighborHeightHints, ignoreTransparentBlocks, preferSquareCrop, defaultArgb,
                     minWorldBlockX, maxWorldBlockX, minWorldBlockZ, maxWorldBlockZ);
         }
 
@@ -1912,6 +2467,7 @@ public final class MCARenderer {
         public boolean shadeByHeight() { return shadeByHeight; }
         public boolean waterSubsurfaceShading() { return waterSubsurfaceShading; }
         public boolean biomeColoring() { return biomeColoring; }
+        public boolean neighborHeightHints() { return neighborHeightHints; }
         public boolean ignoreTransparentBlocks() { return ignoreTransparentBlocks; }
         public boolean preferSquareCrop() { return preferSquareCrop; }
         public int defaultArgb() { return defaultArgb; }
@@ -1925,7 +2481,13 @@ public final class MCARenderer {
     // Coordenadas de una region dentro del mundo. Ejemplo: r.1.-2.mca -> x=1, z=-2.
     private record RegionCoordinates(int x, int z) {}
 
-    public record RenderedWorld(BufferedImage image, int originBlockX, int originBlockZ, int pixelsPerBlock) {}
+    public record RenderedWorld(BufferedImage image, int originBlockX, int originBlockZ, int pixelsPerBlock, RenderStats stats) {}
+
+    public record RenderStats(long sampleNanos, long paintNanos, long composeNanos, long cropNanos, long markerNanos) {
+        public long totalTrackedNanos() {
+            return sampleNanos + paintNanos + composeNanos + cropNanos + markerNanos;
+        }
+    }
 
     // Punto absoluto del mundo en el plano X/Z.
     public record WorldPoint(int x, int z) {}
@@ -1941,6 +2503,105 @@ public final class MCARenderer {
      * porque mas tarde el renderer puede necesitar contexto adicional al colorear
      * o depurar una columna concreta del mundo.
      */
+    private record ChunkData(
+            CompoundTag root,
+            CompoundTag legacyLevel,
+            int dataVersion,
+            boolean modernLevel,
+            ChunkSectionLookup sectionLookup
+    ) {
+        private static final ChunkData EMPTY = new ChunkData(null, null, 0, false, ChunkSectionLookup.EMPTY);
+
+        private int sectionCount() {
+            return sectionLookup == null ? 0 : sectionLookup.sectionCount();
+        }
+    }
+
+    private record ChunkSectionLookup(ListTag<CompoundTag> sections, int minSectionY, CompoundTag[] sectionsByY) {
+        private static final ChunkSectionLookup EMPTY = new ChunkSectionLookup(null, 0, new CompoundTag[0]);
+
+        private static ChunkSectionLookup from(ListTag<CompoundTag> sections) {
+            if(sections == null || sections.size() == 0) {
+                return EMPTY;
+            }
+
+            int minSectionY = Integer.MAX_VALUE;
+            int maxSectionY = Integer.MIN_VALUE;
+            for(CompoundTag section : sections) {
+                if(section == null) {
+                    continue;
+                }
+                int sectionY = section.getByte("Y");
+                minSectionY = Math.min(minSectionY, sectionY);
+                maxSectionY = Math.max(maxSectionY, sectionY);
+            }
+            if(minSectionY == Integer.MAX_VALUE) {
+                return EMPTY;
+            }
+
+            CompoundTag[] sectionsByY = new CompoundTag[maxSectionY - minSectionY + 1];
+            for(CompoundTag section : sections) {
+                if(section == null) {
+                    continue;
+                }
+                int index = section.getByte("Y") - minSectionY;
+                if(index >= 0 && index < sectionsByY.length) {
+                    sectionsByY[index] = section;
+                }
+            }
+            return new ChunkSectionLookup(sections, minSectionY, sectionsByY);
+        }
+
+        private CompoundTag findSectionForY(int blockY) {
+            if(sectionsByY == null || sectionsByY.length == 0) {
+                return null;
+            }
+            int targetSectionY = Math.floorDiv(blockY, 16);
+            return findSectionBySectionY(targetSectionY);
+        }
+
+        private CompoundTag findSectionBySectionY(int sectionY) {
+            if(sectionsByY == null || sectionsByY.length == 0) {
+                return null;
+            }
+            int index = sectionY - minSectionY;
+            if(index < 0 || index >= sectionsByY.length) {
+                return null;
+            }
+            return sectionsByY[index];
+        }
+
+        private boolean isEmpty() {
+            return sectionsByY == null || sectionsByY.length == 0;
+        }
+
+        private int sectionCount() {
+            return sections == null ? 0 : sections.size();
+        }
+
+        private int minBlockY() {
+            return minSectionY * 16;
+        }
+
+        private int worldHeight() {
+            return sectionsByY == null ? 0 : sectionsByY.length * 16;
+        }
+    }
+
+    private static final class RenderColorCache {
+        private final Map<String, Color> baseColors = new HashMap<>();
+        private final Map<BiomeTintKey, Color> biomeTints = new HashMap<>();
+        private final Map<WaterSurfaceKey, Color> waterSurfaces = new HashMap<>();
+    }
+
+    private record BiomeTintKey(String blockName, String biomeName, int baseRgb) {}
+
+    private record WaterSurfaceKey(int waterBaseRgb, String floorBlockName, int waterDepth) {}
+
+    private record RegionPaintStats(long sampleNanos, long paintNanos) {}
+
+    private record RenderedRegionResult(BufferedImage image, RenderStats stats) {}
+
     private record TopBlockSample(String blockName, int y, int worldBlockX, int worldBlockZ, String waterFloorBlockName, int waterDepth) {
         private static final TopBlockSample EMPTY = new TopBlockSample(null, 0, 0, 0, null, 0);
 
@@ -2012,7 +2673,7 @@ public final class MCARenderer {
     }
 
     private record ChunkInspection(String scheme, int sectionCount, String status) {}
-    private record RenderedRegion(RegionCoordinates region, BufferedImage image) {}
+    private record RenderedRegion(RegionCoordinates region, BufferedImage image, RenderStats stats) {}
     private static final class RegionRenderRuntimeException extends RuntimeException {
         private final IOException ioException;
 

@@ -811,7 +811,11 @@ public class GestorServidores {
 
             // detecto cuando el proceso finaliza
             proceso.onExit().thenRun(()->{
+               if(server.getServerProcess() == proceso){
+                   server.setServerProcess(null);
+               }
                server.setIniciando(false);
+               server.setLogReaderIniciado(false);
                server.appendConsoleLinea("[INFO] El servidor se ha detenido.");
                notificarEstadoServidor(server);
                // si el usuario ha pedido un reinicio y hemos parado el servidor entonces lo iniciamos de nuevo

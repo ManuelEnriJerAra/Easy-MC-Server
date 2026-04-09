@@ -26,17 +26,33 @@ import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MojangAPI {
     private static final String VERSION_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest.json";
     private static final String UUID_BY_USERNAME_URL = "https://api.mojang.com/users/profiles/minecraft/";
     private static final String SESSION_PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";
+    private static final int CONNECT_TIMEOUT_MS = 5_000;
+    private static final int READ_TIMEOUT_MS = 8_000;
+    private static final ExecutorService BACKGROUND_REQUESTS = Executors.newFixedThreadPool(4, runnable -> {
+        Thread thread = new Thread(runnable, "mojang-api-worker");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    public static void runBackgroundRequest(Runnable task) {
+        if (task == null) {
+            return;
+        }
+        BACKGROUND_REQUESTS.execute(task);
+    }
+
     public JsonNode getManifest() {
         try{
-            return mapper.readTree(URI.create(VERSION_MANIFEST_URL).toURL().openStream());
+            return readJsonFromUrl(VERSION_MANIFEST_URL);
         }
         catch(Exception e){
             throw new  RuntimeException(e);
@@ -77,7 +93,7 @@ public class MojangAPI {
             String versionJsonUrl = obtenerUrlVersionJson(versionId);
             if (versionJsonUrl == null) return null;
 
-            JsonNode versionJson = mapper.readTree(URI.create(versionJsonUrl).toURL().openStream());
+            JsonNode versionJson = readJsonFromUrl(versionJsonUrl);
 
             JsonNode serverNode = versionJson.get("downloads").get("server");
 
@@ -94,7 +110,7 @@ public class MojangAPI {
 
     public void descargar(String url, File destino, DownloadProgressListener listener){
         try{
-            URLConnection conn = URI.create(url).toURL().openConnection();
+            URLConnection conn = openConnection(url);
             long total = conn.getContentLengthLong();
 
             try(InputStream in = conn.getInputStream();
@@ -127,7 +143,7 @@ public class MojangAPI {
             String skinUrl = obtenerUrlSkinPorUuid(uuid);
             if(skinUrl == null) return null;
 
-            BufferedImage skin = ImageIO.read(URI.create(skinUrl).toURL());
+            BufferedImage skin = readImageFromUrl(skinUrl);
             if(skin == null) return null;
 
             BufferedImage head = extraerCabezaDesdeSkin(skin);
@@ -149,7 +165,7 @@ public class MojangAPI {
 
     private String obtenerUuidPorUsername(String username){
         try{
-            JsonNode node = mapper.readTree(URI.create(UUID_BY_USERNAME_URL + username).toURL().openStream());
+            JsonNode node = readJsonFromUrl(UUID_BY_USERNAME_URL + username);
             JsonNode idNode = node.get("id");
             if(idNode == null) return null;
             String id = idNode.asString();
@@ -161,7 +177,7 @@ public class MojangAPI {
 
     private String obtenerUrlSkinPorUuid(String uuid){
         try{
-            JsonNode profile = mapper.readTree(URI.create(SESSION_PROFILE_URL + uuid).toURL().openStream());
+            JsonNode profile = readJsonFromUrl(SESSION_PROFILE_URL + uuid);
             JsonNode props = profile.get("properties");
             if(props == null || !props.isArray() || props.isEmpty()) return null;
 
@@ -194,5 +210,24 @@ public class MojangAPI {
         g.drawImage(overlay, 0, 0, null);
         g.dispose();
         return out;
+    }
+
+    private JsonNode readJsonFromUrl(String url) throws IOException {
+        try (InputStream in = openConnection(url).getInputStream()) {
+            return mapper.readTree(in);
+        }
+    }
+
+    private BufferedImage readImageFromUrl(String url) throws IOException {
+        try (InputStream in = openConnection(url).getInputStream()) {
+            return ImageIO.read(in);
+        }
+    }
+
+    private URLConnection openConnection(String url) throws IOException {
+        URLConnection connection = URI.create(url).toURL().openConnection();
+        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(READ_TIMEOUT_MS);
+        return connection;
     }
 }

@@ -732,7 +732,7 @@ public class PanelJugadores extends JPanel {
                 return; // ya hay una descarga en curso para este jugador
             }
 
-            new Thread(() -> {
+            MojangAPI.runBackgroundRequest(() -> {
                 try{
                     ImageIcon head = mojangAPI.obtenerCabezaJugador(username, 32);
                     if (head == null) return;
@@ -745,7 +745,7 @@ public class PanelJugadores extends JPanel {
                 } finally{
                     CARGANDO.remove(key);
                 }
-            }, "skin-" + key).start();
+            });
         }
     }
 
