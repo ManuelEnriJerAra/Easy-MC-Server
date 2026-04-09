@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.example</groupId>
-    <artifactId>easy_mc_server_0.3</artifactId>
+    <artifactId>easy_mc_server_0.4</artifactId>
     <version>alpha</version>
 
     <properties>
@@ -75,7 +75,7 @@
     </dependencies>
     <build>
         <plugins>
-            <!-- Compilaci�n -->
+            <!-- Compilación -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -83,7 +83,7 @@
                 <configuration>
                     <release>25</release>
                     <encoding>UTF-8</encoding>
-                    <!-- Lombok en compilaci�n -->
+                    <!-- Lombok en compilación -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -115,7 +115,7 @@
                                 </transformer>
                             </transformers>
 
-                            <!-- evita problemas t�picos al juntar jars -->
+                            <!-- evita problemas típicos al juntar jars -->
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
