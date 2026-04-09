@@ -208,6 +208,10 @@ public class PanelPrevisualizacion extends JPanel {
                 nuevoDisplay = nuevoParts.length <= 2 ? nuevoDisplay : (nuevoParts[0] + "\n" + nuevoParts[1]);
                 motdLabel.setText(MotdRenderUtil.toHtml(nuevoDisplay));
                 aplicarEllipsisTextos(nombreField, motdLabel);
+                try{
+                    gestorServidores.guardarServidor(server);
+                } catch (RuntimeException ignored){
+                }
             }
         });
 

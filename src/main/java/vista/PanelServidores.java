@@ -322,7 +322,9 @@ public class PanelServidores extends FlatScrollPane {
 
         JLabel motdLabel = new JLabel();
         motdLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        motdLabel.putClientProperty("fullText", Utilidades.leerMotdDesdeProperties(Path.of(servidor.getServerDir())));
+        motdLabel.putClientProperty("fullText", extraerPrimeraLineaMotd(
+                Utilidades.leerMotdDesdeProperties(Path.of(servidor.getServerDir()))
+        ));
 
         JLabel versionLabel = new JLabel();
         versionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1009,6 +1011,16 @@ public class PanelServidores extends FlatScrollPane {
 
         FontMetrics fm = label.getFontMetrics(label.getFont());
         label.setText(ellipsizePx(full, fm, maxWidthPx));
+    }
+
+    private String extraerPrimeraLineaMotd(String motd){
+        if(motd == null) return "";
+        String limpio = motd.replace("\r", "");
+        int salto = limpio.indexOf('\n');
+        if(salto >= 0){
+            limpio = limpio.substring(0, salto);
+        }
+        return limpio.strip();
     }
 
     // Si el texto no entra (en píxeles) añade "..."
