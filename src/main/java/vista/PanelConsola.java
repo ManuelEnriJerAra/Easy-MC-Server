@@ -53,6 +53,7 @@ public class PanelConsola extends JPanel {
 
     public PanelConsola(GestorServidores gestorServidores) {
         this.setLayout(new BorderLayout(0, 8));
+        this.setOpaque(false);
         this.gestorServidores = gestorServidores;
         this.setMinimumSize(new Dimension(this.getWidth(), 200));
         consolaPane.setEditable(false);

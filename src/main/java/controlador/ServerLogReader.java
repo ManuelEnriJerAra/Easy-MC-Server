@@ -13,6 +13,7 @@ import java.io.InputStreamReader;
 public class ServerLogReader implements Runnable{
     private final Server server;
     private final InputStream inputStream;
+    private final Runnable onServerReady;
 
     @Override
     public void run() {
@@ -20,6 +21,12 @@ public class ServerLogReader implements Runnable{
             String linea;
             while ((linea = reader.readLine()) != null) {
                 server.appendConsoleLinea(linea);
+                if(Boolean.TRUE.equals(server.getIniciando()) && linea.contains("Done")){
+                    server.setIniciando(false);
+                    if(onServerReady != null){
+                        onServerReady.run();
+                    }
+                }
             }
         } catch (IOException e) {
             server.appendConsoleLinea("[ERROR] Error leyendo logs: "+e.getMessage());

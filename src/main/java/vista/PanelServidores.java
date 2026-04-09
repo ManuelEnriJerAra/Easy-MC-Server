@@ -90,14 +90,14 @@ public class PanelServidores extends FlatScrollPane {
     }
 
     public void seleccionarServidor(Server server){
-        seleccionarServidor(server, true);
+        seleccionarServidor(server, true, true);
     }
 
     public void mostrarSeleccionServidor(Server server){
-        seleccionarServidor(server, false);
+        seleccionarServidor(server, false, false);
     }
 
-    private void seleccionarServidor(Server server, boolean notificar){
+    private void seleccionarServidor(Server server, boolean notificar, boolean asegurarVisible){
         if(server == null) return;
         refrescarTema(true);
 
@@ -118,7 +118,9 @@ public class PanelServidores extends FlatScrollPane {
             if(!coincidePorId && !coincidePorDir) continue;
 
             marcarFilaSeleccionada(fila);
-            fila.scrollRectToVisible(new Rectangle(0, 0, fila.getWidth(), fila.getHeight()));
+            if(asegurarVisible){
+                fila.scrollRectToVisible(new Rectangle(0, 0, fila.getWidth(), fila.getHeight()));
+            }
             if(notificar && listener != null){
                 listener.servidorSeleccionado(filaServer);
             }
@@ -204,6 +206,12 @@ public class PanelServidores extends FlatScrollPane {
     private void recargarPanel(List<Server> servidores, GestorServidores gestorServidores){
         refrescarTema(true);
         Server servidorSeleccionadoActual = obtenerServidorSeleccionadoActual();
+        Point posicionScroll = null;
+        JViewport viewport = getViewport();
+        if(viewport != null){
+            Point actual = viewport.getViewPosition();
+            posicionScroll = actual == null ? null : new Point(actual);
+        }
         JPanel panelContenedor = construirPanelContenedor(servidores);
 
         filaSeleccionada = null;
@@ -211,8 +219,25 @@ public class PanelServidores extends FlatScrollPane {
         if(servidorSeleccionadoActual != null){
             mostrarSeleccionServidor(servidorSeleccionadoActual);
         }
+        restaurarPosicionScroll(posicionScroll);
         this.revalidate();
         this.repaint();
+    }
+
+    private void restaurarPosicionScroll(Point posicionScroll){
+        if(posicionScroll == null) return;
+        JViewport viewport = getViewport();
+        if(viewport == null) return;
+        Component vista = viewport.getView();
+        if(vista == null) return;
+
+        int maxX = Math.max(0, vista.getWidth() - viewport.getWidth());
+        int maxY = Math.max(0, vista.getHeight() - viewport.getHeight());
+        Point ajustada = new Point(
+                Math.max(0, Math.min(posicionScroll.x, maxX)),
+                Math.max(0, Math.min(posicionScroll.y, maxY))
+        );
+        viewport.setViewPosition(ajustada);
     }
 
     private JPanel construirPanelContenedor(List<Server> servidores){
@@ -316,7 +341,7 @@ public class PanelServidores extends FlatScrollPane {
         boolean vivo = servidor.getServerProcess() != null && servidor.getServerProcess().isAlive();
         // El texto no cambia de color: solo el punto.
         estado.setForeground(AppTheme.getForeground());
-        actualizarEstadoLabel(estado, vivo);
+        actualizarEstadoLabel(estado, servidor);
         estado.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         panelDerecho.add(estado, BorderLayout.SOUTH);
@@ -938,15 +963,16 @@ public class PanelServidores extends FlatScrollPane {
             if(!(serverObj instanceof Server server)) continue;
             if(!(estadoObj instanceof JLabel estado)) continue;
 
-            boolean vivo = server.getServerProcess() != null && server.getServerProcess().isAlive();
-            actualizarEstadoLabel(estado, vivo);
+            actualizarEstadoLabel(estado, server);
         }
 
     }
 
-    private void actualizarEstadoLabel(JLabel estado, boolean vivo){
-        String dotColor = vivo ? "#00C853" : "#D50000";
-        String texto = vivo ? "Activo" : "Inactivo";
+    private void actualizarEstadoLabel(JLabel estado, Server server){
+        boolean vivo = server != null && server.getServerProcess() != null && server.getServerProcess().isAlive();
+        boolean iniciando = vivo && Boolean.TRUE.equals(server.getIniciando());
+        String dotColor = iniciando ? "#FF9800" : (vivo ? "#00C853" : "#D50000");
+        String texto = iniciando ? "Iniciando" : (vivo ? "Activo" : "Inactivo");
         estado.setText("<html><span style='color:" + dotColor + ";'>●</span> " + texto + "</html>");
     }
 

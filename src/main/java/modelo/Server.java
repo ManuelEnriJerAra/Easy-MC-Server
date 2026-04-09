@@ -55,6 +55,7 @@ public class Server {
     @JsonIgnore transient Boolean logReaderIniciado = false; // NO LO GUARDO
     @JsonIgnore transient Boolean restartPending = false; // reinicio pendiente
     @JsonIgnore transient List<String> rawLogLines = new ArrayList<>(); // líneas de logs sin traducir
+    @JsonIgnore transient Boolean iniciando = false; // arranque en progreso
 
     // ===== CONSTRUCTORES =====
 

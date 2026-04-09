@@ -395,7 +395,6 @@ public class PanelPrevisualizacion extends JPanel {
         }
 
         private static JComponent crearZonaArrastre(JDialog dialog, BufferedImage[] result, ImageFilePicker picker) {
-            JButton elegirButton = new JButton("Seleccionar del ordenador");
             Runnable abrirSelector = () -> {
                 try{
                     BufferedImage image = cargarImagenElegida(picker);
@@ -406,11 +405,10 @@ public class PanelPrevisualizacion extends JPanel {
                     mostrarError(dialog, ex.getMessage());
                 }
             };
-            elegirButton.addActionListener(e -> abrirSelector.run());
 
             JPanel uploadPanel = new JPanel(new BorderLayout(0, 10));
             uploadPanel.setOpaque(true);
-            uploadPanel.setBackground(AppTheme.getBackground());
+            uploadPanel.setBackground(AppTheme.getSurfaceBackground());
             uploadPanel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             uploadPanel.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createDashedBorder(AppTheme.getMainAccent(), 1f, 6f, 3f, true),
@@ -424,17 +422,18 @@ public class PanelPrevisualizacion extends JPanel {
             JLabel subtitle = new JLabel("o seleccionala desde tu ordenador", SwingConstants.CENTER);
             subtitle.setForeground(AppTheme.getMutedForeground());
 
-            JPanel textWrap = new JPanel();
+            JPanel textWrap = new JPanel(new GridBagLayout());
             textWrap.setOpaque(false);
-            textWrap.setLayout(new BoxLayout(textWrap, BoxLayout.Y_AXIS));
+            JPanel centeredText = new JPanel();
+            centeredText.setOpaque(false);
+            centeredText.setLayout(new BoxLayout(centeredText, BoxLayout.Y_AXIS));
             title.setAlignmentX(Component.CENTER_ALIGNMENT);
             subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
-            elegirButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            textWrap.add(title);
-            textWrap.add(Box.createVerticalStrut(6));
-            textWrap.add(subtitle);
-            textWrap.add(Box.createVerticalStrut(14));
-            textWrap.add(elegirButton);
+            centeredText.add(title);
+            centeredText.add(Box.createVerticalStrut(6));
+            centeredText.add(subtitle);
+
+            textWrap.add(centeredText);
 
             uploadPanel.add(textWrap, BorderLayout.CENTER);
             installImageDropHandler(uploadPanel, dialog, result);
@@ -455,7 +454,7 @@ public class PanelPrevisualizacion extends JPanel {
             if(previews == null || previews.isEmpty()){
                 JPanel empty = new JPanel(new BorderLayout());
                 empty.setOpaque(true);
-                empty.setBackground(AppTheme.getBackground());
+                empty.setBackground(AppTheme.getSurfaceBackground());
                 empty.setBorder(BorderFactory.createCompoundBorder(
                         BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor()),
                         BorderFactory.createEmptyBorder(18, 18, 18, 18)
@@ -486,7 +485,7 @@ public class PanelPrevisualizacion extends JPanel {
             card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             card.setHorizontalAlignment(SwingConstants.LEFT);
             card.setVerticalAlignment(SwingConstants.TOP);
-            card.setBackground(AppTheme.getBackground());
+            card.setBackground(AppTheme.getSurfaceBackground());
             card.setBorder(BorderFactory.createCompoundBorder(
                     AppTheme.createRoundedBorder(new Insets(10, 10, 10, 10), 1f),
                     BorderFactory.createEmptyBorder(10, 10, 10, 10)

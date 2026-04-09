@@ -259,7 +259,7 @@ public class PanelConfigServidor extends JPanel {
 
     private JButton createSecondaryOptionButton(String text){
         JButton button = createOptionButton(text);
-        button.setBackground(AppTheme.getBackground());
+        button.setBackground(AppTheme.getSurfaceBackground());
         button.setForeground(AppTheme.getForeground());
         return button;
     }
@@ -384,7 +384,7 @@ public class PanelConfigServidor extends JPanel {
         button.setBorderPainted(true);
         button.putClientProperty("JButton.buttonType", "roundRect");
         button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
-        button.setBackground(AppTheme.getBackground());
+        button.setBackground(AppTheme.getSurfaceBackground());
         button.setForeground(AppTheme.getForeground());
     }
 
@@ -717,7 +717,7 @@ public class PanelConfigServidor extends JPanel {
     private JComponent crearTarjetaCampoVertical(FieldSpec spec){
         JPanel card = new JPanel(new BorderLayout(0, 6));
         card.setOpaque(true);
-        card.setBackground(AppTheme.getBackground());
+        card.setBackground(AppTheme.getSurfaceBackground());
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true),
@@ -738,7 +738,7 @@ public class PanelConfigServidor extends JPanel {
     private JComponent crearTarjetaBoolean(FieldSpec spec){
         JPanel card = new JPanel(new BorderLayout());
         card.setOpaque(true);
-        card.setBackground(AppTheme.getBackground());
+        card.setBackground(AppTheme.getSurfaceBackground());
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true),
                 BorderFactory.createEmptyBorder(6, 8, 6, 8)
@@ -758,7 +758,7 @@ public class PanelConfigServidor extends JPanel {
     private JComponent crearTarjetaNumero(FieldSpec spec){
         JPanel card = new JPanel(new BorderLayout(0, 4));
         card.setOpaque(true);
-        card.setBackground(AppTheme.getBackground());
+        card.setBackground(AppTheme.getSurfaceBackground());
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true),
                 BorderFactory.createEmptyBorder(6, 8, 6, 8)
@@ -777,7 +777,7 @@ public class PanelConfigServidor extends JPanel {
     private JComponent crearTarjetaRam(){
         JPanel card = new JPanel();
         card.setOpaque(true);
-        card.setBackground(AppTheme.getBackground());
+        card.setBackground(AppTheme.getSurfaceBackground());
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(BorderFactory.createCompoundBorder(

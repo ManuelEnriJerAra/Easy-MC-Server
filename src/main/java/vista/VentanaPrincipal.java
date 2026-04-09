@@ -16,6 +16,7 @@ import controlador.GestorServidores;
 import controlador.Main;
 import modelo.Server;
 import com.formdev.flatlaf.FlatLaf;
+import com.formdev.flatlaf.intellijthemes.FlatAllIJThemes;
 import com.formdev.flatlaf.ui.FlatLineBorder;
 
 import javax.swing.*;
@@ -45,6 +46,11 @@ public class VentanaPrincipal extends JFrame {
 
     private final JPanel panelIzquierdo, panelDerecho;
     private final GestorServidores gestorServidores;
+    private JPanel ventanaPrincipalPanel;
+    private JPanel rendimientoPanel;
+    private JPanel wrapperIzquierdo;
+    private JPanel wrapperDerecho;
+    private JPanel barraWrapper;
     private TitledCardPanel servidoresCard; // card de la izquierda con borde redondeado
     private JPanel servidoresPanel;
     private Server serverMostrado;
@@ -62,6 +68,37 @@ public class VentanaPrincipal extends JFrame {
 
     private enum PaginaDerecha { HOME, MUNDO, CONFIG, MODS, INFO }
     private record TemaInfo(String name, String className){}
+
+    private static final class RoundedNavButton extends JButton {
+        private RoundedNavButton(String text) {
+            super(text);
+            setContentAreaFilled(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int arc = AppTheme.getArc();
+                if (arc > 0) {
+                    g2.clip(new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth(), getHeight(), arc, arc));
+                }
+                if (isOpaque() && getBackground() != null) {
+                    g2.setColor(getBackground());
+                    if (arc > 0) {
+                        g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
+                    } else {
+                        g2.fillRect(0, 0, getWidth(), getHeight());
+                    }
+                }
+                super.paintComponent(g2);
+            } finally {
+                g2.dispose();
+            }
+        }
+    }
+
     private PaginaDerecha paginaDerechaActual = PaginaDerecha.HOME;
     private JPanel panelDerechoCards;
     private CardLayout cardDerecho;
@@ -76,7 +113,7 @@ public class VentanaPrincipal extends JFrame {
         this.setSize(1280, 720);
         this.setTitle("Easy-MC-Server");
         this.setLocationRelativeTo(null);
-        JPanel ventanaPrincipalPanel = new JPanel(new BorderLayout()); // el panel principal, donde se aloja todo
+        ventanaPrincipalPanel = new JPanel(new BorderLayout()); // el panel principal, donde se aloja todo
         Color bgApp = AppTheme.getBackground();
         Color panelBg = AppTheme.getPanelBackground();
         ventanaPrincipalPanel.setBackground(bgApp);
@@ -88,7 +125,9 @@ public class VentanaPrincipal extends JFrame {
         panelIzquierdo.setBackground(bgApp);
 
         // PANEL DE GRÁFICAS DE RENDIMIENTO
-        JPanel rendimientoPanel = new JPanel(new GridLayout(1,3));
+        rendimientoPanel = new JPanel(new GridLayout(1,3));
+        rendimientoPanel.setOpaque(true);
+        rendimientoPanel.setBackground(bgApp);
         panelIzquierdo.add(rendimientoPanel, BorderLayout.NORTH);
 
         // PANEL DE SERVIDORES (card con borde redondeado)
@@ -299,13 +338,13 @@ public class VentanaPrincipal extends JFrame {
 
         // SPLIT PANE
 
-        JPanel wrapperIzquierdo = new JPanel(new BorderLayout());
+        wrapperIzquierdo = new JPanel(new BorderLayout());
         wrapperIzquierdo.add(panelIzquierdo, BorderLayout.CENTER);
         wrapperIzquierdo.setOpaque(true);
         wrapperIzquierdo.setBackground(bgApp);
         wrapperIzquierdo.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
 
-        JPanel wrapperDerecho = new JPanel(new BorderLayout());
+        wrapperDerecho = new JPanel(new BorderLayout());
         wrapperDerecho.add(panelDerecho, BorderLayout.CENTER);
         wrapperDerecho.setOpaque(true);
         wrapperDerecho.setBackground(bgApp);
@@ -318,7 +357,7 @@ public class VentanaPrincipal extends JFrame {
         splitPrincipal.setBackground(bgApp);
 
         // Barra vertical al extremo izquierdo de la ventana
-        JPanel barraWrapper = new JPanel(new BorderLayout());
+        barraWrapper = new JPanel(new BorderLayout());
         barraWrapper.setOpaque(true);
         barraWrapper.setBackground(bgApp);
         barraWrapper.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
@@ -510,7 +549,7 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private JButton crearNavButton(String emoji, String tooltip, PaginaDerecha pagina){
-        JButton b = new JButton(emoji);
+        JButton b = new RoundedNavButton(emoji);
         b.setFocusPainted(false);
         b.setAlignmentX(Component.LEFT_ALIGNMENT); // fijar a la izquierda
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
@@ -528,14 +567,14 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private JButton crearActionButton(String emoji, String tooltip, Runnable action){
-        JButton b = new JButton(emoji);
+        JButton b = new RoundedNavButton(emoji);
         b.setFocusPainted(false);
         b.setAlignmentX(Component.LEFT_ALIGNMENT); // fijar a la izquierda
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         b.setToolTipText(tooltip);
         b.setFont(b.getFont().deriveFont(Font.PLAIN, 18f));
         b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        b.setBorderPainted(false); // sin borde
+        b.setBorderPainted(true); // mantener visible el borde redondeado
         b.setContentAreaFilled(false); // fondo transparente
         b.setOpaque(false);
         b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc()));
@@ -579,36 +618,14 @@ public class VentanaPrincipal extends JFrame {
         SwingUtilities.invokeLater(() -> {
             java.util.List<TemaInfo> disponibles = new ArrayList<>();
 
-            // 1) Preferimos la lista completa de temas de FlatLaf (vía reflexión para evitar dependencias de método)
+            // 1) Preferimos la lista completa de temas de FlatLaf
             try{
-                Class<?> all = Class.forName("com.formdev.flatlaf.intellijthemes.FlatAllIJThemes");
-                java.lang.reflect.Field infosField = all.getField("INFOS");
-                Object infosObj = infosField.get(null);
-                if(infosObj instanceof Object[] arr){
-                    for(Object o : arr){
-                        if(o == null) continue;
-                        String name = null;
-                        String className = null;
-                        try{
-                            java.lang.reflect.Method m = o.getClass().getMethod("getName");
-                            Object r = m.invoke(o);
-                            if(r != null) name = String.valueOf(r);
-                        } catch (Throwable ignored){}
-                        try{
-                            java.lang.reflect.Method m = o.getClass().getMethod("getClassName");
-                            Object r = m.invoke(o);
-                            if(r != null) className = String.valueOf(r);
-                        } catch (Throwable ignored){}
-                        try{
-                            if(className == null){
-                                java.lang.reflect.Method m = o.getClass().getMethod("getLookAndFeelClassName");
-                                Object r = m.invoke(o);
-                                if(r != null) className = String.valueOf(r);
-                            }
-                        } catch (Throwable ignored){}
-                        if(name == null || className == null) continue;
-                        disponibles.add(new TemaInfo(name, className));
-                    }
+                for(FlatAllIJThemes.FlatIJLookAndFeelInfo info : FlatAllIJThemes.INFOS){
+                    if(info == null) continue;
+                    String name = info.getName();
+                    String className = info.getClassName();
+                    if(name == null || className == null || name.isBlank() || className.isBlank()) continue;
+                    disponibles.add(new TemaInfo(name, className));
                 }
             } catch (Throwable ignored){
                 // fallback abajo
@@ -624,6 +641,16 @@ public class VentanaPrincipal extends JFrame {
                         disponibles.add(new TemaInfo(info.getName(), cn));
                     }
                 }
+            }
+
+            // 3) Fallback final: un conjunto mínimo conocido de temas FlatLaf empaquetados
+            if(disponibles.isEmpty()){
+                disponibles.add(new TemaInfo("Solarized Light", "com.formdev.flatlaf.intellijthemes.FlatSolarizedLightIJTheme"));
+                disponibles.add(new TemaInfo("Solarized Dark", "com.formdev.flatlaf.intellijthemes.FlatSolarizedDarkIJTheme"));
+                disponibles.add(new TemaInfo("Arc", "com.formdev.flatlaf.intellijthemes.FlatArcIJTheme"));
+                disponibles.add(new TemaInfo("Arc Dark", "com.formdev.flatlaf.intellijthemes.FlatArcDarkIJTheme"));
+                disponibles.add(new TemaInfo("Material Solarized Light", "com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTSolarizedLightIJTheme"));
+                disponibles.add(new TemaInfo("Material Solarized Dark", "com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTSolarizedDarkIJTheme"));
             }
 
             if(disponibles.isEmpty()){
@@ -725,8 +752,13 @@ public class VentanaPrincipal extends JFrame {
 
         Container cp = getContentPane();
         if (cp != null) cp.setBackground(bgApp);
+        if (ventanaPrincipalPanel != null) ventanaPrincipalPanel.setBackground(bgApp);
         if (panelIzquierdo != null) panelIzquierdo.setBackground(bgApp);
         if (panelDerecho != null) panelDerecho.setBackground(bgApp);
+        if (rendimientoPanel != null) rendimientoPanel.setBackground(bgApp);
+        if (wrapperIzquierdo != null) wrapperIzquierdo.setBackground(bgApp);
+        if (wrapperDerecho != null) wrapperDerecho.setBackground(bgApp);
+        if (barraWrapper != null) barraWrapper.setBackground(bgApp);
         if (panelDerechoCards != null) {
             panelDerechoCards.setOpaque(true);
             panelDerechoCards.setBackground(bgApp);
@@ -802,10 +834,8 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private void reconfigurarSplitPanes(){
-        SwingUtilities.invokeLater(() -> {
-            if(splitPrincipal != null) configurarSplitPane(splitPrincipal, 8);
-            if(splitHome != null) configurarSplitPane(splitHome, 8);
-        });
+        if(splitPrincipal != null) configurarSplitPane(splitPrincipal, 8);
+        if(splitHome != null) configurarSplitPane(splitHome, 8);
     }
 
     private void seleccionarServidor(Server server){

@@ -31,17 +31,25 @@ public final class AppTheme {
         return arc > 0 ? arc : Main.DEFAULT_ARC;
     }
 
-    public static Color getBackground() {
+    private static Color getBaseThemeBackground() {
         Color bg = UIManager.getColor("Panel.background");
         return bg != null ? bg : FALLBACK_BACKGROUND;
     }
 
+    public static Color getBackground() {
+        return darken(getBaseThemeBackground(), 0.07f);
+    }
+
     public static Color getPanelBackground() {
-        Color bg = getBackground();
-        float luminance = (0.299f * bg.getRed() + 0.587f * bg.getGreen() + 0.114f * bg.getBlue()) / 255f;
+        return getBaseThemeBackground();
+    }
+
+    public static Color getSurfaceBackground() {
+        Color panel = getPanelBackground();
+        float luminance = (0.299f * panel.getRed() + 0.587f * panel.getGreen() + 0.114f * panel.getBlue()) / 255f;
         return luminance >= 0.5f
-                ? darken(bg, 0.045f)
-                : tint(bg, Color.WHITE, 0.07f);
+                ? darken(panel, 0.035f)
+                : tint(panel, Color.WHITE, 0.05f);
     }
 
     public static Color getMainAccent() {

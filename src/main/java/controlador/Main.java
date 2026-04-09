@@ -12,6 +12,7 @@ package controlador;
 
 import modelo.EasyMCConfig;
 import vista.NoServerFrame;
+import vista.AppTheme;
 import vista.VentanaPrincipal;
 
 import javax.swing.*;
@@ -31,11 +32,18 @@ public class Main {
         UIManager.put("Button.arc", DEFAULT_ARC); // radio de los botones
         UIManager.put("Component.arc", DEFAULT_ARC); // radio de los componentes (RoundBorder)
         UIManager.put("ProgressBar.arc", DEFAULT_ARC);
+        UIManager.put("TitlePane.background", AppTheme.getBackground());
+        UIManager.put("TitlePane.inactiveBackground", AppTheme.getBackground());
+        UIManager.put("TitlePane.foreground", AppTheme.getForeground());
+        UIManager.put("TitlePane.inactiveForeground", AppTheme.getMutedForeground());
+        UIManager.put("TitlePane.borderColor", AppTheme.getTransparentColor());
+        UIManager.put("TitlePane.embeddedForeground", AppTheme.getForeground());
+        UIManager.put("TitlePane.unifiedBackground", false);
     }
 
     public static void main(String[] args){
-        aplicarTemaInicial();
         SwingUtilities.invokeLater(()->{
+            aplicarTemaInicial();
             if (SystemInfo.isLinux) {
                 JFrame.setDefaultLookAndFeelDecorated(true);
                 JDialog.setDefaultLookAndFeelDecorated(true);
@@ -44,19 +52,19 @@ public class Main {
             System.setProperty("flatlaf.useWindowDecorations",  "true");
             System.setProperty("flatlaf.MenuBarEmbedded", "true");
             aplicarPreferenciasUI();
-        });
 
-        GestorServidores gestorServidores = new GestorServidores();
-        if(gestorServidores.getListaServidores().isEmpty()){
-            noServerFrame = new NoServerFrame(gestorServidores);
-            noServerFrame.setVisible(true);
-            gestorServidores.mostrarAvisoArranqueSiProcede(noServerFrame);
-        }
-        else{
-            ventanaPrincipal = new VentanaPrincipal(gestorServidores);
-            ventanaPrincipal.setVisible(true);
-            gestorServidores.mostrarAvisoArranqueSiProcede(ventanaPrincipal);
-        }
+            GestorServidores gestorServidores = new GestorServidores();
+            if(gestorServidores.getListaServidores().isEmpty()){
+                noServerFrame = new NoServerFrame(gestorServidores);
+                noServerFrame.setVisible(true);
+                gestorServidores.mostrarAvisoArranqueSiProcede(noServerFrame);
+            }
+            else{
+                ventanaPrincipal = new VentanaPrincipal(gestorServidores);
+                ventanaPrincipal.setVisible(true);
+                gestorServidores.mostrarAvisoArranqueSiProcede(ventanaPrincipal);
+            }
+        });
     }
 
     private static void aplicarTemaInicial() {

@@ -2072,7 +2072,7 @@ public class PanelMundo extends JPanel {
         button.setBorderPainted(true);
         button.putClientProperty("JButton.buttonType", "roundRect");
         button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
-        button.setBackground(AppTheme.getBackground());
+        button.setBackground(AppTheme.getSurfaceBackground());
         button.setForeground(AppTheme.getForeground());
     }
 
@@ -2088,7 +2088,7 @@ public class PanelMundo extends JPanel {
 
     private void stylePreviewOverlayButton(JButton button) {
         if (button == null) return;
-        button.setBackground(AppTheme.getBackground());
+        button.setBackground(AppTheme.getSurfaceBackground());
         button.setForeground(AppTheme.getForeground());
     }
 
@@ -2141,7 +2141,7 @@ public class PanelMundo extends JPanel {
 
         JPanel optionsPanel = new JPanel();
         optionsPanel.setOpaque(true);
-        optionsPanel.setBackground(AppTheme.getBackground());
+        optionsPanel.setBackground(AppTheme.getSurfaceBackground());
         optionsPanel.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), 1f));
         optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.Y_AXIS));
 

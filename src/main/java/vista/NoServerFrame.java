@@ -52,10 +52,12 @@ public class NoServerFrame extends JFrame {
 
         // Panel principal del Dialog
         JPanel panelPrincipal = new JPanel(new BorderLayout());
+        panelPrincipal.setBackground(AppTheme.getBackground());
         this.setContentPane(panelPrincipal);
 
         // PANEL IZQUIERDO ---------------------------------------------------------------------------------------------
         JPanel panelIzquierdo = new JPanel(new BorderLayout());
+        panelIzquierdo.setBackground(AppTheme.getPanelBackground());
         panelPrincipal.add(panelIzquierdo, BorderLayout.WEST);
         panelIzquierdo.setBorder(BorderFactory.createLineBorder(AppTheme.getDialogBorderColor()));
 
@@ -63,6 +65,7 @@ public class NoServerFrame extends JFrame {
         panelIzquierdo.add(logoLabel, BorderLayout.NORTH);
 
         JPanel panelInfo = new JPanel(new GridBagLayout());
+        panelInfo.setBackground(AppTheme.getPanelBackground());
         panelIzquierdo.add(panelInfo, BorderLayout.CENTER);
         GridBagConstraints c = new GridBagConstraints();
 
@@ -81,6 +84,7 @@ public class NoServerFrame extends JFrame {
         // PANEL DERECHO -----------------------------------------------------------------------------------------------
 
         JPanel panelDerecho = new JPanel(new GridBagLayout());
+        panelDerecho.setBackground(AppTheme.getPanelBackground());
         panelPrincipal.add(panelDerecho, BorderLayout.CENTER);
         GridBagConstraints c2 = new GridBagConstraints();
 
@@ -102,6 +106,7 @@ public class NoServerFrame extends JFrame {
         c2.gridy = 1;
 
         JPanel botonesNuevo = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0));
+        botonesNuevo.setBackground(AppTheme.getPanelBackground());
         panelDerecho.add(botonesNuevo, c2);
         JButton crearNuevo = new JButton("Crear Nuevo");
         botonesNuevo.add(crearNuevo);

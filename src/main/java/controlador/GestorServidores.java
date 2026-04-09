@@ -802,6 +802,7 @@ public class GestorServidores {
             // creo el proceso y se lo asigno al servidor
             Process proceso = pb.start();
             server.setServerProcess(proceso);
+            server.setIniciando(true);
             notificarEstadoServidor(server);
 
             // comienzo a leer la consola
@@ -810,6 +811,7 @@ public class GestorServidores {
 
             // detecto cuando el proceso finaliza
             proceso.onExit().thenRun(()->{
+               server.setIniciando(false);
                server.appendConsoleLinea("[INFO] El servidor se ha detenido.");
                notificarEstadoServidor(server);
                // si el usuario ha pedido un reinicio y hemos parado el servidor entonces lo iniciamos de nuevo
@@ -824,6 +826,7 @@ public class GestorServidores {
             });
 
         } catch (IOException e) {
+            server.setIniciando(false);
             server.appendConsoleLinea("[ERROR] El servidor no se pudo iniciar"+e.getMessage());
             throw new RuntimeException(e);
         }
@@ -836,6 +839,7 @@ public class GestorServidores {
         if(proceso==null || !proceso.isAlive()) {
             server.appendConsoleLinea("[INFO] El servidor no está en ejecución");
             server.setServerProcess(null);
+            server.setIniciando(false);
             notificarEstadoServidor(server);
             return;
         }
@@ -862,6 +866,7 @@ public class GestorServidores {
         } finally{
             // Si no está vivo limpiamos referencia
             if(!proceso.isAlive()) server.setServerProcess(null);
+            if(!proceso.isAlive()) server.setIniciando(false);
             notificarEstadoServidor(server);
         }
     }
@@ -911,7 +916,8 @@ public class GestorServidores {
         Thread lector = new Thread(
             new ServerLogReader(
                     server,
-                    server.getServerProcess().getInputStream()
+                    server.getServerProcess().getInputStream(),
+                    () -> SwingUtilities.invokeLater(() -> notificarEstadoServidor(server))
             ),
             "log-reader-"+server.getId()
         );
