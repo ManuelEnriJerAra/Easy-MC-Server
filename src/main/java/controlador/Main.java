@@ -10,13 +10,13 @@
 
 package controlador;
 
+import modelo.EasyMCConfig;
 import vista.NoServerFrame;
 import vista.VentanaPrincipal;
 
 import javax.swing.*;
 import java.awt.*;
 
-import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTSolarizedLightIJTheme;
 import com.formdev.flatlaf.util.SystemInfo;
 
 public class Main {
@@ -34,8 +34,7 @@ public class Main {
     }
 
     public static void main(String[] args){
-        FlatMTSolarizedLightIJTheme.setup();
-        //FlatLightFlatIJTheme.setup();
+        aplicarTemaInicial();
         SwingUtilities.invokeLater(()->{
             if (SystemInfo.isLinux) {
                 JFrame.setDefaultLookAndFeelDecorated(true);
@@ -57,6 +56,27 @@ public class Main {
             ventanaPrincipal = new VentanaPrincipal(gestorServidores);
             ventanaPrincipal.setVisible(true);
             gestorServidores.mostrarAvisoArranqueSiProcede(ventanaPrincipal);
+        }
+    }
+
+    private static void aplicarTemaInicial() {
+        EasyMCConfig config = GestorConfiguracion.cargarConfiguracion();
+        String temaClassName = config.getTemaClassName();
+        if (temaClassName == null || temaClassName.isBlank()) {
+            temaClassName = GestorConfiguracion.getTemaPorDefecto();
+        }
+
+        try {
+            UIManager.setLookAndFeel(temaClassName);
+        } catch (Exception e) {
+            System.err.println("No se pudo aplicar el tema guardado, se usara el tema por defecto: " + e.getMessage());
+            UIManager.put("ClassLoader", Main.class.getClassLoader());
+            try {
+                UIManager.setLookAndFeel(GestorConfiguracion.getTemaPorDefecto());
+                GestorConfiguracion.guardarTema(GestorConfiguracion.getTemaPorDefecto());
+            } catch (Exception ex) {
+                throw new RuntimeException("No se pudo aplicar el tema por defecto.", ex);
+            }
         }
     }
 }

@@ -37,3 +37,4 @@ build/
 ServerList.json
 dependency-reduced-pom.xml
 .m2/
+EasyMCConfig.json

@@ -11,6 +11,7 @@
 
 package vista;
 
+import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import controlador.Main;
 import modelo.Server;
@@ -675,6 +676,7 @@ public class VentanaPrincipal extends JFrame {
                 // Los bordes redondeados creados a mano (FlatLineBorder) no se recalculan solos.
                 // Al cambiar de tema, volvemos a generar esos bordes con los nuevos valores de UIManager.
                 refreshThemeStyles();
+                GestorConfiguracion.guardarTema(className);
             } catch (Exception ex){
                 JOptionPane.showMessageDialog(this, "No se pudo aplicar el tema: " + ex.getMessage(), "Temas", JOptionPane.ERROR_MESSAGE);
             }
