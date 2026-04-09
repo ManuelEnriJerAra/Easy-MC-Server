@@ -102,12 +102,23 @@ public class PanelMundo extends JPanel {
     private final JLabel tiempoRealValueLabel = new JLabel("-");
     private final JLabel lastPlayedValueLabel = new JLabel("-");
     private final JLabel versionValueLabel = new JLabel("-");
+    private final JLabel dataVersionValueLabel = new JLabel("-");
     private final JLabel tipoMundoValueLabel = new JLabel("-");
+    private final JLabel spawnValueLabel = new JLabel("-");
+    private final JLabel gamemodeValueLabel = new JLabel("-");
+    private final JLabel difficultyValueLabel = new JLabel("-");
+    private final JLabel weatherValueLabel = new JLabel("-");
+    private final JLabel dayTimeValueLabel = new JLabel("-");
+    private final JLabel hardcoreValueLabel = new JLabel("-");
+    private final JLabel allowCommandsValueLabel = new JLabel("-");
     private final JLabel generatorSettingsValueLabel = new JLabel("-");
     private final JLabel estructurasValueLabel = new JLabel("-");
+    private final JLabel gameRulesValueLabel = new JLabel("-");
+    private final JLabel dataPacksValueLabel = new JLabel("-");
     private final JLabel initialEnabledPacksValueLabel = new JLabel("-");
     private final JLabel initialDisabledPacksValueLabel = new JLabel("-");
     private final JLabel previewRenderStatusLabel = new JLabel();
+    private final JPanel metadataReadPanel = new JPanel();
     private final JComboBox<World> mundosCombo = new JComboBox<>();
     private final JButton refrescarButton = new JButton("Refrescar");
     private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
@@ -206,9 +217,19 @@ public class PanelMundo extends JPanel {
         styleInfoLabel(tiempoRealValueLabel);
         styleInfoLabel(lastPlayedValueLabel);
         styleInfoLabel(versionValueLabel);
+        styleInfoLabel(dataVersionValueLabel);
         styleInfoLabel(tipoMundoValueLabel);
+        styleInfoLabel(spawnValueLabel);
+        styleInfoLabel(gamemodeValueLabel);
+        styleInfoLabel(difficultyValueLabel);
+        styleInfoLabel(weatherValueLabel);
+        styleInfoLabel(dayTimeValueLabel);
+        styleInfoLabel(hardcoreValueLabel);
+        styleInfoLabel(allowCommandsValueLabel);
         styleInfoLabel(generatorSettingsValueLabel);
         styleInfoLabel(estructurasValueLabel);
+        styleInfoLabel(gameRulesValueLabel);
+        styleInfoLabel(dataPacksValueLabel);
         styleInfoLabel(initialEnabledPacksValueLabel);
         styleInfoLabel(initialDisabledPacksValueLabel);
         styleInfoLabel(pesoMundoValueLabel);
@@ -220,6 +241,8 @@ public class PanelMundo extends JPanel {
 
         conexionesPanel.setOpaque(false);
         conexionesPanel.setLayout(new BoxLayout(conexionesPanel, BoxLayout.Y_AXIS));
+        metadataReadPanel.setOpaque(false);
+        metadataReadPanel.setLayout(new BoxLayout(metadataReadPanel, BoxLayout.Y_AXIS));
 
         mundosCombo.addActionListener(e -> {
             if (actualizandoComboMundos) return;
@@ -293,7 +316,9 @@ public class PanelMundo extends JPanel {
         infoPanel.add(Box.createVerticalStrut(2));
         infoPanel.add(crearSeedRow());
         infoPanel.add(Box.createVerticalStrut(2));
-        infoPanel.add(crearInfoRow("Tipo:", tipoMundoValueLabel));
+        infoPanel.add(crearInfoRow("Hora del mundo:", dayTimeValueLabel));
+        infoPanel.add(Box.createVerticalStrut(2));
+        infoPanel.add(crearInfoRow("Clima:", weatherValueLabel));
         infoPanel.add(Box.createVerticalStrut(8));
         infoPanel.add(crearInfoRow("Peso mundo:", pesoMundoValueLabel));
         infoPanel.add(Box.createVerticalStrut(2));
@@ -391,14 +416,40 @@ public class PanelMundo extends JPanel {
         gbc.insets = new Insets(0, 0, 0, 0);
 
         gbc.gridx = 0;
-        gbc.weightx = 0.55;
-        panel.add(crearTarjetaConfiguracionMundo(), gbc);
+        gbc.weightx = 1.0;
+        panel.add(crearTarjetaDatosMundo(), gbc);
 
         gbc.gridx = 1;
-        gbc.weightx = 0.45;
+        gbc.weightx = 1.0;
+        gbc.insets = new Insets(0, 8, 0, 0);
+        panel.add(crearTarjetaConfiguracionMundo(), gbc);
+
+        gbc.gridx = 2;
+        gbc.weightx = 1.0;
         gbc.insets = new Insets(0, 8, 0, 0);
         panel.add(crearTarjetaConexiones(), gbc);
         return panel;
+    }
+
+    private JPanel crearTarjetaDatosMundo() {
+        CardPanel card = new CardPanel(new BorderLayout(), new Insets(12, 12, 12, 12));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+
+        JLabel titulo = crearTituloTarjeta("Datos");
+        card.add(titulo, BorderLayout.NORTH);
+
+        JScrollPane lecturaScroll = new JScrollPane(metadataReadPanel);
+        lecturaScroll.setBorder(BorderFactory.createEmptyBorder());
+        lecturaScroll.getViewport().setOpaque(false);
+        lecturaScroll.setOpaque(false);
+        lecturaScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        lecturaScroll.setPreferredSize(new Dimension(0, 250));
+        lecturaScroll.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+        lecturaScroll.getVerticalScrollBar().setUnitIncrement(20);
+        lecturaScroll.getVerticalScrollBar().setBlockIncrement(80);
+        card.add(lecturaScroll, BorderLayout.CENTER);
+        return card;
     }
 
     private JPanel crearTarjetaConfiguracionMundo() {
@@ -406,73 +457,35 @@ public class PanelMundo extends JPanel {
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
-        JLabel titulo = crearTituloTarjeta("Configuracion del mundo");
+        JLabel titulo = crearTituloTarjeta("Configuracion");
         card.add(titulo, BorderLayout.NORTH);
-
-        JPanel contenido = new JPanel(new GridLayout(1, 2, 10, 0));
-        contenido.setOpaque(false);
-        contenido.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
-
-        JPanel lectura = new JPanel();
-        lectura.setOpaque(false);
-        lectura.setLayout(new BoxLayout(lectura, BoxLayout.Y_AXIS));
-        lectura.add(crearInfoRow("Generator settings:", generatorSettingsValueLabel));
-        lectura.add(crearInfoRow("Generar estructuras:", estructurasValueLabel));
-
-        lectura.add(crearInfoRow("Initial enabled packs:", initialEnabledPacksValueLabel));
-        lectura.add(crearInfoRow("Initial disabled packs:", initialDisabledPacksValueLabel));
 
         JPanel ajustes = new JPanel();
         ajustes.setOpaque(false);
         ajustes.setLayout(new BoxLayout(ajustes, BoxLayout.Y_AXIS));
-        allowNetherCheckBox.setAlignmentX(Component.LEFT_ALIGNMENT);
-        allowNetherCheckBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, allowNetherCheckBox.getPreferredSize().height));
-        ajustes.add(allowNetherCheckBox);
+        ajustes.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+        ajustes.add(crearTarjetaAjusteBooleano("Permitir Nether", allowNetherCheckBox));
         ajustes.add(Box.createVerticalStrut(4));
-        ajustes.add(crearComboRow("Region file compression:", regionCompressionCombo));
+        ajustes.add(crearTarjetaAjusteCampo("Region file compression", regionCompressionCombo));
         ajustes.add(Box.createVerticalStrut(4));
-        ajustes.add(crearSpinnerRow("Proteccion del spawn:", spawnProtectionSpinner));
+        ajustes.add(crearTarjetaAjusteCampo("Proteccion del spawn", spawnProtectionSpinner));
         ajustes.add(Box.createVerticalStrut(4));
-        ajustes.add(crearSpinnerRow("Tamano maximo del mundo:", maxWorldSizeSpinner));
+        ajustes.add(crearTarjetaAjusteCampo("Tamaño maximo del mundo", maxWorldSizeSpinner));
+        ajustes.add(Box.createVerticalGlue());
         ajustes.add(Box.createVerticalStrut(6));
         guardarConfiguracionMundoButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         guardarConfiguracionMundoButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, guardarConfiguracionMundoButton.getPreferredSize().height));
         ajustes.add(guardarConfiguracionMundoButton);
 
-        contenido.add(lectura);
-        contenido.add(ajustes);
-        card.add(contenido, BorderLayout.CENTER);
+        JScrollPane ajustesScroll = new JScrollPane(ajustes);
+        ajustesScroll.setBorder(BorderFactory.createEmptyBorder());
+        ajustesScroll.getViewport().setOpaque(false);
+        ajustesScroll.setOpaque(false);
+        ajustesScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        ajustesScroll.getVerticalScrollBar().setUnitIncrement(18);
+        ajustesScroll.getVerticalScrollBar().setBlockIncrement(72);
+        card.add(ajustesScroll, BorderLayout.CENTER);
         return card;
-    }
-
-    private JPanel crearSpinnerRow(String labelText, JSpinner spinner) {
-        JPanel row = new JPanel(new BorderLayout(8, 0));
-        row.setOpaque(false);
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel label = new JLabel(labelText);
-        label.setFont(label.getFont().deriveFont(Font.BOLD));
-        row.add(label, BorderLayout.WEST);
-        spinner.setMaximumSize(new Dimension(168, 26));
-        spinner.setPreferredSize(new Dimension(168, 26));
-        row.add(spinner, BorderLayout.EAST);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
-        return row;
-    }
-
-    private JPanel crearComboRow(String labelText, JComboBox<String> comboBox) {
-        JPanel row = new JPanel(new BorderLayout(8, 0));
-        row.setOpaque(false);
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel label = new JLabel(labelText);
-        label.setFont(label.getFont().deriveFont(Font.BOLD));
-        row.add(label, BorderLayout.WEST);
-        comboBox.setMaximumSize(new Dimension(168, 26));
-        comboBox.setPreferredSize(new Dimension(168, 26));
-        row.add(comboBox, BorderLayout.EAST);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
-        return row;
     }
 
     private JPanel crearTarjetaConexiones() {
@@ -484,6 +497,31 @@ public class PanelMundo extends JPanel {
         conexionesPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
         card.add(conexionesPanel, BorderLayout.CENTER);
         return card;
+    }
+
+    private JPanel crearTarjetaAjusteBooleano(String labelText, JCheckBox checkBox) {
+        checkBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+        checkBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, checkBox.getPreferredSize().height));
+        return BoxCategory.createBooleanCard(labelText, checkBox);
+    }
+
+    private JPanel crearTarjetaAjusteCampo(String labelText, JComponent field) {
+        prepararCampoConfiguracion(field);
+        return BoxCategory.createFieldCard(labelText, field);
+    }
+
+    private void prepararCampoConfiguracion(JComponent field) {
+        if (field == null) {
+            return;
+        }
+        if (field instanceof JComboBox<?> comboBox) {
+            comboBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+            comboBox.setPreferredSize(new Dimension(180, 30));
+        } else if (field instanceof JSpinner spinner) {
+            spinner.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+            spinner.setPreferredSize(new Dimension(180, 30));
+        }
+        BoxCategory.makeWidthFlexible(field);
     }
 
     private JPanel crearPanelPreview() {
@@ -602,7 +640,17 @@ public class PanelMundo extends JPanel {
             seedValueLabel.setText("-");
             lastPlayedValueLabel.setText("-");
             versionValueLabel.setText("-");
+            dataVersionValueLabel.setText("-");
             tipoMundoValueLabel.setText("-");
+            spawnValueLabel.setText("-");
+            gamemodeValueLabel.setText("-");
+            difficultyValueLabel.setText("-");
+            weatherValueLabel.setText("-");
+            dayTimeValueLabel.setText("-");
+            hardcoreValueLabel.setText("-");
+            allowCommandsValueLabel.setText("-");
+            gameRulesValueLabel.setText("-");
+            dataPacksValueLabel.setText("-");
             pesoMundoValueLabel.setText("-");
             pesoStatsSavesValueLabel.setText("-");
             pesoTotalValueLabel.setText("-");
@@ -621,9 +669,19 @@ public class PanelMundo extends JPanel {
         seedValueLabel.setText("-");
         lastPlayedValueLabel.setText("-");
         versionValueLabel.setText("-");
+        dataVersionValueLabel.setText("-");
         tipoMundoValueLabel.setText("-");
+        spawnValueLabel.setText("-");
+        gamemodeValueLabel.setText("-");
+        difficultyValueLabel.setText("-");
+        weatherValueLabel.setText("-");
+        dayTimeValueLabel.setText("-");
+        hardcoreValueLabel.setText("-");
+        allowCommandsValueLabel.setText("-");
         generatorSettingsValueLabel.setText("-");
         estructurasValueLabel.setText("-");
+        gameRulesValueLabel.setText("-");
+        dataPacksValueLabel.setText("-");
         initialEnabledPacksValueLabel.setText("-");
         initialDisabledPacksValueLabel.setText("-");
         allowNetherCheckBox.setSelected(false);
@@ -668,7 +726,13 @@ public class PanelMundo extends JPanel {
             seedValueLabel.setText("-");
             lastPlayedValueLabel.setText("-");
             versionValueLabel.setText("-");
+            dataVersionValueLabel.setText("-");
             tipoMundoValueLabel.setText("-");
+            dayTimeValueLabel.setText("-");
+            spawnValueLabel.setText("-");
+            gamemodeValueLabel.setText("-");
+            difficultyValueLabel.setText("-");
+            weatherValueLabel.setText("-");
             return;
         }
 
@@ -677,8 +741,14 @@ public class PanelMundo extends JPanel {
         String lastPlayed = WorldDataReader.getLastPlayed(mundo);
         lastPlayedValueLabel.setText(valorOPlaceholder(lastPlayed));
         versionValueLabel.setText(valorOPlaceholder(WorldDataReader.getVersionName(mundo)));
+        dataVersionValueLabel.setText(valorOPlaceholder(WorldDataReader.getDataVersion(mundo)));
         tipoMundoValueLabel.setText(valorOPlaceholder(leerTipoMundo(mundo)));
         seedValueLabel.setText(valorOPlaceholder(WorldDataReader.getSeed(mundo)));
+        dayTimeValueLabel.setText(valorOPlaceholder(WorldDataReader.getDayTime(mundo)));
+        gamemodeValueLabel.setText(valorOPlaceholder(WorldDataReader.getGameMode(mundo)));
+        difficultyValueLabel.setText(construirResumenDificultad(mundo));
+        weatherValueLabel.setText(valorOPlaceholder(WorldDataReader.getWeatherSummary(mundo)));
+        spawnValueLabel.setText(valorOPlaceholder(formatearSpawn(WorldDataReader.getSpawnPoint(mundo))));
     }
 
     private void actualizarConfiguracionMundo() {
@@ -687,10 +757,21 @@ public class PanelMundo extends JPanel {
         Properties metadata = leerMetadataMundo(mundo);
         Properties serverProps = leerPropiedadesServidor(server);
 
+        dayTimeValueLabel.setText(valorOPlaceholder(WorldDataReader.getDayTime(mundo)));
+        hardcoreValueLabel.setText(valorOPlaceholder(primeroNoVacio(WorldDataReader.getHardcore(mundo), formatearBoolean(metadata.getProperty("hardcore")))));
+        allowCommandsValueLabel.setText(valorOPlaceholder(WorldDataReader.getAllowCommands(mundo)));
         generatorSettingsValueLabel.setText(formatearGeneratorSettings(metadata.getProperty("generator-settings")));
         estructurasValueLabel.setText(formatearEstructuras(metadata.getProperty("generate-structures")));
+        dataPacksValueLabel.setText(valorOPlaceholder(primeroNoVacio(
+                WorldDataReader.getDataPacksSummary(mundo),
+                construirResumenPacksIniciales(metadata)
+        )));
+        gameRulesValueLabel.setText(valorOPlaceholder(WorldDataReader.getGameRulesSummary(mundo)));
         initialEnabledPacksValueLabel.setText(valorOPlaceholder(metadata.getProperty("initial-enabled-packs")));
         initialDisabledPacksValueLabel.setText(valorOPlaceholder(metadata.getProperty("initial-disabled-packs")));
+        reconstruirMetadataMundo(mundo);
+        actualizarTooltipResumenLargo(dataPacksValueLabel, construirTooltipPacks(metadata));
+        actualizarTooltipResumenLargo(gameRulesValueLabel, "Resumen de gamerules principales leidas desde level.dat.");
 
         updatingWorldSettingsControls = true;
         allowNetherCheckBox.setSelected(leerBoolean(serverProps, "allow-nether", true));
@@ -700,6 +781,158 @@ public class PanelMundo extends JPanel {
         updatingWorldSettingsControls = false;
         markCurrentWorldSettingsAsPersisted();
         updateWorldSettingsSaveButtonState();
+    }
+
+    private void reconstruirMetadataMundo(World mundo) {
+        metadataReadPanel.removeAll();
+        agregarSeccionMetadata("Identidad");
+        metadataReadPanel.add(crearInfoRow("Version:", versionValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Data version:", dataVersionValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearSeedRow());
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Tipo:", tipoMundoValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(10));
+
+        agregarSeccionMetadata("Estado del mundo");
+        metadataReadPanel.add(crearInfoRow("Gamemode:", gamemodeValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Dificultad:", difficultyValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Hora del mundo:", dayTimeValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Clima:", weatherValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Spawn:", spawnValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Hardcore:", hardcoreValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Comandos:", allowCommandsValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(10));
+
+        agregarSeccionMetadata("Generacion y packs");
+        metadataReadPanel.add(crearInfoRow("Generator settings:", generatorSettingsValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Generar estructuras:", estructurasValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Data packs:", dataPacksValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Initial enabled packs:", initialEnabledPacksValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(4));
+        metadataReadPanel.add(crearInfoRow("Initial disabled packs:", initialDisabledPacksValueLabel));
+        metadataReadPanel.add(Box.createVerticalStrut(10));
+
+        agregarSeccionMetadata("Gamerules");
+        metadataReadPanel.add(crearSeccionGameRules(WorldDataReader.getGameRules(mundo)));
+        metadataReadPanel.add(Box.createVerticalGlue());
+        metadataReadPanel.revalidate();
+        metadataReadPanel.repaint();
+    }
+
+    private void agregarSeccionMetadata(String titulo) {
+        if (metadataReadPanel.getComponentCount() > 0) {
+            metadataReadPanel.add(Box.createVerticalStrut(2));
+        }
+        metadataReadPanel.add(crearSeparadorSeccionMetadata(titulo));
+        metadataReadPanel.add(Box.createVerticalStrut(8));
+    }
+
+    private JPanel crearSeparadorSeccionMetadata(String titulo) {
+        JPanel panel = new JPanel(new BorderLayout(8, 0));
+        panel.setOpaque(false);
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel label = new JLabel(titulo);
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 13f));
+        label.setForeground(AppTheme.getMutedForeground());
+
+        JSeparator separator = new JSeparator();
+        separator.setForeground(AppTheme.getSubtleBorderColor());
+
+        panel.add(label, BorderLayout.WEST);
+        panel.add(separator, BorderLayout.CENTER);
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+        return panel;
+    }
+
+    private JPanel crearSeccionGameRules(Map<String, String> gameRules) {
+        JPanel panel = new JPanel();
+        panel.setOpaque(false);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        if (gameRules == null || gameRules.isEmpty()) {
+            JLabel fallback = new JLabel("No se han encontrado gamerules en level.dat.");
+            fallback.setForeground(AppTheme.getMutedForeground());
+            fallback.setAlignmentX(Component.LEFT_ALIGNMENT);
+            panel.add(fallback);
+            return panel;
+        }
+
+        for (Map.Entry<String, String> entry : gameRules.entrySet()) {
+            panel.add(crearInfoRow(formatearNombreGameRule(entry.getKey()) + ":", crearValorGameRuleLabel(entry.getValue())));
+            panel.add(Box.createVerticalStrut(2));
+        }
+
+        return panel;
+    }
+
+    private JLabel crearValorGameRuleLabel(String value) {
+        JLabel label = new JLabel(valorOPlaceholder(formatearValorGameRule(value)));
+        styleInfoLabel(label);
+        return label;
+    }
+
+    private String formatearValorGameRule(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        String normalized = quitarComillasEnvolventes(value.trim());
+        if ("true".equalsIgnoreCase(normalized) || "si".equalsIgnoreCase(normalized) || "\u00E2\u0153\u201C".equals(normalized)) {
+            return "\u2713";
+        }
+        if ("false".equalsIgnoreCase(normalized) || "no".equalsIgnoreCase(normalized) || "\u00E2\u0153\u201D".equals(normalized)) {
+            return "\u2717";
+        }
+        return normalized;
+    }
+
+    private String quitarComillasEnvolventes(String value) {
+        if (value == null || value.length() < 2) {
+            return value;
+        }
+        boolean comillasDobles = value.startsWith("\"") && value.endsWith("\"");
+        boolean comillasSimples = value.startsWith("'") && value.endsWith("'");
+        if (comillasDobles || comillasSimples) {
+            return value.substring(1, value.length() - 1).trim();
+        }
+        return value;
+    }
+
+    private String formatearNombreGameRule(String key) {
+        if (key == null || key.isBlank()) {
+            return "-";
+        }
+        String spaced = key.replaceAll("([a-z])([A-Z])", "$1 $2").replace('-', ' ').trim();
+        if (spaced.isEmpty()) {
+            return key;
+        }
+        String[] words = spaced.split("\\s+");
+        StringBuilder result = new StringBuilder();
+        for (String word : words) {
+            if (word.isBlank()) {
+                continue;
+            }
+            if (!result.isEmpty()) {
+                result.append(' ');
+            }
+            result.append(Character.toUpperCase(word.charAt(0)));
+            if (word.length() > 1) {
+                result.append(word.substring(1));
+            }
+        }
+        return result.toString();
     }
 
     private void guardarConfiguracionMundo() {
@@ -807,6 +1040,81 @@ public class PanelMundo extends JPanel {
             return "{}";
         }
         return value;
+    }
+
+    private String construirResumenDificultad(World mundo) {
+        String difficulty = WorldDataReader.getDifficulty(mundo);
+        if (difficulty == null || difficulty.isBlank()) {
+            return "-";
+        }
+        String locked = WorldDataReader.getDifficultyLocked(mundo);
+        if (locked == null || locked.isBlank()) {
+            return difficulty;
+        }
+        return difficulty + " (bloqueada: " + locked + ")";
+    }
+
+    private String formatearSpawn(WorldDataReader.SpawnPoint spawnPoint) {
+        if (spawnPoint == null) {
+            return null;
+        }
+        return "X: " + spawnPoint.x() + " Y: " + spawnPoint.y() + " Z: " + spawnPoint.z();
+    }
+
+    private String construirResumenPacksIniciales(Properties metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        int enabled = contarElementosCsv(metadata.getProperty("initial-enabled-packs"));
+        int disabled = contarElementosCsv(metadata.getProperty("initial-disabled-packs"));
+        if (enabled == 0 && disabled == 0) {
+            return null;
+        }
+        return enabled + " iniciales activos / " + disabled + " iniciales desactivados";
+    }
+
+    private int contarElementosCsv(String value) {
+        if (value == null || value.isBlank()) {
+            return 0;
+        }
+        return (int) java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(token -> !token.isEmpty())
+                .count();
+    }
+
+    private String construirTooltipPacks(Properties metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        String enabled = metadata.getProperty("initial-enabled-packs");
+        String disabled = metadata.getProperty("initial-disabled-packs");
+        if ((enabled == null || enabled.isBlank()) && (disabled == null || disabled.isBlank())) {
+            return null;
+        }
+        return "<html>Activos iniciales: " + escaparHtml(valorOPlaceholder(enabled))
+                + "<br>Desactivados iniciales: " + escaparHtml(valorOPlaceholder(disabled)) + "</html>";
+    }
+
+    private void actualizarTooltipResumenLargo(JLabel label, String tooltip) {
+        if (label == null) {
+            return;
+        }
+        label.setToolTipText((tooltip == null || tooltip.isBlank()) ? null : tooltip);
+    }
+
+    private String escaparHtml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private String primeroNoVacio(String primary, String fallback) {
+        if (primary != null && !primary.isBlank() && !"-".equals(primary)) {
+            return primary;
+        }
+        return fallback;
     }
 
     private String normalizarRegionCompression(String value) {

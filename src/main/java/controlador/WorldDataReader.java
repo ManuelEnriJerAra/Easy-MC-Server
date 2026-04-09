@@ -5,7 +5,9 @@ import static controlador.Utilidades.fromMStoDateString;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 import modelo.World;
 import net.querz.nbt.io.NBTUtil;
@@ -14,6 +16,7 @@ import net.querz.nbt.tag.CompoundTag;
 import net.querz.nbt.tag.IntTag;
 import net.querz.nbt.tag.ListTag;
 import net.querz.nbt.tag.LongTag;
+import net.querz.nbt.tag.NumberTag;
 import net.querz.nbt.tag.StringTag;
 import net.querz.nbt.tag.Tag;
 
@@ -64,6 +67,19 @@ public class WorldDataReader {
 
             String versionName = versionTag.getString("Name");
             return versionName == null || versionName.isBlank() ? null : versionName;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static String getDataVersion(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+
+            IntTag dataVersionTag = data.getIntTag("DataVersion");
+            if(dataVersionTag == null) return null;
+            return Integer.toString(dataVersionTag.asInt());
         } catch (Exception ex) {
             return null;
         }
@@ -198,9 +214,12 @@ public class WorldDataReader {
             if(data == null) return null;
 
             IntTag spawnXTag = data.getIntTag("SpawnX");
+            IntTag spawnYTag = data.getIntTag("SpawnY");
             IntTag spawnZTag = data.getIntTag("SpawnZ");
             if(spawnXTag != null && spawnZTag != null) {
-                return new SpawnPoint(spawnXTag.asInt(), spawnZTag.asInt());
+                int spawnY = spawnYTag != null ? spawnYTag.asInt() : 0;
+                float angle = readFloat(data.get("SpawnAngle"), 0f);
+                return new SpawnPoint(spawnXTag.asInt(), spawnY, spawnZTag.asInt(), angle);
             }
 
             CompoundTag spawnTag = data.getCompoundTag("spawn");
@@ -208,16 +227,20 @@ public class WorldDataReader {
 
             int[] spawnPos = spawnTag.getIntArray("pos");
             if(spawnPos != null && spawnPos.length >= 3) {
-                return new SpawnPoint(spawnPos[0], spawnPos[2]);
+                float angle = readFloat(spawnTag.get("angle"), 0f);
+                return new SpawnPoint(spawnPos[0], spawnPos[1], spawnPos[2], angle);
             }
 
             ListTag<?> spawnPosList = spawnTag.getListTag("pos");
             if(spawnPosList != null && spawnPosList.size() >= 3) {
                 Tag<?> xTag = spawnPosList.get(0);
+                Tag<?> yTag = spawnPosList.get(1);
                 Tag<?> zTag = spawnPosList.get(2);
                 if(xTag instanceof net.querz.nbt.tag.NumberTag<?> xNumber
+                        && yTag instanceof net.querz.nbt.tag.NumberTag<?> yNumber
                         && zTag instanceof net.querz.nbt.tag.NumberTag<?> zNumber) {
-                    return new SpawnPoint(xNumber.asInt(), zNumber.asInt());
+                    float angle = readFloat(spawnTag.get("angle"), 0f);
+                    return new SpawnPoint(xNumber.asInt(), yNumber.asInt(), zNumber.asInt(), angle);
                 }
             }
 
@@ -225,6 +248,165 @@ public class WorldDataReader {
         } catch (Exception ex) {
             System.out.println("Ha ocurrido un error accediendo al spawn del mundo: " + mundo.getWorldDir());
             return null;
+        }
+    }
+
+    public static String getGameMode(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+
+            IntTag gameTypeTag = data.getIntTag("GameType");
+            if(gameTypeTag == null) return null;
+            return switch (gameTypeTag.asInt()) {
+                case 0 -> "Supervivencia";
+                case 1 -> "Creativo";
+                case 2 -> "Aventura";
+                case 3 -> "Espectador";
+                default -> Integer.toString(gameTypeTag.asInt());
+            };
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static String getDifficulty(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+
+            IntTag difficultyTag = data.getIntTag("Difficulty");
+            if(difficultyTag == null) return null;
+            return switch (difficultyTag.asInt()) {
+                case 0 -> "Pacifica";
+                case 1 -> "Facil";
+                case 2 -> "Normal";
+                case 3 -> "Dificil";
+                default -> Integer.toString(difficultyTag.asInt());
+            };
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static String getHardcore(World mundo) {
+        Boolean value = readBooleanValue(mundo, "hardcore");
+        if(value == null) return null;
+        return value ? "✓" : "✗";
+    }
+
+    public static String getAllowCommands(World mundo) {
+        Boolean value = readBooleanValue(mundo, "allowCommands");
+        if(value == null) return null;
+        return value ? "✓" : "✗";
+    }
+
+    public static String getDifficultyLocked(World mundo) {
+        Boolean value = readBooleanValue(mundo, "DifficultyLocked");
+        if(value == null) return null;
+        return value ? "✓" : "✗";
+    }
+
+    public static String getWeatherSummary(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+
+            boolean thundering = readBoolean(data.get("thundering"));
+            boolean raining = readBoolean(data.get("raining"));
+            if(thundering) return "Tormenta";
+            if(raining) return "Lluvia";
+            return "Despejado";
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static String getDayTime(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+
+            LongTag dayTimeTag = data.getLongTag("DayTime");
+            if(dayTimeTag == null) return null;
+
+            long absoluteTicks = Math.max(0L, dayTimeTag.asLong());
+            long day = absoluteTicks / 24000L;
+            long timeOfDay = Math.floorMod(absoluteTicks, 24000L);
+            long hours = Math.floorMod((timeOfDay / 1000L) + 6L, 24L);
+            long minutes = Math.round((timeOfDay % 1000L) * 60.0 / 1000.0);
+            if(minutes == 60L) {
+                hours = (hours + 1L) % 24L;
+                minutes = 0L;
+            }
+            return String.format(Locale.ROOT, "Dia %d - %02d:%02d", day + 1L, hours, minutes);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static String getDataPacksSummary(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+
+            CompoundTag dataPacks = data.getCompoundTag("DataPacks");
+            if(dataPacks == null) return null;
+
+            int enabled = getStringListSize(dataPacks.getListTag("Enabled"));
+            int disabled = getStringListSize(dataPacks.getListTag("Disabled"));
+            if(enabled == 0 && disabled == 0) return null;
+            return enabled + " activos / " + disabled + " desactivados";
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static String getGameRulesSummary(World mundo) {
+        try {
+            Map<String, String> gameRules = getGameRules(mundo);
+            if(gameRules.isEmpty()) return null;
+
+            String keepInventory = readStringValue(gameRules, "keepInventory");
+            String daylight = readStringValue(gameRules, "doDaylightCycle");
+            String mobSpawning = readStringValue(gameRules, "doMobSpawning");
+            String mobGriefing = readStringValue(gameRules, "mobGriefing");
+
+            StringBuilder summary = new StringBuilder();
+            appendRuleSummary(summary, "Inventario", keepInventory);
+            appendRuleSummary(summary, "Dia", daylight);
+            appendRuleSummary(summary, "Mobs", mobSpawning);
+            appendRuleSummary(summary, "Griefing", mobGriefing);
+
+            if(summary.isEmpty()) {
+                return gameRules.size() + " reglas";
+            }
+            summary.append(" (").append(gameRules.size()).append(" reglas)");
+            return summary.toString();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static Map<String, String> getGameRules(World mundo) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return Map.of();
+
+            CompoundTag gameRules = data.getCompoundTag("GameRules");
+            if(gameRules == null || gameRules.size() == 0) return Map.of();
+
+            Map<String, String> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (Map.Entry<String, Tag<?>> entry : gameRules.entrySet()) {
+                String key = entry.getKey();
+                if(key == null || key.isBlank()) continue;
+                Tag<?> tag = entry.getValue();
+                if(tag == null) continue;
+                result.put(key, normalizeRuleValue(tag.valueToString()));
+            }
+            return result.isEmpty() ? Map.of() : new LinkedHashMap<>(result);
+        } catch (Exception ex) {
+            return Map.of();
         }
     }
 
@@ -257,8 +439,76 @@ public class WorldDataReader {
         }
     }   
 
-    // Solo necesitamos X y Z para una vista cenital.
-    public record SpawnPoint(int x, int z) {}
+    private static void appendRuleSummary(StringBuilder summary, String label, String value) {
+        if(value == null || value.isBlank()) return;
+        if(!summary.isEmpty()) summary.append(" | ");
+        summary.append(label).append(": ").append(normalizeRuleValue(value));
+    }
+
+    private static String normalizeRuleValue(String value) {
+        if("true".equalsIgnoreCase(value)) return "✓";
+        if("false".equalsIgnoreCase(value)) return "✗";
+        return value;
+    }
+
+    private static String readStringValue(Map<String, String> values, String key) {
+        if(values == null || key == null) return null;
+        return values.get(key);
+    }
+
+    private static int getStringListSize(ListTag<?> listTag) {
+        return listTag == null ? 0 : listTag.size();
+    }
+
+    private static String readStringValue(CompoundTag compound, String key) {
+        if(compound == null || key == null) return null;
+        StringTag stringTag = compound.getStringTag(key);
+        if(stringTag != null) return stringTag.getValue();
+        Tag<?> tag = compound.get(key);
+        return tag == null ? null : tag.valueToString();
+    }
+
+    private static Boolean readBooleanValue(World mundo, String key) {
+        try {
+            CompoundTag data = getDataTag(mundo);
+            if(data == null) return null;
+            Tag<?> tag = data.get(key);
+            if(tag == null) return null;
+            return readBoolean(tag);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static boolean readBoolean(Tag<?> tag) {
+        if(tag instanceof NumberTag<?> numberTag) {
+            return numberTag.asInt() != 0;
+        }
+        if(tag instanceof StringTag stringTag) {
+            return Boolean.parseBoolean(stringTag.getValue());
+        }
+        return false;
+    }
+
+    private static float readFloat(Tag<?> tag, float defaultValue) {
+        if(tag instanceof NumberTag<?> numberTag) {
+            return numberTag.asFloat();
+        }
+        if(tag instanceof StringTag stringTag) {
+            try {
+                return Float.parseFloat(stringTag.getValue());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return defaultValue;
+    }
+
+    // Solo necesitamos X y Z para la preview, pero para la UI tenemos disponible el spawn completo.
+    public record SpawnPoint(int x, int y, int z, float angle) {
+        public SpawnPoint(int x, int z) {
+            this(x, 0, z, 0f);
+        }
+    }
 
     public enum WorldStorageLayout {
         LEGACY,
