@@ -801,11 +801,7 @@ public class PanelMundo extends JPanel {
     private void reconstruirMetadataMundo(World mundo) {
         metadataReadPanel.removeAll();
         agregarSeccionMetadata("Identidad");
-        metadataReadPanel.add(crearInfoRow("Version:", versionValueLabel));
-        metadataReadPanel.add(Box.createVerticalStrut(4));
         metadataReadPanel.add(crearInfoRow("Data version:", dataVersionValueLabel));
-        metadataReadPanel.add(Box.createVerticalStrut(4));
-        metadataReadPanel.add(crearSeedRow());
         metadataReadPanel.add(Box.createVerticalStrut(4));
         metadataReadPanel.add(crearInfoRow("Tipo:", tipoMundoValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(10));
@@ -814,10 +810,6 @@ public class PanelMundo extends JPanel {
         metadataReadPanel.add(crearInfoRow("Gamemode:", gamemodeValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(4));
         metadataReadPanel.add(crearInfoRow("Dificultad:", difficultyValueLabel));
-        metadataReadPanel.add(Box.createVerticalStrut(4));
-        metadataReadPanel.add(crearInfoRow("Hora del mundo:", dayTimeValueLabel));
-        metadataReadPanel.add(Box.createVerticalStrut(4));
-        metadataReadPanel.add(crearInfoRow("Clima:", weatherValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(4));
         metadataReadPanel.add(crearInfoRow("Spawn:", spawnValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(4));
