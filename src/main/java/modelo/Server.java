@@ -46,6 +46,16 @@ public class Server {
     private Integer ordenLista; // orden manual/base de la lista, preparado para drag and drop futuro
     private Boolean favorito; // indica si el servidor se muestra en el bloque superior de favoritos
     private Integer ordenFavorito; // orden estable entre favoritos, segun cuando se marcaron por primera vez
+    private Integer estadisticasRangoSegundos; // rango visible preferido en el panel de estadísticas
+    private Boolean estadisticasPersistenciaActiva; // si el histórico se guarda en disco para este servidor
+    private Integer estadisticasVentanaRecienteSegundos; // muestras recientes conservadas a resolución de 1 segundo
+    private Integer estadisticasResolucionHistoricaSegundos; // bucket para compactar histórico antiguo
+    private Boolean estadisticasRamActiva;
+    private Boolean estadisticasRamHistorial;
+    private Boolean estadisticasDiscoActiva;
+    private Boolean estadisticasDiscoHistorial;
+    private Boolean estadisticasJugadoresActiva;
+    private Boolean estadisticasJugadoresHistorial;
 
     // ===== DATOS DE EJECUCIÓN =====
     // lo que sea transient no se va a guardar en el JSON
@@ -63,6 +73,16 @@ public class Server {
     public Server(){
         id = UUID.randomUUID().toString();
         this.serverConfig = new ServerConfig();
+        this.estadisticasRangoSegundos = 300;
+        this.estadisticasPersistenciaActiva = true;
+        this.estadisticasVentanaRecienteSegundos = 30 * 24 * 60 * 60;
+        this.estadisticasResolucionHistoricaSegundos = 60;
+        this.estadisticasRamActiva = true;
+        this.estadisticasRamHistorial = true;
+        this.estadisticasDiscoActiva = true;
+        this.estadisticasDiscoHistorial = true;
+        this.estadisticasJugadoresActiva = false;
+        this.estadisticasJugadoresHistorial = true;
     }
 
     // ===== CONSOLA =====

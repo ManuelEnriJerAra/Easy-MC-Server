@@ -203,6 +203,46 @@ public class GestorServidores {
             server.setFavorito(Boolean.FALSE);
             cambios = true;
         }
+        if (server.getEstadisticasRangoSegundos() == null || server.getEstadisticasRangoSegundos() <= 0) {
+            server.setEstadisticasRangoSegundos(300);
+            cambios = true;
+        }
+        if (server.getEstadisticasPersistenciaActiva() == null) {
+            server.setEstadisticasPersistenciaActiva(Boolean.TRUE);
+            cambios = true;
+        }
+        if (server.getEstadisticasVentanaRecienteSegundos() == null || server.getEstadisticasVentanaRecienteSegundos() <= 0) {
+            server.setEstadisticasVentanaRecienteSegundos(30 * 24 * 60 * 60);
+            cambios = true;
+        }
+        if (server.getEstadisticasResolucionHistoricaSegundos() == null || server.getEstadisticasResolucionHistoricaSegundos() <= 0) {
+            server.setEstadisticasResolucionHistoricaSegundos(60);
+            cambios = true;
+        }
+        if (server.getEstadisticasRamActiva() == null) {
+            server.setEstadisticasRamActiva(Boolean.TRUE);
+            cambios = true;
+        }
+        if (server.getEstadisticasRamHistorial() == null) {
+            server.setEstadisticasRamHistorial(Boolean.TRUE);
+            cambios = true;
+        }
+        if (server.getEstadisticasDiscoActiva() == null) {
+            server.setEstadisticasDiscoActiva(Boolean.TRUE);
+            cambios = true;
+        }
+        if (server.getEstadisticasDiscoHistorial() == null) {
+            server.setEstadisticasDiscoHistorial(Boolean.TRUE);
+            cambios = true;
+        }
+        if (server.getEstadisticasJugadoresActiva() == null) {
+            server.setEstadisticasJugadoresActiva(Boolean.FALSE);
+            cambios = true;
+        }
+        if (server.getEstadisticasJugadoresHistorial() == null) {
+            server.setEstadisticasJugadoresHistorial(Boolean.TRUE);
+            cambios = true;
+        }
         return cambios;
     }
 

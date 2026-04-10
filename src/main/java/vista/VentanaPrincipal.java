@@ -66,7 +66,7 @@ public class VentanaPrincipal extends JFrame {
     private JSplitPane splitHome;
     private PanelConfigServidor panelConfigServidor;
 
-    private enum PaginaDerecha { HOME, MUNDO, CONFIG, MODS, INFO }
+    private enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, INFO }
     private record TemaInfo(String name, String className){}
 
     private static final class RoundedNavButton extends JButton {
@@ -455,15 +455,14 @@ public class VentanaPrincipal extends JFrame {
             }
         });
         JPanel config = panelConfigServidor;
-        JPanel mods = new JPanel(new BorderLayout());
-        mods.setOpaque(false);
+        JPanel stats = crearPanelEstadisticas(server);
         JPanel info = new JPanel(new BorderLayout());
         info.setOpaque(false);
 
         panelDerechoCards.add(home, PaginaDerecha.HOME.name());
         panelDerechoCards.add(mundo, PaginaDerecha.MUNDO.name());
         panelDerechoCards.add(config, PaginaDerecha.CONFIG.name());
-        panelDerechoCards.add(mods, PaginaDerecha.MODS.name());
+        panelDerechoCards.add(stats, PaginaDerecha.STATS.name());
         panelDerechoCards.add(info, PaginaDerecha.INFO.name());
 
         PaginaDerecha paginaAMostrar = paginaDerechaActual != null ? paginaDerechaActual : PaginaDerecha.HOME;
@@ -485,7 +484,7 @@ public class VentanaPrincipal extends JFrame {
         JButton home = crearNavButton("\uD83C\uDFE0", "Home", PaginaDerecha.HOME);
         JButton mundo = crearNavButton("\uD83C\uDF0D", "Mundos", PaginaDerecha.MUNDO);
         JButton config = crearNavButton("\u2699", "Configuración del servidor", PaginaDerecha.CONFIG);
-        JButton mods = crearNavButton("▣", "Mods (Sin implementar)", PaginaDerecha.MODS);
+        JButton stats = crearNavButton("\uD83D\uDCC8", "Estadísticas", PaginaDerecha.STATS);
         JButton temas = crearActionButton("\uD83D\uDD8C", "Apariencia", this::abrirSelectorTema);
         JButton info = crearNavButton("\u2139", "Información", PaginaDerecha.INFO);
 
@@ -495,7 +494,7 @@ public class VentanaPrincipal extends JFrame {
         botones.add(Box.createVerticalStrut(8));
         botones.add(config);
         botones.add(Box.createVerticalStrut(8));
-        botones.add(mods);
+        botones.add(stats);
         botones.add(Box.createVerticalGlue()); // fijar los siguientes al fondo
         botones.add(temas); // abajo
         botones.add(Box.createVerticalStrut(6));
@@ -522,7 +521,7 @@ public class VentanaPrincipal extends JFrame {
         home.addMouseListener(navHover);
         mundo.addMouseListener(navHover);
         config.addMouseListener(navHover);
-        mods.addMouseListener(navHover);
+        stats.addMouseListener(navHover);
         info.addMouseListener(navHover);
 
         MouseAdapter temasHover = new MouseAdapter() {
@@ -564,6 +563,10 @@ public class VentanaPrincipal extends JFrame {
         b.addActionListener(e -> navegarAPaginaDerecha(pagina));
         navButtons.put(pagina, b);
         return b;
+    }
+
+    private JPanel crearPanelEstadisticas(Server server) {
+        return new PanelEstadisticas(gestorServidores, server);
     }
 
     private JButton crearActionButton(String emoji, String tooltip, Runnable action){
