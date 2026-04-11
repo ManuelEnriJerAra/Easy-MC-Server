@@ -735,12 +735,15 @@ public class PanelEstadisticas extends JPanel {
 
         long pid = process.pid();
         long heapUsageMb = readHeapUsageWithJstat(pid);
-        if (heapUsageMb >= 0L) {
+        if (heapUsageMb > 0L) {
             return heapUsageMb;
         }
 
         long residentUsageMb = readResidentUsageByOs(pid);
-        return Math.max(0L, residentUsageMb);
+        if (residentUsageMb >= 0L) {
+            return residentUsageMb;
+        }
+        return Math.max(0L, heapUsageMb);
     }
 
     private static DiskActivitySample readServerDiskActivity(Server server) {
@@ -833,7 +836,7 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private static long readHeapUsageWithJstat(long pid) {
-        String output = ejecutarComando(List.of("jstat", "-gc", String.valueOf(pid)), 700);
+        String output = ejecutarComando(List.of("jstat", "-J-Duser.language=en", "-J-Duser.country=US", "-gc", String.valueOf(pid)), 700);
         if (output == null || output.isBlank()) {
             return -1L;
         }
@@ -855,12 +858,25 @@ public class PanelEstadisticas extends JPanel {
             return -1L;
         }
 
+        double[] heapColumns = {
+                readDoubleColumn(headers, values, "S0U"),
+                readDoubleColumn(headers, values, "S1U"),
+                readDoubleColumn(headers, values, "EU"),
+                readDoubleColumn(headers, values, "OU")
+        };
         double usedKb = 0d;
-        usedKb += readDoubleColumn(headers, values, "S0U");
-        usedKb += readDoubleColumn(headers, values, "S1U");
-        usedKb += readDoubleColumn(headers, values, "EU");
-        usedKb += readDoubleColumn(headers, values, "OU");
+        int parsedColumns = 0;
+        for (double heapColumn : heapColumns) {
+            if (Double.isNaN(heapColumn)) {
+                continue;
+            }
+            usedKb += heapColumn;
+            parsedColumns++;
+        }
 
+        if (parsedColumns == 0) {
+            return -1L;
+        }
         if (usedKb <= 0d) {
             return 0L;
         }
@@ -873,12 +889,12 @@ public class PanelEstadisticas extends JPanel {
                 continue;
             }
             try {
-                return Double.parseDouble(values[i]);
+                return parseLocalizedDouble(values[i]);
             } catch (NumberFormatException ignored) {
-                return 0d;
+                return Double.NaN;
             }
         }
-        return 0d;
+        return Double.NaN;
     }
 
     private static long readResidentUsageByOs(long pid) {
@@ -952,10 +968,17 @@ public class PanelEstadisticas extends JPanel {
 
     private static double parseDouble(String value) {
         try {
-            return Double.parseDouble(value.trim());
+            return parseLocalizedDouble(value);
         } catch (Exception ignored) {
             return 0d;
         }
+    }
+
+    private static double parseLocalizedDouble(String value) {
+        if (value == null) {
+            throw new NumberFormatException("null");
+        }
+        return Double.parseDouble(value.trim().replace(',', '.'));
     }
 
     private String formatMb(long mb) {
@@ -1369,7 +1392,299 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private void abrirDialogoExportacion() {
-        JOptionPane.showMessageDialog(this, "La nueva configuración avanzada de exportación se está preparando en la siguiente iteración.");
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        JDialog dialog = new JDialog(owner instanceof Frame frame ? frame : null, "Exportar estadisticas", Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+
+        ExportPaletteModel paletteModel = createDefaultExportPaletteModel();
+        ExportRenderOptionsModel renderOptionsModel = createDefaultExportRenderOptionsModel();
+        JComboBox<ExportFormatOption> formatoCombo = new JComboBox<>(ExportFormatOption.values());
+        ExportSnapshot exportSnapshot = createFrozenExportSnapshot();
+        JComboBox<ExportInstantOption> desdeCombo = new JComboBox<>(createExportInstantModel(exportSnapshot, true));
+        JComboBox<ExportInstantOption> hastaCombo = new JComboBox<>(createExportInstantModel(exportSnapshot, false));
+        JComboBox<ExportLayoutOption> disposicionCombo = new JComboBox<>(ExportLayoutOption.values());
+        JCheckBox incluirRamCheckBox = new JCheckBox("RAM");
+        JCheckBox incluirDiscoCheckBox = new JCheckBox("Disco");
+        JCheckBox gridCheckBox = new JCheckBox("Grid");
+        JCheckBox leyendaCheckBox = new JCheckBox("Leyenda");
+        JCheckBox rellenoCheckBox = new JCheckBox("Relleno");
+        JCheckBox bordeCheckBox = new JCheckBox("Borde");
+        JCheckBox valorActualCheckBox = new JCheckBox("Valor actual");
+        JCheckBox apagadosCheckBox = new JCheckBox("Marcadores");
+        JLabel previewLabel = new JLabel("Generando previsualizacion...", SwingConstants.CENTER);
+
+        if (desdeCombo.getItemCount() > 0) {
+            desdeCombo.setSelectedIndex(0);
+        }
+        if (hastaCombo.getItemCount() > 0) {
+            hastaCombo.setSelectedIndex(Math.max(0, hastaCombo.getItemCount() - 1));
+        }
+        incluirRamCheckBox.setSelected(true);
+        incluirDiscoCheckBox.setSelected(true);
+        gridCheckBox.setSelected(renderOptionsModel.showGrid);
+        leyendaCheckBox.setSelected(renderOptionsModel.showLegend);
+        rellenoCheckBox.setSelected(renderOptionsModel.showAreaFill);
+        bordeCheckBox.setSelected(renderOptionsModel.showBorder);
+        valorActualCheckBox.setSelected(renderOptionsModel.showLatestValue);
+        apagadosCheckBox.setSelected(renderOptionsModel.showShutdownMarkers);
+        formatoCombo.setFocusable(false);
+        desdeCombo.setFocusable(false);
+        hastaCombo.setFocusable(false);
+        disposicionCombo.setFocusable(false);
+        List<JCheckBox> exportCheckBoxes = List.of(
+                incluirRamCheckBox,
+                incluirDiscoCheckBox,
+                gridCheckBox,
+                leyendaCheckBox,
+                rellenoCheckBox,
+                bordeCheckBox,
+                valorActualCheckBox,
+                apagadosCheckBox
+        );
+        for (JCheckBox checkBox : exportCheckBoxes) {
+            checkBox.setOpaque(false);
+        }
+        previewLabel.setOpaque(true);
+        previewLabel.setBackground(AppTheme.getSurfaceBackground());
+        previewLabel.setForeground(AppTheme.getMutedForeground());
+        previewLabel.setBorder(AppTheme.createRoundedBorder(new Insets(10, 10, 10, 10), 1f));
+        previewLabel.setPreferredSize(new Dimension(920, 320));
+        previewLabel.setMinimumSize(new Dimension(720, 260));
+
+        JButton backgroundColorButton = new JButton("Fondo");
+        JButton borderColorButton = new JButton("Borde");
+        JButton gridColorButton = new JButton("Grid");
+        JButton textColorButton = new JButton("Texto");
+        JButton ramColorButton = new JButton("RAM");
+        JButton diskColorButton = new JButton("Disco");
+        List<JButton> colorButtons = List.of(backgroundColorButton, borderColorButton, gridColorButton, textColorButton, ramColorButton, diskColorButton);
+        for (JButton button : colorButtons) {
+            styleActionButton(button);
+        }
+        configurarColorButton(backgroundColorButton, paletteModel.backgroundColor);
+        configurarColorButton(borderColorButton, paletteModel.borderColor);
+        configurarColorButton(gridColorButton, paletteModel.gridColor);
+        configurarColorButton(textColorButton, paletteModel.textColor);
+        configurarColorButton(ramColorButton, paletteModel.ramAccentColor);
+        configurarColorButton(diskColorButton, paletteModel.diskAccentColor);
+
+        final boolean[] updatingExportUi = {false};
+        Runnable refreshPreview = () -> {
+            if (updatingExportUi[0]) {
+                return;
+            }
+            updatingExportUi[0] = true;
+            try {
+                ExportFormatOption formato = (ExportFormatOption) formatoCombo.getSelectedItem();
+                actualizarEstadoControlesExportacion(formato, disposicionCombo, incluirRamCheckBox.isSelected(), incluirDiscoCheckBox.isSelected(), colorButtons,
+                        List.of(gridCheckBox, leyendaCheckBox, rellenoCheckBox, bordeCheckBox, valorActualCheckBox, apagadosCheckBox));
+                ExportLayoutOption disposicion = (ExportLayoutOption) disposicionCombo.getSelectedItem();
+                actualizarPrevisualizacionExportacion(
+                        previewLabel,
+                        exportSnapshot,
+                        resolveExportBoundary((ExportInstantOption) desdeCombo.getSelectedItem(), exportSnapshot, true),
+                        resolveExportBoundary((ExportInstantOption) hastaCombo.getSelectedItem(), exportSnapshot, false),
+                        incluirRamCheckBox.isSelected(),
+                        incluirDiscoCheckBox.isSelected(),
+                        disposicion,
+                        paletteModel.toPalette(),
+                        renderOptionsModel.toOptions()
+                );
+            } finally {
+                updatingExportUi[0] = false;
+            }
+        };
+
+        formatoCombo.addActionListener(e -> refreshPreview.run());
+        desdeCombo.addActionListener(e -> refreshPreview.run());
+        hastaCombo.addActionListener(e -> refreshPreview.run());
+        disposicionCombo.addActionListener(e -> refreshPreview.run());
+        incluirRamCheckBox.addActionListener(e -> refreshPreview.run());
+        incluirDiscoCheckBox.addActionListener(e -> refreshPreview.run());
+        gridCheckBox.addActionListener(e -> {
+            renderOptionsModel.showGrid = gridCheckBox.isSelected();
+            refreshPreview.run();
+        });
+        leyendaCheckBox.addActionListener(e -> {
+            renderOptionsModel.showLegend = leyendaCheckBox.isSelected();
+            refreshPreview.run();
+        });
+        rellenoCheckBox.addActionListener(e -> {
+            renderOptionsModel.showAreaFill = rellenoCheckBox.isSelected();
+            refreshPreview.run();
+        });
+        bordeCheckBox.addActionListener(e -> {
+            renderOptionsModel.showBorder = bordeCheckBox.isSelected();
+            refreshPreview.run();
+        });
+        valorActualCheckBox.addActionListener(e -> {
+            renderOptionsModel.showLatestValue = valorActualCheckBox.isSelected();
+            refreshPreview.run();
+        });
+        apagadosCheckBox.addActionListener(e -> {
+            renderOptionsModel.showShutdownMarkers = apagadosCheckBox.isSelected();
+            refreshPreview.run();
+        });
+
+        backgroundColorButton.addActionListener(e -> seleccionarColor(dialog, backgroundColorButton, "Color de fondo", color -> {
+            paletteModel.backgroundColor = color;
+            refreshPreview.run();
+        }));
+        borderColorButton.addActionListener(e -> seleccionarColor(dialog, borderColorButton, "Color del borde", color -> {
+            paletteModel.borderColor = color;
+            refreshPreview.run();
+        }));
+        gridColorButton.addActionListener(e -> seleccionarColor(dialog, gridColorButton, "Color de la rejilla", color -> {
+            paletteModel.gridColor = color;
+            refreshPreview.run();
+        }));
+        textColorButton.addActionListener(e -> seleccionarColor(dialog, textColorButton, "Color del texto", color -> {
+            paletteModel.textColor = color;
+            refreshPreview.run();
+        }));
+        ramColorButton.addActionListener(e -> seleccionarColor(dialog, ramColorButton, "Color de RAM", color -> {
+            paletteModel.ramAccentColor = color;
+            refreshPreview.run();
+        }));
+        diskColorButton.addActionListener(e -> seleccionarColor(dialog, diskColorButton, "Color de Disco", color -> {
+            paletteModel.diskAccentColor = color;
+            refreshPreview.run();
+        }));
+
+        JPanel wrapper = new JPanel(new BorderLayout(0, 12));
+        wrapper.setOpaque(true);
+        wrapper.setBackground(AppTheme.getBackground());
+        wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        CardPanel previewCard = new CardPanel(new BorderLayout(), new Insets(10, 10, 10, 10));
+        previewCard.setBackground(AppTheme.getSurfaceBackground());
+        JLabel previewTitle = new JLabel("Previsualizacion");
+        previewTitle.setFont(previewTitle.getFont().deriveFont(Font.BOLD, 13f));
+        previewTitle.setForeground(AppTheme.getForeground());
+        previewCard.add(previewTitle, BorderLayout.NORTH);
+        JPanel previewContent = new JPanel(new BorderLayout());
+        previewContent.setOpaque(false);
+        previewContent.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+        previewContent.add(previewLabel, BorderLayout.CENTER);
+        previewCard.add(previewContent, BorderLayout.CENTER);
+        wrapper.add(previewCard, BorderLayout.NORTH);
+
+        CardPanel configCard = new CardPanel(new BorderLayout(), new Insets(10, 10, 10, 10));
+        configCard.setBackground(AppTheme.getSurfaceBackground());
+        JLabel configTitle = new JLabel("Opciones");
+        configTitle.setFont(configTitle.getFont().deriveFont(Font.BOLD, 13f));
+        configTitle.setForeground(AppTheme.getForeground());
+        configCard.add(configTitle, BorderLayout.NORTH);
+
+        JPanel configContent = new JPanel();
+        configContent.setOpaque(false);
+        configContent.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+        configContent.setLayout(new BoxLayout(configContent, BoxLayout.Y_AXIS));
+        JLabel datosTitle = crearSubtituloExportacion("Datos");
+        configContent.add(datosTitle);
+        configContent.add(Box.createVerticalStrut(6));
+        configContent.add(crearFilaExportacion("Formato", formatoCombo));
+        configContent.add(Box.createVerticalStrut(8));
+        configContent.add(crearFilaExportacion("Desde", desdeCombo));
+        configContent.add(Box.createVerticalStrut(8));
+        configContent.add(crearFilaExportacion("Hasta", hastaCombo));
+        configContent.add(Box.createVerticalStrut(8));
+        configContent.add(crearFilaChecksExportacion("Series", incluirRamCheckBox, incluirDiscoCheckBox));
+        configContent.add(Box.createVerticalStrut(8));
+        configContent.add(crearFilaExportacion("Disposicion", disposicionCombo));
+        configContent.add(Box.createVerticalStrut(14));
+
+        JLabel vistaTitle = crearSubtituloExportacion("Capas");
+        configContent.add(vistaTitle);
+        configContent.add(Box.createVerticalStrut(6));
+        JPanel togglesPanel = new JPanel(new GridLayout(2, 3, 8, 8));
+        togglesPanel.setOpaque(false);
+        togglesPanel.add(gridCheckBox);
+        togglesPanel.add(leyendaCheckBox);
+        togglesPanel.add(rellenoCheckBox);
+        togglesPanel.add(bordeCheckBox);
+        togglesPanel.add(valorActualCheckBox);
+        togglesPanel.add(apagadosCheckBox);
+        configContent.add(togglesPanel);
+        configContent.add(Box.createVerticalStrut(14));
+
+        JLabel colorTitle = crearSubtituloExportacion("Colores PNG");
+        configContent.add(colorTitle);
+        configContent.add(Box.createVerticalStrut(6));
+
+        JPanel coloresPanel = new JPanel(new GridLayout(2, 3, 8, 8));
+        coloresPanel.setOpaque(false);
+        coloresPanel.add(backgroundColorButton);
+        coloresPanel.add(borderColorButton);
+        coloresPanel.add(gridColorButton);
+        coloresPanel.add(textColorButton);
+        coloresPanel.add(ramColorButton);
+        coloresPanel.add(diskColorButton);
+        configContent.add(coloresPanel);
+        configCard.add(configContent, BorderLayout.CENTER);
+        wrapper.add(configCard, BorderLayout.CENTER);
+
+        JButton exportarButton = new JButton("Exportar");
+        JButton cancelarButton = new JButton("Cancelar");
+        styleActionButton(exportarButton);
+        styleActionButton(cancelarButton);
+        cancelarButton.addActionListener(e -> dialog.dispose());
+        exportarButton.addActionListener(e -> {
+            if (!incluirRamCheckBox.isSelected() && !incluirDiscoCheckBox.isSelected()) {
+                JOptionPane.showMessageDialog(dialog, "Selecciona al menos una grafica para exportar.", "Exportar estadisticas", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            try {
+                if (formatoCombo.getSelectedItem() == ExportFormatOption.PNG) {
+                    exportarGraficasComoPng(
+                            dialog,
+                            exportSnapshot,
+                            resolveExportBoundary((ExportInstantOption) desdeCombo.getSelectedItem(), exportSnapshot, true),
+                            resolveExportBoundary((ExportInstantOption) hastaCombo.getSelectedItem(), exportSnapshot, false),
+                            incluirRamCheckBox.isSelected(),
+                            incluirDiscoCheckBox.isSelected(),
+                            (ExportLayoutOption) disposicionCombo.getSelectedItem(),
+                            paletteModel.toPalette(),
+                            renderOptionsModel.toOptions()
+                    );
+                } else {
+                    exportarGraficasComoCsv(
+                            dialog,
+                            exportSnapshot,
+                            resolveExportBoundary((ExportInstantOption) desdeCombo.getSelectedItem(), exportSnapshot, true),
+                            resolveExportBoundary((ExportInstantOption) hastaCombo.getSelectedItem(), exportSnapshot, false),
+                            incluirRamCheckBox.isSelected(),
+                            incluirDiscoCheckBox.isSelected()
+                    );
+                }
+                dialog.dispose();
+            } catch (IOException ex) {
+                if ("EXPORT_CANCELLED".equals(ex.getMessage())) {
+                    return;
+                }
+                JOptionPane.showMessageDialog(dialog, "No se ha podido exportar las estadisticas: " + ex.getMessage(), "Exportar estadisticas", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        footer.setOpaque(false);
+        footer.add(cancelarButton);
+        footer.add(exportarButton);
+        wrapper.add(footer, BorderLayout.SOUTH);
+
+        previewLabel.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                refreshPreview.run();
+            }
+        });
+
+        dialog.setContentPane(wrapper);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(960, 700));
+        dialog.setLocationRelativeTo(this);
+        refreshPreview.run();
+        dialog.setVisible(true);
     }
 
     private JPanel crearFilaExportacion(String titulo, JComponent component) {
@@ -1402,6 +1717,14 @@ public class PanelEstadisticas extends JPanel {
         return row;
     }
 
+    private JLabel crearSubtituloExportacion(String texto) {
+        JLabel label = new JLabel(texto);
+        label.setForeground(AppTheme.getMutedForeground());
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 12f));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return label;
+    }
+
     private void configurarColorButton(JButton button, Color color) {
         button.setBackground(color);
         button.setForeground(contrastingTextColor(color));
@@ -1422,42 +1745,52 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private void actualizarPrevisualizacionExportacion(JLabel previewLabel,
-                                                       TimeRangeOption tramo,
+                                                       ExportSnapshot exportSnapshot,
+                                                       long desdeTimestampMillis,
+                                                       long hastaTimestampMillis,
                                                        boolean incluirRam,
                                                        boolean incluirDisco,
                                                        ExportLayoutOption disposicion,
-                                                       ExportPalette palette) {
+                                                       ExportPalette palette,
+                                                       ExportRenderOptions renderOptions) {
         if (previewLabel == null) {
             return;
         }
         if (!incluirRam && !incluirDisco) {
             previewLabel.setIcon(null);
-            previewLabel.setText("Selecciona al menos una gráfica");
+            previewLabel.setText("Selecciona al menos una grafica");
             previewLabel.setForeground(AppTheme.getMutedForeground());
             return;
         }
-        BufferedImage image = crearImagenExportacion(
-                Math.max(720, previewLabel.getWidth() > 0 ? previewLabel.getWidth() : 760),
+        int previewWidth = Math.max(720, previewLabel.getWidth() > 0 ? previewLabel.getWidth() : 760);
+        int previewHeight = Math.max(260, previewLabel.getHeight() > 0 ? previewLabel.getHeight() : 320);
+        BufferedImage image = crearImagenPrevisualizacionExportacion(
+                previewWidth,
                 320,
-                tramo != null ? tramo : getSelectedRange(),
+                exportSnapshot,
+                desdeTimestampMillis,
+                hastaTimestampMillis,
                 incluirRam,
                 incluirDisco,
-                disposicion != null ? disposicion : ExportLayoutOption.SEPARADAS,
-                palette
+                disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS,
+                palette,
+                renderOptions
         );
-        Image scaled = image.getScaledInstance(Math.max(720, previewLabel.getWidth() > 0 ? previewLabel.getWidth() : 760), 320, Image.SCALE_SMOOTH);
         previewLabel.setText(null);
-        previewLabel.setIcon(new ImageIcon(scaled));
+        previewLabel.setIcon(new ImageIcon(scaleImageToFit(image, previewWidth, previewHeight)));
     }
 
     private void exportarGraficasComoPng(Component parent,
-                                         TimeRangeOption tramo,
+                                         ExportSnapshot exportSnapshot,
+                                         long desdeTimestampMillis,
+                                         long hastaTimestampMillis,
                                          boolean incluirRam,
                                          boolean incluirDisco,
                                          ExportLayoutOption disposicion,
-                                         ExportPalette palette) throws IOException {
+                                         ExportPalette palette,
+                                         ExportRenderOptions renderOptions) throws IOException {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Exportar gráficas como PNG");
+        chooser.setDialogTitle("Exportar graficas como PNG");
         chooser.setFileFilter(new FileNameExtensionFilter("Imagen PNG", "png"));
         java.io.File imagenesDir = FileSystemView.getFileSystemView().getDefaultDirectory();
         if (imagenesDir != null && imagenesDir.isDirectory()) {
@@ -1472,18 +1805,34 @@ public class PanelEstadisticas extends JPanel {
         if (!destino.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png")) {
             destino = destino.resolveSibling(destino.getFileName() + ".png");
         }
-        confirmarSobrescrituraSiHaceFalta(parent, destino);
 
-        BufferedImage image = crearImagenExportacion(1400, 340, tramo, incluirRam, incluirDisco, disposicion, palette);
-        ImageIO.write(image, "png", destino.toFile());
+        List<ExportImageTarget> exportTargets = crearDestinosExportacionPng(
+                destino,
+                exportSnapshot,
+                desdeTimestampMillis,
+                hastaTimestampMillis,
+                incluirRam,
+                incluirDisco,
+                disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS,
+                palette,
+                renderOptions
+        );
+        for (ExportImageTarget exportTarget : exportTargets) {
+            confirmarSobrescrituraSiHaceFalta(parent, exportTarget.path());
+        }
+        for (ExportImageTarget exportTarget : exportTargets) {
+            ImageIO.write(exportTarget.image(), "png", exportTarget.path().toFile());
+        }
     }
 
     private void exportarGraficasComoCsv(Component parent,
-                                         TimeRangeOption tramo,
+                                         ExportSnapshot exportSnapshot,
+                                         long desdeTimestampMillis,
+                                         long hastaTimestampMillis,
                                          boolean incluirRam,
                                          boolean incluirDisco) throws IOException {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Exportar gráficas como CSV");
+        chooser.setDialogTitle("Exportar graficas como CSV");
         chooser.setFileFilter(new FileNameExtensionFilter("CSV", "csv"));
         java.io.File documentosDir = FileSystemView.getFileSystemView().getDefaultDirectory();
         if (documentosDir != null && documentosDir.isDirectory()) {
@@ -1500,7 +1849,7 @@ public class PanelEstadisticas extends JPanel {
         }
         confirmarSobrescrituraSiHaceFalta(parent, destino);
 
-        ExportData exportData = buildExportData(tramo != null ? tramo : getSelectedRange());
+        ExportData exportData = buildExportData(exportSnapshot, desdeTimestampMillis, hastaTimestampMillis);
 
         try (BufferedWriter writer = Files.newBufferedWriter(destino, StandardCharsets.UTF_8)) {
             writer.write("metric,timestamp_iso,timestamp_millis,value,shutdown_marker");
@@ -1514,26 +1863,122 @@ public class PanelEstadisticas extends JPanel {
         }
     }
 
+    private void actualizarEstadoControlesExportacion(ExportFormatOption formato,
+                                                      JComboBox<ExportLayoutOption> disposicionCombo,
+                                                      boolean incluirRam,
+                                                      boolean incluirDisco,
+                                                      List<JButton> colorButtons,
+                                                      List<JCheckBox> styleCheckBoxes) {
+        boolean pngSelected = formato == ExportFormatOption.PNG;
+        ExportLayoutOption selected = disposicionCombo != null ? (ExportLayoutOption) disposicionCombo.getSelectedItem() : null;
+        boolean overlayAllowed = incluirRam && incluirDisco;
+        if (disposicionCombo != null) {
+            List<ExportLayoutOption> expectedOptions = new ArrayList<>();
+            expectedOptions.add(ExportLayoutOption.MISMA_IMAGEN_SEPARADAS);
+            if (overlayAllowed) {
+                expectedOptions.add(ExportLayoutOption.MISMA_IMAGEN_SUPERPUESTAS);
+            }
+            expectedOptions.add(ExportLayoutOption.ARCHIVOS_SEPARADOS);
+            boolean modelChanged = disposicionCombo.getItemCount() != expectedOptions.size();
+            if (!modelChanged) {
+                for (int i = 0; i < expectedOptions.size(); i++) {
+                    if (disposicionCombo.getItemAt(i) != expectedOptions.get(i)) {
+                        modelChanged = true;
+                        break;
+                    }
+                }
+            }
+            if (modelChanged) {
+                DefaultComboBoxModel<ExportLayoutOption> model = new DefaultComboBoxModel<>();
+                for (ExportLayoutOption option : expectedOptions) {
+                    model.addElement(option);
+                }
+                disposicionCombo.setModel(model);
+            }
+            if (selected == ExportLayoutOption.MISMA_IMAGEN_SUPERPUESTAS && !overlayAllowed) {
+                disposicionCombo.setSelectedItem(ExportLayoutOption.MISMA_IMAGEN_SEPARADAS);
+            } else if (selected != null) {
+                disposicionCombo.setSelectedItem(selected);
+            }
+            if (disposicionCombo.getSelectedItem() == null) {
+                disposicionCombo.setSelectedItem(ExportLayoutOption.MISMA_IMAGEN_SEPARADAS);
+            }
+            disposicionCombo.setEnabled(pngSelected);
+        }
+        if (colorButtons != null) {
+            for (JButton button : colorButtons) {
+                button.setEnabled(pngSelected);
+            }
+        }
+        if (styleCheckBoxes != null) {
+            for (JCheckBox checkBox : styleCheckBoxes) {
+                checkBox.setEnabled(pngSelected);
+            }
+        }
+    }
+
     private BufferedImage crearImagenExportacion(int width,
                                                  int singleChartHeight,
-                                                 TimeRangeOption tramo,
+                                                 ExportSnapshot exportSnapshot,
+                                                 long desdeTimestampMillis,
+                                                 long hastaTimestampMillis,
                                                  boolean incluirRam,
                                                  boolean incluirDisco,
                                                  ExportLayoutOption disposicion,
-                                                 ExportPalette palette) {
-        ExportData exportData = buildExportData(tramo != null ? tramo : getSelectedRange());
-        List<BufferedImage> images = new ArrayList<>();
-        if (disposicion == ExportLayoutOption.SUPERPUESTAS && incluirRam && incluirDisco) {
-            images.add(renderOverlayExportChart(width, singleChartHeight, exportData, palette));
-        } else {
-            if (incluirRam) {
-                images.add(ramChart.renderToImage(width, singleChartHeight, exportData.ramSamples(), exportData.rangeSeconds(), palette, palette.ramAccentColor()));
-            }
-            if (incluirDisco) {
-                images.add(diskChart.renderToImage(width, singleChartHeight, exportData.diskSamples(), exportData.rangeSeconds(), palette, palette.diskAccentColor()));
-            }
-        }
+                                                 ExportPalette palette,
+                                                 ExportRenderOptions renderOptions) {
+        List<BufferedImage> images = crearImagenesExportacion(width, singleChartHeight, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirRam, incluirDisco, disposicion, palette, renderOptions);
+        return combinarImagenesExportacion(images, width, palette);
+    }
 
+    private BufferedImage crearImagenPrevisualizacionExportacion(int width,
+                                                                 int singleChartHeight,
+                                                                 ExportSnapshot exportSnapshot,
+                                                                 long desdeTimestampMillis,
+                                                                 long hastaTimestampMillis,
+                                                                 boolean incluirRam,
+                                                                 boolean incluirDisco,
+                                                                 ExportLayoutOption disposicion,
+                                                                 ExportPalette palette,
+                                                                 ExportRenderOptions renderOptions) {
+        int imageWidth = Math.max(420, (disposicion == ExportLayoutOption.ARCHIVOS_SEPARADOS && incluirRam && incluirDisco) ? (width / 2) - 12 : width);
+        List<BufferedImage> images = crearImagenesExportacion(imageWidth, singleChartHeight, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirRam, incluirDisco, disposicion, palette, renderOptions);
+        if (disposicion == ExportLayoutOption.ARCHIVOS_SEPARADOS && images.size() > 1) {
+            return combinarImagenesHorizontales(images, palette);
+        }
+        return combinarImagenesExportacion(images, width, palette);
+    }
+
+    private List<BufferedImage> crearImagenesExportacion(int width,
+                                                         int singleChartHeight,
+                                                         ExportSnapshot exportSnapshot,
+                                                         long desdeTimestampMillis,
+                                                         long hastaTimestampMillis,
+                                                         boolean incluirRam,
+                                                         boolean incluirDisco,
+                                                         ExportLayoutOption disposicion,
+                                                         ExportPalette palette,
+                                                         ExportRenderOptions renderOptions) {
+        ExportData exportData = buildExportData(exportSnapshot, desdeTimestampMillis, hastaTimestampMillis);
+        ExportLayoutOption effectiveLayout = disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS;
+        List<BufferedImage> images = new ArrayList<>();
+        if (effectiveLayout == ExportLayoutOption.MISMA_IMAGEN_SUPERPUESTAS && incluirRam && incluirDisco) {
+            images.add(renderOverlayExportChart(width, singleChartHeight, exportData, palette, renderOptions));
+            return images;
+        }
+        if (incluirRam) {
+            images.add(ramChart.renderToImage(width, singleChartHeight, exportData.ramSamples(), exportData.rangeSeconds(), palette, palette.ramAccentColor(), renderOptions));
+        }
+        if (incluirDisco) {
+            images.add(diskChart.renderToImage(width, singleChartHeight, exportData.diskSamples(), exportData.rangeSeconds(), palette, palette.diskAccentColor(), renderOptions));
+        }
+        return images;
+    }
+
+    private BufferedImage combinarImagenesExportacion(List<BufferedImage> images, int width, ExportPalette palette) {
+        if (images == null || images.isEmpty()) {
+            return new BufferedImage(Math.max(1, width), 1, BufferedImage.TYPE_INT_ARGB);
+        }
         int spacing = images.size() > 1 ? 14 : 0;
         int finalWidth = images.stream().mapToInt(BufferedImage::getWidth).max().orElse(width);
         int finalHeight = images.stream().mapToInt(BufferedImage::getHeight).sum() + (Math.max(0, images.size() - 1) * spacing);
@@ -1557,26 +2002,235 @@ public class PanelEstadisticas extends JPanel {
         return combined;
     }
 
-    private ExportData buildExportData(TimeRangeOption tramo) {
-        TimeRangeOption selected = tramo != null ? tramo : getSelectedRange();
-        int bucketSeconds = getStatsHistoricalResolutionSeconds();
-        int offsetSeconds = getTimelineOffsetSeconds();
-        List<ChartSample> ramSamples = statsHistory.snapshotForRange(selected.seconds(), offsetSeconds, bucketSeconds);
-        List<ChartSample> diskSamples = statsHistory.snapshotForRangeDisk(selected.seconds(), offsetSeconds, bucketSeconds);
-        int ramMax = Math.max(1, resolveMaxRamMb());
-        return new ExportData(ramSamples, diskSamples, selected.seconds(), ramMax, 100);
+    private BufferedImage combinarImagenesHorizontales(List<BufferedImage> images, ExportPalette palette) {
+        if (images == null || images.isEmpty()) {
+            return new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        }
+        int spacing = 14;
+        int finalWidth = images.stream().mapToInt(BufferedImage::getWidth).sum() + (Math.max(0, images.size() - 1) * spacing);
+        int finalHeight = images.stream().mapToInt(BufferedImage::getHeight).max().orElse(1);
+        BufferedImage combined = new BufferedImage(finalWidth, finalHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = combined.createGraphics();
+        try {
+            g2.setColor(palette.backgroundColor());
+            g2.fillRect(0, 0, finalWidth, finalHeight);
+            int x = 0;
+            for (int i = 0; i < images.size(); i++) {
+                BufferedImage image = images.get(i);
+                g2.drawImage(image, x, 0, null);
+                x += image.getWidth();
+                if (i < images.size() - 1) {
+                    x += spacing;
+                }
+            }
+        } finally {
+            g2.dispose();
+        }
+        return combined;
     }
 
-    private BufferedImage renderOverlayExportChart(int width, int height, ExportData exportData, ExportPalette palette) {
+    private BufferedImage scaleImageToFit(BufferedImage source, int maxWidth, int maxHeight) {
+        if (source == null) {
+            return null;
+        }
+        int safeMaxWidth = Math.max(1, maxWidth);
+        int safeMaxHeight = Math.max(1, maxHeight);
+        double scale = Math.min(safeMaxWidth / (double) Math.max(1, source.getWidth()),
+                safeMaxHeight / (double) Math.max(1, source.getHeight()));
+        scale = Math.min(1d, scale);
+        int targetWidth = Math.max(1, (int) Math.round(source.getWidth() * scale));
+        int targetHeight = Math.max(1, (int) Math.round(source.getHeight() * scale));
+        BufferedImage scaled = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = scaled.createGraphics();
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.drawImage(source, 0, 0, targetWidth, targetHeight, null);
+        } finally {
+            g2.dispose();
+        }
+        return scaled;
+    }
+
+    private List<ExportImageTarget> crearDestinosExportacionPng(Path destinoBase,
+                                                                ExportSnapshot exportSnapshot,
+                                                                long desdeTimestampMillis,
+                                                                long hastaTimestampMillis,
+                                                                boolean incluirRam,
+                                                                boolean incluirDisco,
+                                                                ExportLayoutOption disposicion,
+                                                                ExportPalette palette,
+                                                                ExportRenderOptions renderOptions) {
+        List<ExportImageTarget> exportTargets = new ArrayList<>();
+        ExportLayoutOption effectiveLayout = disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS;
+        if (effectiveLayout == ExportLayoutOption.ARCHIVOS_SEPARADOS && incluirRam && incluirDisco) {
+            ExportData exportData = buildExportData(exportSnapshot, desdeTimestampMillis, hastaTimestampMillis);
+            exportTargets.add(new ExportImageTarget(
+                    appendToFileName(destinoBase, "-ram"),
+                    ramChart.renderToImage(1400, 340, exportData.ramSamples(), exportData.rangeSeconds(), palette, palette.ramAccentColor(), renderOptions)
+            ));
+            exportTargets.add(new ExportImageTarget(
+                    appendToFileName(destinoBase, "-disco"),
+                    diskChart.renderToImage(1400, 340, exportData.diskSamples(), exportData.rangeSeconds(), palette, palette.diskAccentColor(), renderOptions)
+            ));
+            return exportTargets;
+        }
+        exportTargets.add(new ExportImageTarget(
+                destinoBase,
+                crearImagenExportacion(1400, 340, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirRam, incluirDisco, effectiveLayout, palette, renderOptions)
+        ));
+        return exportTargets;
+    }
+
+    private Path appendToFileName(Path path, String suffix) {
+        String fileName = path.getFileName().toString();
+        int extensionIndex = fileName.lastIndexOf('.');
+        String baseName = extensionIndex >= 0 ? fileName.substring(0, extensionIndex) : fileName;
+        String extension = extensionIndex >= 0 ? fileName.substring(extensionIndex) : "";
+        return path.resolveSibling(baseName + suffix + extension);
+    }
+
+    private ExportPaletteModel createDefaultExportPaletteModel() {
+        Color mainAccent = AppTheme.getMainAccent();
+        Color diskAccent = AppTheme.tint(mainAccent, AppTheme.getWarningColor(), 0.45f);
+        return new ExportPaletteModel(
+                AppTheme.getSurfaceBackground(),
+                AppTheme.getBorderColor(),
+                AppTheme.getSubtleBorderColor(),
+                AppTheme.getForeground(),
+                mainAccent,
+                diskAccent
+        );
+    }
+
+    private ExportRenderOptionsModel createDefaultExportRenderOptionsModel() {
+        return new ExportRenderOptionsModel(
+                true,
+                true,
+                true,
+                true,
+                true,
+                true
+        );
+    }
+
+    private ExportSnapshot createFrozenExportSnapshot() {
+        int bucketSeconds = getStatsHistoricalResolutionSeconds();
+        List<ChartSample> ramTimeline = statsHistory.snapshotTimelineRam(bucketSeconds);
+        List<ChartSample> diskTimeline = statsHistory.snapshotTimelineDisk(bucketSeconds);
+        TreeMap<Long, Long> timestamps = new TreeMap<>();
+        for (ChartSample sample : ramTimeline) {
+            if (sample != null) {
+                timestamps.put(sample.timestampMillis(), sample.timestampMillis());
+            }
+        }
+        for (ChartSample sample : diskTimeline) {
+            if (sample != null) {
+                timestamps.put(sample.timestampMillis(), sample.timestampMillis());
+            }
+        }
+        List<Long> availableTimestamps = new ArrayList<>(timestamps.values());
+        long minTimestamp = availableTimestamps.isEmpty() ? 0L : availableTimestamps.get(0);
+        long maxTimestamp = availableTimestamps.isEmpty() ? 0L : availableTimestamps.get(availableTimestamps.size() - 1);
+        return new ExportSnapshot(
+                ramTimeline,
+                diskTimeline,
+                availableTimestamps,
+                Math.max(1, resolveMaxRamMb()),
+                100,
+                minTimestamp,
+                maxTimestamp
+        );
+    }
+
+    private DefaultComboBoxModel<ExportInstantOption> createExportInstantModel(ExportSnapshot snapshot, boolean startModel) {
+        DefaultComboBoxModel<ExportInstantOption> model = new DefaultComboBoxModel<>();
+        model.addElement(startModel ? new ExportInstantOption("Principio", null, true, false)
+                : new ExportInstantOption("Final", null, false, true));
+        if (snapshot != null && snapshot.availableTimestamps() != null) {
+            for (Long timestamp : snapshot.availableTimestamps()) {
+                if (timestamp == null) {
+                    continue;
+                }
+                model.addElement(new ExportInstantOption(SAMPLE_TIME_FORMAT.format(Instant.ofEpochMilli(timestamp)), timestamp, false, false));
+            }
+        }
+        if (startModel) {
+            model.addElement(new ExportInstantOption("Final", null, false, true));
+        } else {
+            model.insertElementAt(new ExportInstantOption("Principio", null, true, false), 1);
+        }
+        return model;
+    }
+
+    private long resolveExportBoundary(ExportInstantOption option, ExportSnapshot snapshot, boolean startBoundary) {
+        if (snapshot == null) {
+            return 0L;
+        }
+        if (option == null) {
+            return startBoundary ? snapshot.minTimestampMillis() : snapshot.maxTimestampMillis();
+        }
+        if (option.timestampMillis() != null) {
+            return option.timestampMillis();
+        }
+        if (option.boundaryStart()) {
+            return snapshot.minTimestampMillis();
+        }
+        if (option.boundaryEnd()) {
+            return snapshot.maxTimestampMillis();
+        }
+        return startBoundary ? snapshot.minTimestampMillis() : snapshot.maxTimestampMillis();
+    }
+
+    private ExportData buildExportData(ExportSnapshot exportSnapshot, long desdeTimestampMillis, long hastaTimestampMillis) {
+        ExportSnapshot snapshot = exportSnapshot != null ? exportSnapshot : createFrozenExportSnapshot();
+        long safeStart = Math.min(desdeTimestampMillis, hastaTimestampMillis);
+        long safeEnd = Math.max(desdeTimestampMillis, hastaTimestampMillis);
+        if (safeStart <= 0L && snapshot.minTimestampMillis() > 0L) {
+            safeStart = snapshot.minTimestampMillis();
+        }
+        if (safeEnd <= 0L && snapshot.maxTimestampMillis() > 0L) {
+            safeEnd = snapshot.maxTimestampMillis();
+        }
+        List<ChartSample> ramSamples = filterSamplesByTimestamp(snapshot.ramTimeline(), safeStart, safeEnd);
+        List<ChartSample> diskSamples = filterSamplesByTimestamp(snapshot.diskTimeline(), safeStart, safeEnd);
+        int rangeSeconds = Math.max(1, (int) Math.max(1L, Math.round((safeEnd - safeStart) / 1000d)));
+        return new ExportData(ramSamples, diskSamples, rangeSeconds, snapshot.ramMaxValue(), snapshot.diskMaxValue());
+    }
+
+    private List<ChartSample> filterSamplesByTimestamp(List<ChartSample> samples, long desdeTimestampMillis, long hastaTimestampMillis) {
+        if (samples == null || samples.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<ChartSample> filtered = new ArrayList<>();
+        for (ChartSample sample : samples) {
+            if (sample == null) {
+                continue;
+            }
+            if (sample.timestampMillis() < desdeTimestampMillis || sample.timestampMillis() > hastaTimestampMillis) {
+                continue;
+            }
+            filtered.add(sample);
+        }
+        return filtered;
+    }
+
+    private BufferedImage renderOverlayExportChart(int width,
+                                                   int height,
+                                                   ExportData exportData,
+                                                   ExportPalette palette,
+                                                   ExportRenderOptions renderOptions) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = image.createGraphics();
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int arc = AppTheme.getArc();
             g2.setColor(palette.backgroundColor());
-            g2.fillRoundRect(0, 0, width, height, arc, arc);
-            g2.setColor(palette.borderColor());
-            g2.drawRoundRect(0, 0, width - 1, height - 1, arc, arc);
+            g2.fillRect(0, 0, width, height);
+            if (renderOptions == null || renderOptions.showBorder()) {
+                g2.setColor(palette.borderColor());
+                g2.drawRect(0, 0, width - 1, height - 1);
+            }
 
             int chartWidth = Math.max(1, width - CHART_LEFT_PADDING - CHART_RIGHT_PADDING);
             int chartHeight = Math.max(1, height - CHART_TOP_PADDING - CHART_BOTTOM_PADDING);
@@ -1587,36 +2241,44 @@ public class PanelEstadisticas extends JPanel {
             g2.setColor(palette.textColor());
             g2.drawString("RAM + Disco", x0, 16);
 
-            g2.setColor(palette.gridColor());
-            for (int i = 0; i <= 4; i++) {
-                int y = y0 + Math.round((chartHeight * i) / 4f);
-                g2.drawLine(x0, y, x0 + chartWidth, y);
+            if (renderOptions == null || renderOptions.showGrid()) {
+                g2.setColor(palette.gridColor());
+                for (int i = 0; i <= 4; i++) {
+                    int y = y0 + Math.round((chartHeight * i) / 4f);
+                    g2.drawLine(x0, y, x0 + chartWidth, y);
+                }
             }
             int stepSeconds = calcularPasoGridSegundosExport(exportData.rangeSeconds());
             for (int seconds = 0; seconds <= exportData.rangeSeconds(); seconds += stepSeconds) {
                 float fraction = seconds / (float) exportData.rangeSeconds();
                 int x = Math.round(x0 + (fraction * chartWidth));
-                g2.drawLine(x, y0, x, yBottom);
+                if (renderOptions == null || renderOptions.showGrid()) {
+                    g2.setColor(palette.gridColor());
+                    g2.drawLine(x, y0, x, yBottom);
+                }
                 if (seconds < exportData.rangeSeconds()) {
                     String label = formatRangeLabelExport(exportData.rangeSeconds() - seconds);
                     FontMetrics fm = g2.getFontMetrics();
                     int labelX = Math.max(x0, Math.min(x0 + chartWidth - fm.stringWidth(label), x - (fm.stringWidth(label) / 2)));
+                    g2.setColor(palette.textColor());
                     g2.drawString(label, labelX, yBottom + 16);
                 }
             }
 
-            drawOverlaySeries(g2, exportData.ramSamples(), exportData.ramMaxValue(), x0, yBottom, chartWidth, chartHeight, palette.ramAccentColor());
-            drawOverlaySeries(g2, exportData.diskSamples(), exportData.diskMaxValue(), x0, yBottom, chartWidth, chartHeight, palette.diskAccentColor());
+            drawOverlaySeries(g2, exportData.ramSamples(), exportData.ramMaxValue(), x0, yBottom, chartWidth, chartHeight, palette.ramAccentColor(), palette.backgroundColor(), renderOptions);
+            drawOverlaySeries(g2, exportData.diskSamples(), exportData.diskMaxValue(), x0, yBottom, chartWidth, chartHeight, palette.diskAccentColor(), palette.backgroundColor(), renderOptions);
 
-            int legendY = 18;
-            g2.setColor(palette.ramAccentColor());
-            g2.fillRoundRect(width - 180, legendY - 8, 16, 8, 8, 8);
-            g2.setColor(palette.textColor());
-            g2.drawString("RAM", width - 158, legendY);
-            g2.setColor(palette.diskAccentColor());
-            g2.fillRoundRect(width - 100, legendY - 8, 16, 8, 8, 8);
-            g2.setColor(palette.textColor());
-            g2.drawString("Disco", width - 78, legendY);
+            if (renderOptions == null || renderOptions.showLegend()) {
+                int legendY = 18;
+                g2.setColor(palette.ramAccentColor());
+                g2.fillRect(width - 180, legendY - 8, 16, 8);
+                g2.setColor(palette.textColor());
+                g2.drawString("RAM", width - 158, legendY);
+                g2.setColor(palette.diskAccentColor());
+                g2.fillRect(width - 100, legendY - 8, 16, 8);
+                g2.setColor(palette.textColor());
+                g2.drawString("Disco", width - 78, legendY);
+            }
         } finally {
             g2.dispose();
         }
@@ -1630,10 +2292,18 @@ public class PanelEstadisticas extends JPanel {
                                    int yBottom,
                                    int chartWidth,
                                    int chartHeight,
-                                   Color accent) {
+                                   Color accent,
+                                   Color backgroundColor,
+                                   ExportRenderOptions renderOptions) {
         List<ChartSample> values = samples != null ? samples : List.of();
+        if (values.isEmpty()) {
+            return;
+        }
         Path2D.Float line = new Path2D.Float();
+        Path2D.Float area = new Path2D.Float();
         boolean started = false;
+        int latestIndex = -1;
+        long latest = 0L;
         for (int i = 0; i < values.size(); i++) {
             ChartSample chartSample = values.get(i);
             if (chartSample == null) {
@@ -1646,16 +2316,39 @@ public class PanelEstadisticas extends JPanel {
             if (!started) {
                 started = true;
                 line.moveTo(x, y);
+                area.moveTo(x, yBottom);
+                area.lineTo(x, y);
             } else {
                 line.lineTo(x, y);
+                area.lineTo(x, y);
             }
+            latestIndex = i;
+            latest = sample;
         }
         if (!started) {
             return;
         }
+        area.lineTo(x0 + chartWidth, yBottom);
+        area.closePath();
+        if (renderOptions == null || renderOptions.showAreaFill()) {
+            g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 52));
+            g2.fill(area);
+        }
         g2.setColor(accent);
         g2.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g2.draw(line);
+        if ((renderOptions == null || renderOptions.showLatestValue()) && latestIndex >= 0) {
+            float latestRatio = Math.max(0f, Math.min(1f, latest / (float) Math.max(1L, maxValue)));
+            int latestX = Math.round(x0 + (latestIndex / (float) Math.max(1, values.size() - 1)) * chartWidth);
+            int latestY = Math.round(yBottom - (latestRatio * chartHeight));
+            g2.setColor(backgroundColor);
+            g2.fillOval(latestX - 5, latestY - 5, 10, 10);
+            g2.setColor(accent);
+            g2.fillOval(latestX - 3, latestY - 3, 6, 6);
+        }
+        if (renderOptions != null && !renderOptions.showShutdownMarkers()) {
+            return;
+        }
         for (int i = 0; i < values.size(); i++) {
             ChartSample chartSample = values.get(i);
             if (chartSample == null || !chartSample.isShutdownMarker()) {
@@ -1767,11 +2460,28 @@ public class PanelEstadisticas extends JPanel {
                                  Color diskAccentColor) {
     }
 
+    private record ExportRenderOptions(boolean showGrid,
+                                       boolean showLegend,
+                                       boolean showAreaFill,
+                                       boolean showBorder,
+                                       boolean showLatestValue,
+                                       boolean showShutdownMarkers) {
+    }
+
     private record ExportData(List<ChartSample> ramSamples,
                               List<ChartSample> diskSamples,
                               int rangeSeconds,
                               long ramMaxValue,
                               long diskMaxValue) {
+    }
+
+    private record ExportSnapshot(List<ChartSample> ramTimeline,
+                                  List<ChartSample> diskTimeline,
+                                  List<Long> availableTimestamps,
+                                  long ramMaxValue,
+                                  long diskMaxValue,
+                                  long minTimestampMillis,
+                                  long maxTimestampMillis) {
     }
 
     private static final class ExportPaletteModel {
@@ -1801,9 +2511,63 @@ public class PanelEstadisticas extends JPanel {
         }
     }
 
+    private static final class ExportRenderOptionsModel {
+        private boolean showGrid;
+        private boolean showLegend;
+        private boolean showAreaFill;
+        private boolean showBorder;
+        private boolean showLatestValue;
+        private boolean showShutdownMarkers;
+
+        private ExportRenderOptionsModel(boolean showGrid,
+                                         boolean showLegend,
+                                         boolean showAreaFill,
+                                         boolean showBorder,
+                                         boolean showLatestValue,
+                                         boolean showShutdownMarkers) {
+            this.showGrid = showGrid;
+            this.showLegend = showLegend;
+            this.showAreaFill = showAreaFill;
+            this.showBorder = showBorder;
+            this.showLatestValue = showLatestValue;
+            this.showShutdownMarkers = showShutdownMarkers;
+        }
+
+        private ExportRenderOptions toOptions() {
+            return new ExportRenderOptions(showGrid, showLegend, showAreaFill, showBorder, showLatestValue, showShutdownMarkers);
+        }
+    }
+
+    private record ExportImageTarget(Path path, BufferedImage image) {
+    }
+
+    private record ExportInstantOption(String label, Long timestampMillis, boolean boundaryStart, boolean boundaryEnd) {
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    private enum ExportFormatOption {
+        PNG("PNG"),
+        CSV("CSV");
+
+        private final String label;
+
+        ExportFormatOption(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
     private enum ExportLayoutOption {
-        SEPARADAS("Separadas"),
-        SUPERPUESTAS("Superpuestas");
+        MISMA_IMAGEN_SEPARADAS("Misma imagen, separadas"),
+        MISMA_IMAGEN_SUPERPUESTAS("Misma imagen, superpuestas"),
+        ARCHIVOS_SEPARADOS("Archivos separados");
 
         private final String label;
 
@@ -1946,6 +2710,14 @@ public class PanelEstadisticas extends JPanel {
 
         private synchronized List<ChartSample> snapshotForRangePlayers(int seconds, int offsetSeconds, int bucketSeconds) {
             return buildSnapshot(playerSamples, playerArchive, seconds, offsetSeconds, bucketSeconds);
+        }
+
+        private synchronized List<ChartSample> snapshotTimelineRam(int bucketSeconds) {
+            return new ArrayList<>(buildTimelineSamples(ramSamples, ramArchive, bucketSeconds));
+        }
+
+        private synchronized List<ChartSample> snapshotTimelineDisk(int bucketSeconds) {
+            return new ArrayList<>(buildTimelineSamples(diskSamples, diskArchive, bucketSeconds));
         }
 
         private void addSample(Deque<ChartSample> samples, long value, long timestampMillis) {
@@ -2499,12 +3271,13 @@ public class PanelEstadisticas extends JPanel {
                                             List<ChartSample> renderSamples,
                                             int renderRangeSeconds,
                                             ExportPalette palette,
-                                            Color accentColor) {
+                                            Color accentColor,
+                                            ExportRenderOptions renderOptions) {
             BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g2 = image.createGraphics();
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                drawChart(g2, width, height, renderSamples, renderRangeSeconds, palette, accentColor, false);
+                drawChart(g2, width, height, renderSamples, renderRangeSeconds, palette, accentColor, false, false, renderOptions);
             } finally {
                 g2.dispose();
             }
@@ -2531,7 +3304,9 @@ public class PanelEstadisticas extends JPanel {
                                 AppTheme.getMainAccent()
                         ),
                         AppTheme.getMainAccent(),
-                        true);
+                        true,
+                        true,
+                        createDefaultExportRenderOptionsModel().toOptions());
             } finally {
                 g2.dispose();
             }
@@ -2544,16 +3319,28 @@ public class PanelEstadisticas extends JPanel {
                                int renderRangeSeconds,
                                ExportPalette palette,
                                Color accent,
-                               boolean includeHover) {
+                               boolean includeHover,
+                               boolean roundedCorners,
+                               ExportRenderOptions renderOptions) {
             if (width <= 0 || height <= 0) {
                 return;
             }
 
-            int arc = AppTheme.getArc();
             g2.setColor(palette.backgroundColor());
-            g2.fillRoundRect(0, 0, width, height, arc, arc);
-            g2.setColor(palette.borderColor());
-            g2.drawRoundRect(0, 0, width - 1, height - 1, arc, arc);
+            if (roundedCorners) {
+                int arc = AppTheme.getArc();
+                g2.fillRoundRect(0, 0, width, height, arc, arc);
+                if (renderOptions == null || renderOptions.showBorder()) {
+                    g2.setColor(palette.borderColor());
+                    g2.drawRoundRect(0, 0, width - 1, height - 1, arc, arc);
+                }
+            } else {
+                g2.fillRect(0, 0, width, height);
+                if (renderOptions == null || renderOptions.showBorder()) {
+                    g2.setColor(palette.borderColor());
+                    g2.drawRect(0, 0, width - 1, height - 1);
+                }
+            }
 
             int chartWidth = Math.max(1, width - CHART_LEFT_PADDING - CHART_RIGHT_PADDING);
             int chartHeight = Math.max(1, height - CHART_TOP_PADDING - CHART_BOTTOM_PADDING);
@@ -2566,21 +3353,27 @@ public class PanelEstadisticas extends JPanel {
             g2.drawString(formatAxisValue(maxValue), 12, CHART_TOP_PADDING + 5);
             g2.drawString(formatAxisValue(0), 16, yBottom);
 
-            g2.setColor(palette.gridColor());
-            for (int i = 0; i <= 4; i++) {
-                int y = y0 + Math.round((chartHeight * i) / 4f);
-                g2.drawLine(x0, y, x0 + chartWidth, y);
+            if (renderOptions == null || renderOptions.showGrid()) {
+                g2.setColor(palette.gridColor());
+                for (int i = 0; i <= 4; i++) {
+                    int y = y0 + Math.round((chartHeight * i) / 4f);
+                    g2.drawLine(x0, y, x0 + chartWidth, y);
+                }
             }
             int safeRangeSeconds = Math.max(1, renderRangeSeconds);
             int stepSeconds = calcularPasoGridSegundos(safeRangeSeconds);
             for (int seconds = 0; seconds <= safeRangeSeconds; seconds += stepSeconds) {
                 float fraction = seconds / (float) safeRangeSeconds;
                 int x = Math.round(x0 + (fraction * chartWidth));
-                g2.drawLine(x, y0, x, yBottom);
+                if (renderOptions == null || renderOptions.showGrid()) {
+                    g2.setColor(palette.gridColor());
+                    g2.drawLine(x, y0, x, yBottom);
+                }
                 if (seconds < safeRangeSeconds) {
                     String label = formatRangeLabel(safeRangeSeconds - seconds);
                     FontMetrics fm = g2.getFontMetrics();
                     int labelX = Math.max(x0, Math.min(x0 + chartWidth - fm.stringWidth(label), x - (fm.stringWidth(label) / 2)));
+                    g2.setColor(palette.textColor());
                     g2.drawString(label, labelX, yBottom + 16);
                 }
             }
@@ -2630,43 +3423,49 @@ public class PanelEstadisticas extends JPanel {
             area.lineTo(x0 + chartWidth, yBottom);
             area.closePath();
 
-            g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 52));
-            g2.fill(area);
+            if (renderOptions == null || renderOptions.showAreaFill()) {
+                g2.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 52));
+                g2.fill(area);
+            }
 
             g2.setColor(accent);
             g2.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             g2.draw(line);
 
-            for (int i = 0; i < values.size(); i++) {
-                ChartSample chartSample = values.get(i);
-                if (chartSample == null || !chartSample.isShutdownMarker()) {
-                    continue;
+            if (renderOptions == null || renderOptions.showShutdownMarkers()) {
+                for (int i = 0; i < values.size(); i++) {
+                    ChartSample chartSample = values.get(i);
+                    if (chartSample == null || !chartSample.isShutdownMarker()) {
+                        continue;
+                    }
+                    long sample = Math.min(chartSample.value(), maxValue);
+                    float ratio = Math.max(0f, Math.min(1f, sample / (float) maxValue));
+                    int shutdownX = Math.round(x0 + (i / (float) Math.max(1, values.size() - 1)) * chartWidth);
+                    int shutdownY = Math.round(yBottom - (ratio * chartHeight));
+                    g2.setColor(palette.backgroundColor());
+                    g2.fillOval(shutdownX - 5, shutdownY - 5, 10, 10);
+                    g2.setColor(Color.BLACK);
+                    g2.fillOval(shutdownX - 3, shutdownY - 3, 6, 6);
                 }
-                long sample = Math.min(chartSample.value(), maxValue);
-                float ratio = Math.max(0f, Math.min(1f, sample / (float) maxValue));
-                int shutdownX = Math.round(x0 + (i / (float) Math.max(1, values.size() - 1)) * chartWidth);
-                int shutdownY = Math.round(yBottom - (ratio * chartHeight));
-                g2.setColor(palette.backgroundColor());
-                g2.fillOval(shutdownX - 5, shutdownY - 5, 10, 10);
-                g2.setColor(Color.BLACK);
-                g2.fillOval(shutdownX - 3, shutdownY - 3, 6, 6);
             }
 
-            float latestRatio = Math.max(0f, Math.min(1f, latest / (float) maxValue));
-            int latestX = Math.round(x0 + (latestIndex / (float) Math.max(1, values.size() - 1)) * chartWidth);
-            int latestY = Math.round(yBottom - (latestRatio * chartHeight));
+            if (renderOptions == null || renderOptions.showLatestValue()) {
+                float latestRatio = Math.max(0f, Math.min(1f, latest / (float) maxValue));
+                int latestX = Math.round(x0 + (latestIndex / (float) Math.max(1, values.size() - 1)) * chartWidth);
+                int latestY = Math.round(yBottom - (latestRatio * chartHeight));
 
-            g2.setColor(palette.backgroundColor());
-            g2.fillOval(latestX - 5, latestY - 5, 10, 10);
-            g2.setColor(values.get(latestIndex) != null && values.get(latestIndex).isShutdownMarker() ? Color.BLACK : accent);
-            g2.fillOval(latestX - 3, latestY - 3, 6, 6);
+                g2.setColor(palette.backgroundColor());
+                g2.fillOval(latestX - 5, latestY - 5, 10, 10);
+                g2.setColor(values.get(latestIndex) != null && values.get(latestIndex).isShutdownMarker() ? Color.BLACK : accent);
+                g2.fillOval(latestX - 3, latestY - 3, 6, 6);
 
-            String latestValueLabel = formatAxisValue(latest);
-            FontMetrics latestValueMetrics = g2.getFontMetrics();
-            int latestLabelX = Math.min(width - latestValueMetrics.stringWidth(latestValueLabel) - 8, latestX + 12);
-            int latestLabelY = Math.max(y0 + latestValueMetrics.getAscent(), Math.min(yBottom - 4, latestY + (latestValueMetrics.getAscent() / 2)));
-            g2.setColor(palette.textColor());
-            g2.drawString(latestValueLabel, latestLabelX, latestLabelY);
+                String latestValueLabel = formatAxisValue(latest);
+                FontMetrics latestValueMetrics = g2.getFontMetrics();
+                int latestLabelX = Math.min(width - latestValueMetrics.stringWidth(latestValueLabel) - 8, latestX + 12);
+                int latestLabelY = Math.max(y0 + latestValueMetrics.getAscent(), Math.min(yBottom - 4, latestY + (latestValueMetrics.getAscent() / 2)));
+                g2.setColor(palette.textColor());
+                g2.drawString(latestValueLabel, latestLabelX, latestLabelY);
+            }
 
             if (includeHover && hoveredSampleIndex >= 0 && hoveredSampleIndex < values.size() && values.get(hoveredSampleIndex) != null) {
                 ChartSample hoveredSample = values.get(hoveredSampleIndex);
