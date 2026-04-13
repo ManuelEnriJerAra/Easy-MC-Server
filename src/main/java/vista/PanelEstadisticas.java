@@ -1350,15 +1350,7 @@ public class PanelEstadisticas extends JPanel {
         if (button == null) {
             return;
         }
-        button.setFocusPainted(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        button.setOpaque(false);
-        button.setContentAreaFilled(true);
-        button.setBorderPainted(true);
-        button.putClientProperty("JButton.buttonType", "roundRect");
-        button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
-        button.setBackground(AppTheme.getSurfaceBackground());
-        button.setForeground(AppTheme.getForeground());
+        AppTheme.applyActionButtonStyle(button);
     }
 
     private String getServerHistoryKey() {
@@ -1460,10 +1452,8 @@ public class PanelEstadisticas extends JPanel {
         for (JCheckBox checkBox : exportCheckBoxes) {
             checkBox.setOpaque(false);
         }
-        previewLabel.setOpaque(true);
-        previewLabel.setBackground(AppTheme.getSurfaceBackground());
+        AppTheme.applySurfacePreviewStyle(previewLabel, new Insets(10, 10, 10, 10));
         previewLabel.setForeground(AppTheme.getMutedForeground());
-        previewLabel.setBorder(AppTheme.createRoundedBorder(new Insets(10, 10, 10, 10), 1f));
         previewLabel.setPreferredSize(new Dimension(920, 320));
         previewLabel.setMinimumSize(new Dimension(720, 260));
 

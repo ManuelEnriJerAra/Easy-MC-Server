@@ -378,9 +378,7 @@ public class PanelConfigServidor extends JPanel {
         applyDefaultSaveButtonStyle();
         saveButton.setEnabled(hasUnsavedChanges);
         if(hasUnsavedChanges){
-            saveButton.setBackground(AppTheme.getMainAccent());
-            saveButton.setForeground(Color.WHITE);
-            saveButton.setBorder(AppTheme.createAccentBorder(new Insets(6, 12, 6, 12), 1f));
+            AppTheme.applyAccentButtonStyle(saveButton);
         }
         saveButton.revalidate();
         saveButton.repaint();
@@ -393,15 +391,7 @@ public class PanelConfigServidor extends JPanel {
 
     private void styleActionButton(JButton button){
         if(button == null) return;
-        button.setFocusPainted(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        button.setOpaque(false);
-        button.setContentAreaFilled(true);
-        button.setBorderPainted(true);
-        button.putClientProperty("JButton.buttonType", "roundRect");
-        button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
-        button.setBackground(AppTheme.getSurfaceBackground());
-        button.setForeground(AppTheme.getForeground());
+        AppTheme.applyActionButtonStyle(button);
     }
 
     private void attachDirtyTracking(JCheckBox checkBox){
@@ -731,76 +721,40 @@ public class PanelConfigServidor extends JPanel {
     }
 
     private JComponent crearTarjetaCampoVertical(FieldSpec spec){
-        JPanel card = new JPanel(new BorderLayout(0, 6));
-        card.setOpaque(true);
-        card.setBackground(AppTheme.getSurfaceBackground());
-        card.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true),
-                BorderFactory.createEmptyBorder(7, 8, 7, 8)
-        ));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-
-        JLabel label = new JLabel(formatLabel(spec.key()));
-        label.setFont(label.getFont().deriveFont(Font.BOLD, 13f));
-        applyTooltip(label, spec.key());
         JComponent editor = crearEditor(spec.key(), spec.value());
-        card.add(label, BorderLayout.NORTH);
-        card.add(editor, BorderLayout.CENTER);
-        makeWidthFlexible(card);
-        return card;
+        return BoxCategory.createFieldCard(
+                formatLabel(spec.key()),
+                editor,
+                6,
+                new Insets(7, 8, 7, 8),
+                label -> applyTooltip(label, spec.key())
+        );
     }
 
     private JComponent crearTarjetaBoolean(FieldSpec spec){
-        JPanel card = new JPanel(new BorderLayout());
-        card.setOpaque(true);
-        card.setBackground(AppTheme.getSurfaceBackground());
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)
-        ));
-
         JCheckBox checkBox = new JCheckBox(formatLabel(spec.key()));
         checkBox.setOpaque(false);
         checkBox.setSelected("true".equalsIgnoreCase(spec.value()));
         applyTooltip(checkBox, spec.key());
         attachDirtyTracking(checkBox);
         editors.put(spec.key(), checkBox);
-        card.add(checkBox, BorderLayout.CENTER);
-        makeWidthFlexible(card);
-        return card;
+        return BoxCategory.createBooleanCard(formatLabel(spec.key()), checkBox);
     }
 
     private JComponent crearTarjetaNumero(FieldSpec spec){
-        JPanel card = new JPanel(new BorderLayout(0, 4));
-        card.setOpaque(true);
-        card.setBackground(AppTheme.getSurfaceBackground());
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)
-        ));
-
-        JLabel label = new JLabel(formatLabel(spec.key()));
-        label.setFont(label.getFont().deriveFont(Font.BOLD, 13f));
-        applyTooltip(label, spec.key());
         JComponent editor = crearEditor(spec.key(), spec.value());
-        card.add(label, BorderLayout.NORTH);
-        card.add(editor, BorderLayout.CENTER);
-        makeWidthFlexible(card);
-        return card;
+        return BoxCategory.createFieldCard(
+                formatLabel(spec.key()),
+                editor,
+                4,
+                new Insets(6, 8, 6, 8),
+                label -> applyTooltip(label, spec.key())
+        );
     }
 
     private JComponent crearTarjetaRam(){
-        JPanel card = new JPanel();
-        card.setOpaque(true);
-        card.setBackground(AppTheme.getSurfaceBackground());
-        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel card = BoxCategory.createSurfacePanel(new BorderLayout(), new Insets(7, 8, 7, 8));
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true),
-                BorderFactory.createEmptyBorder(7, 8, 7, 8)
-        ));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
         Server server = gestorServidores.getServidorSeleccionado();
         ServerConfig config = server != null ? server.getServerConfig() : null;

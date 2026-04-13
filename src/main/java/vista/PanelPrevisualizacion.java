@@ -44,7 +44,7 @@ public class PanelPrevisualizacion extends JPanel {
 
         ImageIcon icono = server.getServerIconOrUseDefault();
         ImagenRedondaLabel iconoRedondo = new ImagenRedondaLabel(icono, 10, 96, 96);
-        iconoRedondo.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        AppTheme.applyHandCursor(iconoRedondo);
         iconoRedondo.setToolTipText("Cambiar icono del servidor");
         iconoRedondo.setHoverOverlayEnabled(true);
         iconoRedondo.setHoverText("EDIT");
@@ -93,7 +93,7 @@ public class PanelPrevisualizacion extends JPanel {
         nombreField.putClientProperty("fullText", nombre == null ? "" : nombre);
         nombreField.setToolTipText(nombre);
 
-        nombreField.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        AppTheme.applyHandCursor(nombreField);
         nombreField.setToolTipText("Click para editar (Enter o fuera para guardar)");
         nombreField.addMouseListener(new MouseAdapter() {
             @Override
@@ -491,7 +491,7 @@ public class PanelPrevisualizacion extends JPanel {
             JPanel uploadPanel = new JPanel(new BorderLayout(0, 10));
             uploadPanel.setOpaque(true);
             uploadPanel.setBackground(AppTheme.getSurfaceBackground());
-            uploadPanel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            AppTheme.applyHandCursor(uploadPanel);
             uploadPanel.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createDashedBorder(AppTheme.getMainAccent(), 1f, 6f, 3f, true),
                     BorderFactory.createEmptyBorder(28, 28, 28, 28)
@@ -561,17 +561,13 @@ public class PanelPrevisualizacion extends JPanel {
                 }
             }
 
-            JPanel section = new JPanel(new BorderLayout(0, 8));
-            section.setOpaque(false);
-            section.setBorder(BorderFactory.createTitledBorder("Easy MC Images"));
+            JPanel section = BoxCategory.createTitledSection("Easy MC Images", 8);
             section.add(wrap, BorderLayout.CENTER);
             return section;
         }
 
         private static JComponent crearSeccionPreviews(JDialog dialog, List<Server> servers, Server selectedServer, ImageSelectionResult[] result) {
-            JPanel section = new JPanel(new BorderLayout(0, 6));
-            section.setOpaque(false);
-            section.setBorder(BorderFactory.createTitledBorder("Previews de mundos"));
+            JPanel section = BoxCategory.createTitledSection("Previews de mundos", 6);
 
             JComboBox<Server> serverCombo = new JComboBox<>((servers == null ? List.<Server>of() : servers).toArray(Server[]::new));
             serverCombo.setRenderer(new DefaultListCellRenderer() {
@@ -630,13 +626,7 @@ public class PanelPrevisualizacion extends JPanel {
         }
 
         private static JComponent crearTarjetaVacia(String texto) {
-            JPanel empty = new JPanel(new BorderLayout());
-            empty.setOpaque(true);
-            empty.setBackground(AppTheme.getSurfaceBackground());
-            empty.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor()),
-                    BorderFactory.createEmptyBorder(18, 18, 18, 18)
-            ));
+            JPanel empty = BoxCategory.createSurfacePanel(new BorderLayout(), new Insets(18, 18, 18, 18));
             JLabel label = new JLabel(texto);
             label.setForeground(AppTheme.getMutedForeground());
             empty.add(label, BorderLayout.CENTER);
@@ -647,15 +637,7 @@ public class PanelPrevisualizacion extends JPanel {
             JButton card = new FlatButton();
             card.setLayout(new BorderLayout(0, 6));
             card.setPreferredSize(new Dimension(198, 154));
-            card.setFocusPainted(false);
-            card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            card.setHorizontalAlignment(SwingConstants.LEFT);
-            card.setVerticalAlignment(SwingConstants.TOP);
-            card.setBackground(AppTheme.getSurfaceBackground());
-            card.setBorder(BorderFactory.createCompoundBorder(
-                    AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f),
-                    BorderFactory.createEmptyBorder(8, 8, 8, 8)
-            ));
+            BoxCategory.createSurfaceButtonCard(card, new Insets(8, 8, 8, 8));
 
             JLabel imageLabel = new JLabel("Cargando...", SwingConstants.CENTER);
             imageLabel.setPreferredSize(new Dimension(180, 110));

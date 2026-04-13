@@ -4,6 +4,7 @@ import com.formdev.flatlaf.ui.FlatLineBorder;
 import controlador.Main;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import java.awt.*;
 
 public final class AppTheme {
@@ -158,6 +159,50 @@ public final class AppTheme {
         if (label == null) return;
         label.setFont(label.getFont().deriveFont(Font.BOLD, Math.max(14f, label.getFont().getSize2D())));
         label.setBorder(BorderFactory.createEmptyBorder(4, 10, 2, 10));
+        label.setForeground(getCardTitleColor());
+    }
+
+    public static Color getCardTitleColor() {
+        Color panel = getPanelBackground();
+        float luminance = (0.299f * panel.getRed() + 0.587f * panel.getGreen() + 0.114f * panel.getBlue()) / 255f;
+        return luminance >= 0.5f
+                ? darken(getForeground(), 0.18f)
+                : tint(getForeground(), Color.BLACK, 0.22f);
+    }
+
+    public static void applyActionButtonStyle(AbstractButton button) {
+        if (button == null) return;
+        button.setFocusPainted(false);
+        applyHandCursor(button);
+        button.setOpaque(false);
+        button.setContentAreaFilled(true);
+        button.setBorderPainted(true);
+        button.putClientProperty("JButton.buttonType", "roundRect");
+        button.setBorder(createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
+        button.setBackground(getSurfaceBackground());
+        button.setForeground(getForeground());
+    }
+
+    public static void applyAccentButtonStyle(AbstractButton button) {
+        if (button == null) return;
+        applyActionButtonStyle(button);
+        button.setBackground(getMainAccent());
+        button.setForeground(Color.WHITE);
+        button.setBorder(createAccentBorder(new Insets(6, 12, 6, 12), 1f));
+    }
+
+    public static void applySurfacePreviewStyle(JComponent component, Insets padding) {
+        if (component == null) return;
+        Insets resolvedPadding = padding != null ? padding : new Insets(10, 10, 10, 10);
+        component.setOpaque(true);
+        component.setBackground(getSurfaceBackground());
+        Border border = createRoundedBorder(resolvedPadding, 1f);
+        component.setBorder(border);
+    }
+
+    public static void applyHandCursor(Component component) {
+        if (component == null) return;
+        component.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     }
 
     public static Color getHoverBackground() {

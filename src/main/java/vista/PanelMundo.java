@@ -409,20 +409,7 @@ public class PanelMundo extends JPanel {
     }
 
     private JPanel crearInfoRow(String titulo, JLabel valorLabel) {
-        JPanel panel = new JPanel(new BorderLayout(6, 0));
-        panel.setOpaque(false);
-        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel tituloLabel = new JLabel(titulo);
-        tituloLabel.setFont(tituloLabel.getFont().deriveFont(Font.BOLD));
-        tituloLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        valorLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        panel.add(tituloLabel, BorderLayout.WEST);
-        panel.add(valorLabel, BorderLayout.CENTER);
-        Dimension preferredSize = panel.getPreferredSize();
-        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
-        return panel;
+        return BoxCategory.createInfoRow(titulo, valorLabel);
     }
 
     private JLabel crearTituloTarjeta(String texto) {
@@ -1169,8 +1156,7 @@ public class PanelMundo extends JPanel {
         guardarConfiguracionMundoButton.setEnabled(hasUnsavedChanges);
         if (hasUnsavedChanges) {
             guardarConfiguracionMundoButton.setBackground(AppTheme.getMainAccent());
-            guardarConfiguracionMundoButton.setForeground(Color.WHITE);
-            guardarConfiguracionMundoButton.setBorder(AppTheme.createAccentBorder(new Insets(6, 12, 6, 12), 1f));
+            AppTheme.applyAccentButtonStyle(guardarConfiguracionMundoButton);
         }
         guardarConfiguracionMundoButton.revalidate();
         guardarConfiguracionMundoButton.repaint();
@@ -3234,15 +3220,7 @@ public class PanelMundo extends JPanel {
 
     private void styleActionButton(JButton button) {
         if (button == null) return;
-        button.setFocusPainted(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        button.setOpaque(false);
-        button.setContentAreaFilled(true);
-        button.setBorderPainted(true);
-        button.putClientProperty("JButton.buttonType", "roundRect");
-        button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 12, 6, 12), 1f));
-        button.setBackground(AppTheme.getSurfaceBackground());
-        button.setForeground(AppTheme.getForeground());
+        AppTheme.applyActionButtonStyle(button);
     }
 
     private void stylePreviewMenuButton(JButton button) {
@@ -3257,8 +3235,7 @@ public class PanelMundo extends JPanel {
 
     private void stylePreviewOverlayButton(JButton button) {
         if (button == null) return;
-        button.setBackground(AppTheme.getSurfaceBackground());
-        button.setForeground(AppTheme.getForeground());
+        AppTheme.applyActionButtonStyle(button);
     }
 
     private void stylePreviewStatusLabel(JLabel label) {
@@ -3316,10 +3293,7 @@ public class PanelMundo extends JPanel {
         configurarCentroRenderCombo();
         actualizarEstadoControlesRender();
 
-        JPanel optionsPanel = new JPanel(new GridLayout(1, 2, 14, 0));
-        optionsPanel.setOpaque(true);
-        optionsPanel.setBackground(AppTheme.getSurfaceBackground());
-        optionsPanel.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), 1f));
+        JPanel optionsPanel = BoxCategory.createSurfacePanel(new GridLayout(1, 2, 14, 0), new Insets(8, 8, 8, 8));
 
         JPanel leftColumn = new JPanel();
         leftColumn.setOpaque(false);
@@ -3461,7 +3435,7 @@ public class PanelMundo extends JPanel {
         }
         checkBox.setOpaque(false);
         checkBox.setFocusPainted(false);
-        checkBox.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        AppTheme.applyHandCursor(checkBox);
         checkBox.setForeground(AppTheme.getForeground());
     }
 
