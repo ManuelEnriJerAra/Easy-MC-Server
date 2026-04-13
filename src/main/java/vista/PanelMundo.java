@@ -1155,10 +1155,8 @@ public class PanelMundo extends JPanel {
         applyDefaultWorldSettingsSaveButtonStyle();
         guardarConfiguracionMundoButton.setEnabled(hasUnsavedChanges);
         if (hasUnsavedChanges) {
-            guardarConfiguracionMundoButton.setBackground(AppTheme.getMainAccent());
             AppTheme.applyAccentButtonStyle(guardarConfiguracionMundoButton);
         }
-        guardarConfiguracionMundoButton.revalidate();
         guardarConfiguracionMundoButton.repaint();
     }
 
@@ -3206,11 +3204,8 @@ public class PanelMundo extends JPanel {
         applyDefaultPrimaryButtonStyle();
         usarEsteMundoButton.setEnabled(cambioPendiente);
         if (cambioPendiente) {
-            usarEsteMundoButton.setBackground(AppTheme.getMainAccent());
-            usarEsteMundoButton.setForeground(Color.WHITE);
-            usarEsteMundoButton.setBorder(AppTheme.createAccentBorder(new Insets(6, 12, 6, 12), 1f));
+            AppTheme.applyAccentButtonStyle(usarEsteMundoButton);
         }
-        usarEsteMundoButton.revalidate();
         usarEsteMundoButton.repaint();
     }
 

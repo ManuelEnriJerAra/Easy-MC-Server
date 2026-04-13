@@ -360,19 +360,8 @@ public class PanelJugadores extends JPanel {
     private void refrescarUI(){
         CardLayout cardLayout = (CardLayout) panelCentro.getLayout();
         cardLayout.show(panelCentro, panelsPorJugador.isEmpty() ? CARD_VACIO : CARD_JUGADORES);
-
-        contenedorJugadores.revalidate();
-        contenedorJugadores.repaint();
-        panelSinJugadores.revalidate();
-        panelSinJugadores.repaint();
         panelCentro.revalidate();
         panelCentro.repaint();
-        if(scrollJugadores.getViewport() != null){
-            scrollJugadores.getViewport().revalidate();
-            scrollJugadores.getViewport().repaint();
-        }
-        this.revalidate();
-        this.repaint();
     }
 
     private void recargarContadores(){

@@ -30,6 +30,7 @@ public class PanelPrevisualizacion extends JPanel {
     };
 
     private final GestorServidores gestorServidores;
+
     private Server server = new Server();
 
     PanelPrevisualizacion(GestorServidores gestorServidores){
@@ -282,10 +283,7 @@ public class PanelPrevisualizacion extends JPanel {
             ImageIO.write(icon64, "png", outPath.toFile());
 
             iconoRedondo.setImageIcon(new ImageIcon(icon64));
-            iconoRedondo.revalidate();
             iconoRedondo.repaint();
-            PanelPrevisualizacion.this.revalidate();
-            PanelPrevisualizacion.this.repaint();
 
             try{
                 gestorServidores.guardarServidor(server);
@@ -498,10 +496,10 @@ public class PanelPrevisualizacion extends JPanel {
             ));
             uploadPanel.setPreferredSize(new Dimension(100, 170));
 
-            JLabel title = new JLabel("Arrastra una imagen aqui", SwingConstants.CENTER);
+            JLabel title = new JLabel("Arrastra una imagen aquí", SwingConstants.CENTER);
             title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
 
-            JLabel subtitle = new JLabel("o seleccionala desde tu ordenador", SwingConstants.CENTER);
+            JLabel subtitle = new JLabel("o selecciónala desde tu ordenador", SwingConstants.CENTER);
             subtitle.setForeground(AppTheme.getMutedForeground());
 
             JPanel textWrap = new JPanel(new GridBagLayout());
@@ -554,7 +552,7 @@ public class PanelPrevisualizacion extends JPanel {
             wrap.setOpaque(false);
 
             if(easyMcImages == null || easyMcImages.isEmpty()){
-                wrap.add(crearTarjetaVacia("No hay imagenes internas disponibles ahora mismo."));
+                wrap.add(crearTarjetaVacia("No hay imágenes internas disponibles ahora mismo."));
             } else {
                 for(EasyMcImageOption image : easyMcImages){
                     wrap.add(crearBotonEasyMcImage(dialog, image, result));
@@ -599,7 +597,7 @@ public class PanelPrevisualizacion extends JPanel {
                         ? cargarPreviewsServidor(server)
                         : List.of();
                 if(previews.isEmpty()){
-                    wrap.add(crearTarjetaVacia("No hay previews generadas todavia para este servidor."));
+                    wrap.add(crearTarjetaVacia("No hay previews generadas todavía para este servidor."));
                 } else {
                     for(PreviewMundoOption preview : previews){
                         wrap.add(crearTarjetaPreview(dialog, preview, result));

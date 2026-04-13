@@ -126,13 +126,13 @@ public class VentanaPrincipal extends JFrame {
         nuevoServerButton.setText("+");
         importarServerButton = new FlatButton();
         importarServerButton.setText("↓");
-        importarServerButton.setToolTipText("Importar servidor");
+        importarServerButton.setToolTipText("Importar");
         borrarServerButton = new FlatButton();
         borrarServerButton.setText("-");
-        borrarServerButton.setToolTipText("Eliminar servidor");
+        borrarServerButton.setToolTipText("Eliminar");
         abrirCarpetaServerButton = new FlatButton();
         abrirCarpetaServerButton.setText("📁");
-        abrirCarpetaServerButton.setToolTipText("Abrir carpeta del servidor");
+        abrirCarpetaServerButton.setToolTipText("Abrir carpeta");
         abrirCarpetaServerButton.setEnabled(false);
         borrarServerButton.setEnabled(false);
 
@@ -184,7 +184,7 @@ public class VentanaPrincipal extends JFrame {
                 int confirm = JOptionPane.showConfirmDialog(
                         VentanaPrincipal.this,
                         "¿Seguro que quieres eliminar '" + server.getDisplayName() + "' de la lista?\n(No borra la carpeta del disco)",
-                        "Eliminar servidor",
+                        "Eliminar",
                         JOptionPane.YES_NO_OPTION,
                         JOptionPane.WARNING_MESSAGE
                 );
@@ -228,7 +228,7 @@ public class VentanaPrincipal extends JFrame {
                     JOptionPane.showMessageDialog(
                             VentanaPrincipal.this,
                             "No se ha podido eliminar el servidor.",
-                            "Eliminar servidor",
+                            "Eliminar",
                             JOptionPane.ERROR_MESSAGE
                     );
                 }
@@ -467,7 +467,7 @@ public class VentanaPrincipal extends JFrame {
         JButton mundo = crearNavButton("\uD83C\uDF0D", "Mundos", PaginaDerecha.MUNDO);
         JButton config = crearNavButton("\u2699", "Configuración del servidor", PaginaDerecha.CONFIG);
         JButton stats = crearNavButton("\uD83D\uDCC8", "Estadísticas", PaginaDerecha.STATS);
-        JButton temas = crearActionButton("\uD83D\uDD8C", "Apariencia", this::abrirSelectorTema);
+        JButton temas = crearActionButton("\uD83D\uDD8C", "Temas", this::abrirSelectorTema);
         JButton info = crearNavButton("\u2139", "Información", PaginaDerecha.INFO);
 
         botones.add(home);

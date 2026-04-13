@@ -1199,13 +1199,9 @@ public class PanelEstadisticas extends JPanel {
         guardarHistoricoButton.setEnabled(hasUnsavedChanges);
         reiniciarHistoricoButton.setEnabled(hasUnsavedChanges);
         if (hasUnsavedChanges) {
-            guardarHistoricoButton.setBackground(AppTheme.getMainAccent());
-            guardarHistoricoButton.setForeground(Color.WHITE);
-            guardarHistoricoButton.setBorder(AppTheme.createAccentBorder(new Insets(6, 12, 6, 12), 1f));
+            AppTheme.applyAccentButtonStyle(guardarHistoricoButton);
         }
-        guardarHistoricoButton.revalidate();
         guardarHistoricoButton.repaint();
-        reiniciarHistoricoButton.revalidate();
         reiniciarHistoricoButton.repaint();
     }
 
@@ -1393,7 +1389,7 @@ public class PanelEstadisticas extends JPanel {
 
     private void abrirDialogoExportacion() {
         Window owner = SwingUtilities.getWindowAncestor(this);
-        JDialog dialog = new JDialog(owner instanceof Frame frame ? frame : null, "Exportar estadisticas", Dialog.ModalityType.APPLICATION_MODAL);
+        JDialog dialog = new JDialog(owner instanceof Frame frame ? frame : null, "Exportar estadísticas", Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
         ExportPaletteModel paletteModel = createDefaultExportPaletteModel();
@@ -1641,7 +1637,7 @@ public class PanelEstadisticas extends JPanel {
         cancelarButton.addActionListener(e -> dialog.dispose());
         exportarButton.addActionListener(e -> {
             if (!incluirRamCheckBox.isSelected() && !incluirDiscoCheckBox.isSelected()) {
-                JOptionPane.showMessageDialog(dialog, "Selecciona al menos una grafica para exportar.", "Exportar estadisticas", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(dialog, "Selecciona al menos una gráfica para exportar.", "Exportar estadísticas", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             try {
@@ -1672,7 +1668,7 @@ public class PanelEstadisticas extends JPanel {
                 if ("EXPORT_CANCELLED".equals(ex.getMessage())) {
                     return;
                 }
-                JOptionPane.showMessageDialog(dialog, "No se ha podido exportar las estadisticas: " + ex.getMessage(), "Exportar estadisticas", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(dialog, "No se ha podido exportar las estadísticas: " + ex.getMessage(), "Exportar estadísticas", JOptionPane.ERROR_MESSAGE);
             }
         });
 
