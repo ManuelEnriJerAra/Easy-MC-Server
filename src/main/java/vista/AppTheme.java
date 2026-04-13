@@ -156,8 +156,8 @@ public final class AppTheme {
 
     public static void applyCardTitleStyle(JLabel label) {
         if (label == null) return;
-        label.setFont(label.getFont().deriveFont(Font.BOLD));
-        label.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        label.setFont(label.getFont().deriveFont(Font.BOLD, Math.max(14f, label.getFont().getSize2D())));
+        label.setBorder(BorderFactory.createEmptyBorder(4, 10, 2, 10));
     }
 
     public static Color getHoverBackground() {

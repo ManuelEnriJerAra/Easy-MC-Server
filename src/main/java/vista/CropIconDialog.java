@@ -12,6 +12,8 @@
 
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -76,8 +78,10 @@ public class CropIconDialog {
          *    - OK: toma el recorte actual y lo escala a 64x64 (con o sin antialias según el checkbox).
          *    - Cancelar / cerrar ventana: devuelve null.
          */
-        JButton ok = new JButton("Usar recorte");
-        JButton cancel = new JButton("Cancelar");
+        JButton ok = new FlatButton();
+        ok.setText("Usar recorte");
+        JButton cancel = new FlatButton();
+        cancel.setText("Cancelar");
 
         final BufferedImage[] result = new BufferedImage[1];
 

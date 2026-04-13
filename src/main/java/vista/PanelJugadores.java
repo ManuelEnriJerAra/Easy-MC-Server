@@ -1,5 +1,7 @@
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import controlador.GestorServidores;
 import controlador.MojangAPI;
 import modelo.Server;
@@ -45,10 +47,10 @@ public class PanelJugadores extends JPanel {
     private final JPanel panelCentro = new JPanel(new CardLayout());
     private final JPanel panelSinJugadores = new JPanel(new GridBagLayout());
 
-    private final JButton btnWhitelist = new JButton();
-    private final JButton btnOps = new JButton();
-    private final JButton btnBaneados = new JButton();
-    private final JButton btnBaneadosIp = new JButton();
+    private final JButton btnWhitelist = new FlatButton();
+    private final JButton btnOps = new FlatButton();
+    private final JButton btnBaneados = new FlatButton();
+    private final JButton btnBaneadosIp = new FlatButton();
 
     private Server server;
     private Consumer<String> consoleListener;
@@ -73,7 +75,8 @@ public class PanelJugadores extends JPanel {
 
         contenedorJugadores.setOpaque(true);
         contenedorJugadores.setBackground(AppTheme.getPanelBackground());
-        scrollJugadores = new JScrollPane(contenedorJugadores);
+        scrollJugadores = new FlatScrollPane();
+        scrollJugadores.setViewportView(contenedorJugadores);
         scrollJugadores.setBorder(null);
         scrollJugadores.setOpaque(true);
         scrollJugadores.setBackground(AppTheme.getPanelBackground());
@@ -83,7 +86,7 @@ public class PanelJugadores extends JPanel {
         scrollJugadores.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollJugadores.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
 
-        JLabel labelSinJugadores = new JLabel("No hay ningun jugador conectado.");
+        JLabel labelSinJugadores = new JLabel("No hay ningún jugador conectado.");
         labelSinJugadores.setFont(labelSinJugadores.getFont().deriveFont(Font.PLAIN, 15f));
         labelSinJugadores.setForeground(AppTheme.getMutedForeground());
         panelSinJugadores.setOpaque(true);
@@ -121,7 +124,8 @@ public class PanelJugadores extends JPanel {
         barraInferior.setBackground(AppTheme.getPanelBackground());
         barraInferior.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
 
-        JButton btnRecargar = new JButton("Recargar");
+        JButton btnRecargar = new FlatButton();
+        btnRecargar.setText("Recargar");
         estilizarBotonBarra(btnRecargar);
         btnRecargar.addActionListener(e -> recargarContadores());
 
@@ -427,12 +431,17 @@ public class PanelJugadores extends JPanel {
         JList<String> list = new JList<>(model);
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        JScrollPane scroll = new JScrollPane(list);
+        FlatScrollPane scroll = new FlatScrollPane();
+        scroll.setViewportView(list);
 
-        JButton btnAdd = new JButton("Añadir");
-        JButton btnRemove = new JButton("Quitar");
-        JButton btnRefresh = new JButton("Recargar");
-        JButton btnClose = new JButton("Cerrar");
+        JButton btnAdd = new FlatButton();
+        btnAdd.setText("Añadir");
+        JButton btnRemove = new FlatButton();
+        btnRemove.setText("Quitar");
+        JButton btnRefresh = new FlatButton();
+        btnRefresh.setText("Recargar");
+        JButton btnClose = new FlatButton();
+        btnClose.setText("Cerrar");
 
         btnAdd.addActionListener(e -> onAdd(tipo, model));
         btnRemove.addActionListener(e -> onRemove(tipo, list, model));

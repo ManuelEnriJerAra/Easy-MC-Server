@@ -1,5 +1,8 @@
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
+import com.formdev.flatlaf.extras.components.FlatTextField;
 import controlador.GestorMundos;
 import controlador.GestorServidores;
 import controlador.Utilidades;
@@ -77,7 +80,8 @@ public class PanelPrevisualizacion extends JPanel {
         JLabel nombreLabel = new JLabel(nombre);
         nombreLabel.setFont(nombreLabel.getFont().deriveFont(Font.BOLD, 18f));
 
-        JTextField nombreField = new JTextField(nombre);
+        FlatTextField nombreField = new FlatTextField();
+        nombreField.setText(nombre);
         nombreField.setFont(nombreLabel.getFont());
         javax.swing.border.Border borderNormal = BorderFactory.createEmptyBorder(2, 6, 2, 6);
         Font fontNormal = nombreField.getFont();
@@ -452,7 +456,8 @@ public class PanelPrevisualizacion extends JPanel {
             center.add(crearListadoImagenes(dialog, servers, selectedServer, easyMcImages, result), BorderLayout.CENTER);
             content.add(center, BorderLayout.CENTER);
 
-            JButton cancel = new JButton("Cancelar");
+            JButton cancel = new FlatButton();
+            cancel.setText("Cancelar");
             cancel.addActionListener(e -> {
                 result[0] = null;
                 dialog.dispose();
@@ -533,7 +538,8 @@ public class PanelPrevisualizacion extends JPanel {
             sections.add(Box.createVerticalStrut(12));
             sections.add(crearSeccionPreviews(dialog, servers, selectedServer, result));
 
-            JScrollPane scrollPane = new JScrollPane(sections);
+            FlatScrollPane scrollPane = new FlatScrollPane();
+            scrollPane.setViewportView(sections);
             scrollPane.setBorder(null);
             scrollPane.getVerticalScrollBar().setUnitIncrement(16);
             scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -585,7 +591,8 @@ public class PanelPrevisualizacion extends JPanel {
             if(selectedServer != null){
                 serverCombo.setSelectedItem(selectedServer);
             }
-            JButton resetButton = new JButton("Reiniciar");
+            JButton resetButton = new FlatButton();
+            resetButton.setText("Reiniciar");
 
             JPanel wrap = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 8));
             wrap.setOpaque(false);
@@ -637,7 +644,7 @@ public class PanelPrevisualizacion extends JPanel {
         }
 
         private static JComponent crearTarjetaPreview(JDialog dialog, PreviewMundoOption preview, ImageSelectionResult[] result) {
-            JButton card = new JButton();
+            JButton card = new FlatButton();
             card.setLayout(new BorderLayout(0, 6));
             card.setPreferredSize(new Dimension(198, 154));
             card.setFocusPainted(false);
@@ -684,7 +691,7 @@ public class PanelPrevisualizacion extends JPanel {
         }
 
         private static JComponent crearBotonEasyMcImage(JDialog dialog, EasyMcImageOption imageOption, ImageSelectionResult[] result) {
-            JButton button = new JButton();
+            JButton button = new FlatButton();
             button.setPreferredSize(new Dimension(64, 64));
             button.setMinimumSize(new Dimension(64, 64));
             button.setMaximumSize(new Dimension(64, 64));

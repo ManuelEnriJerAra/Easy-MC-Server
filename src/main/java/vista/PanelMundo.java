@@ -1,5 +1,10 @@
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatComboBox;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
+import com.formdev.flatlaf.extras.components.FlatSpinner;
+import com.formdev.flatlaf.extras.components.FlatTextField;
 import controlador.GestorMundos;
 import controlador.GestorServidores;
 import controlador.MCARenderer;
@@ -120,19 +125,19 @@ public class PanelMundo extends JPanel {
     private final JLabel initialDisabledPacksValueLabel = new JLabel("-");
     private final JLabel previewRenderStatusLabel = new JLabel();
     private final JPanel metadataReadPanel = new JPanel();
-    private final JComboBox<World> mundosCombo = new JComboBox<>();
-    private final JButton refrescarButton = new JButton("Refrescar");
-    private final JButton usarEsteMundoButton = new JButton("Usar este mundo");
-    private final JButton importarButton = new JButton("Importar mundo");
-    private final JButton exportarButton = new JButton("Exportar mundo");
-    private final JButton generarButton = new JButton("Generar nuevo");
-    private final JButton generarPreviewButton = new JButton("Generar preview");
-    private final JButton guardarConfiguracionMundoButton = new JButton("Guardar ajustes del mundo");
-    private final JButton previewMenuButton = new JButton("\u2630");
+    private final FlatComboBox<World> mundosCombo = new FlatComboBox<>();
+    private final JButton refrescarButton = new FlatButton();
+    private final JButton usarEsteMundoButton = new FlatButton();
+    private final JButton importarButton = new FlatButton();
+    private final JButton exportarButton = new FlatButton();
+    private final JButton generarButton = new FlatButton();
+    private final JButton generarPreviewButton = new FlatButton();
+    private final JButton guardarConfiguracionMundoButton = new FlatButton();
+    private final JButton previewMenuButton = new FlatButton();
     private final JCheckBox allowNetherCheckBox = new JCheckBox("Permitir Nether");
-    private final JSpinner spawnProtectionSpinner = new JSpinner(new SpinnerNumberModel(16, 0, Integer.MAX_VALUE, 1));
-    private final JSpinner maxWorldSizeSpinner = new JSpinner(new SpinnerNumberModel(29999984, 1, Integer.MAX_VALUE, 1));
-    private final JComboBox<String> regionCompressionCombo = new JComboBox<>(REGION_FILE_COMPRESSION_OPTIONS);
+    private final FlatSpinner spawnProtectionSpinner = new FlatSpinner();
+    private final FlatSpinner maxWorldSizeSpinner = new FlatSpinner();
+    private final FlatComboBox<String> regionCompressionCombo = new FlatComboBox<>();
     private JDialog previewOptionsDialog;
     private JPanel previewOptionsPanel;
     private final JCheckBox sombreadoMenuItem = new JCheckBox("Sombreado", true);
@@ -146,19 +151,8 @@ public class PanelMundo extends JPanel {
     private final JCheckBox mostrarJugadoresMenuItem = new JCheckBox("Mostrar jugadores", false);
     private final JCheckBox limitesChunksMenuItem = new JCheckBox("Límites de chunks", false);
     private final JCheckBox usarTodoMenuItem = new JCheckBox("Mapa completo", false);
-    private final JComboBox<PreviewRenderLimitOption> limiteRenderCombo = new JComboBox<>(new PreviewRenderLimitOption[]{
-            new PreviewRenderLimitOption("64x64", 64),
-            new PreviewRenderLimitOption("128x128", 128),
-            new PreviewRenderLimitOption("256x256", 256),
-            new PreviewRenderLimitOption("512x512", 512),
-            new PreviewRenderLimitOption("1024x1024", 1024),
-            new PreviewRenderLimitOption("2048x2048", 2048),
-            new PreviewRenderLimitOption("4096x4096", 4096),
-            new PreviewRenderLimitOption("8192x8192", 8192),
-            new PreviewRenderLimitOption("16384x16384", 16384),
-            new PreviewRenderLimitOption("Ilimitado", 0)
-    });
-    private final JComboBox<PreviewCenterOption> centroRenderCombo = new JComboBox<>();
+    private final FlatComboBox<PreviewRenderLimitOption> limiteRenderCombo = new FlatComboBox<>();
+    private final FlatComboBox<PreviewCenterOption> centroRenderCombo = new FlatComboBox<>();
     private final JLabel pesoMundoLabel = new JLabel("-");
     private final JLabel pesoStatsSavesLabel = new JLabel("Peso stats y saves: -");
     private final JLabel pesoTotalLabel = new JLabel("-");
@@ -209,10 +203,15 @@ public class PanelMundo extends JPanel {
         setOpaque(false);
         INSTANCIAS_ACTIVAS.add(this);
 
-        TitledCardPanel section = new TitledCardPanel("Mundos");
-        section.setBorder(BorderFactory.createEmptyBorder());
-        add(section, BorderLayout.CENTER);
 
+        refrescarButton.setText("Refrescar");
+        usarEsteMundoButton.setText("Usar este mundo");
+        importarButton.setText("Importar mundo");
+        exportarButton.setText("Exportar mundo");
+        generarButton.setText("Generar nuevo");
+        generarPreviewButton.setText("Generar preview");
+        guardarConfiguracionMundoButton.setText("Guardar ajustes del mundo");
+        previewMenuButton.setText("\u2630");
         styleActionButton(refrescarButton);
         styleActionButton(importarButton);
         styleActionButton(exportarButton);
@@ -222,6 +221,21 @@ public class PanelMundo extends JPanel {
         stylePreviewOverlayButton(generarPreviewButton);
         stylePreviewMenuButton(previewMenuButton);
         applyDefaultPrimaryButtonStyle();
+        spawnProtectionSpinner.setModel(new SpinnerNumberModel(16, 0, Integer.MAX_VALUE, 1));
+        maxWorldSizeSpinner.setModel(new SpinnerNumberModel(29999984, 1, Integer.MAX_VALUE, 1));
+        regionCompressionCombo.setModel(new DefaultComboBoxModel<>(REGION_FILE_COMPRESSION_OPTIONS));
+        limiteRenderCombo.setModel(new DefaultComboBoxModel<>(new PreviewRenderLimitOption[]{
+                new PreviewRenderLimitOption("64x64", 64),
+                new PreviewRenderLimitOption("128x128", 128),
+                new PreviewRenderLimitOption("256x256", 256),
+                new PreviewRenderLimitOption("512x512", 512),
+                new PreviewRenderLimitOption("1024x1024", 1024),
+                new PreviewRenderLimitOption("2048x2048", 2048),
+                new PreviewRenderLimitOption("4096x4096", 4096),
+                new PreviewRenderLimitOption("8192x8192", 8192),
+                new PreviewRenderLimitOption("16384x16384", 16384),
+                new PreviewRenderLimitOption("Ilimitado", 0)
+        }));
 
         previewImageLabel.setPreferredSize(new Dimension(320, 320));
         previewImageLabel.setMinimumSize(new Dimension(260, 260));
@@ -285,7 +299,6 @@ public class PanelMundo extends JPanel {
         JPanel body = new JPanel();
         body.setOpaque(false);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.setBorder(BorderFactory.createEmptyBorder());
         body.add(crearTarjetaPrincipal());
         body.add(Box.createVerticalStrut(8));
         body.add(crearFilaInferior());
@@ -363,12 +376,12 @@ public class PanelMundo extends JPanel {
         izquierda.add(accionesPanel, BorderLayout.SOUTH);
 
         izquierdaWrap.add(izquierda, BorderLayout.CENTER);
-        card.add(izquierdaWrap, BorderLayout.CENTER);
+        card.getContentPanel().add(izquierdaWrap, BorderLayout.CENTER);
 
         JPanel previewWrap = new JPanel(new BorderLayout());
         previewWrap.setOpaque(false);
         previewWrap.add(crearPanelPreview(), BorderLayout.NORTH);
-        card.add(previewWrap, BorderLayout.EAST);
+        card.getContentPanel().add(previewWrap, BorderLayout.EAST);
         ajustarAlturaTarjetaPrincipal(card);
         return card;
     }
@@ -415,7 +428,6 @@ public class PanelMundo extends JPanel {
     private JLabel crearTituloTarjeta(String texto) {
         JLabel titulo = new JLabel(texto);
         AppTheme.applyCardTitleStyle(titulo);
-        titulo.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
         return titulo;
     }
 
@@ -447,70 +459,60 @@ public class PanelMundo extends JPanel {
     }
 
     private JPanel crearTarjetaDatosMundo() {
-        CardPanel card = new CardPanel(new BorderLayout(), new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Datos", new Insets(12, 12, 12, 12));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
-        JLabel titulo = crearTituloTarjeta("Datos");
-        card.add(titulo, BorderLayout.NORTH);
-
-        JScrollPane lecturaScroll = new JScrollPane(metadataReadPanel);
+        FlatScrollPane lecturaScroll = new FlatScrollPane();
+        lecturaScroll.setViewportView(metadataReadPanel);
         lecturaScroll.setBorder(BorderFactory.createEmptyBorder());
         lecturaScroll.getViewport().setOpaque(false);
         lecturaScroll.setOpaque(false);
         lecturaScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         lecturaScroll.setPreferredSize(new Dimension(0, 250));
-        lecturaScroll.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
         lecturaScroll.getVerticalScrollBar().setUnitIncrement(20);
         lecturaScroll.getVerticalScrollBar().setBlockIncrement(80);
-        card.add(lecturaScroll, BorderLayout.CENTER);
+        card.getContentPanel().add(lecturaScroll, BorderLayout.CENTER);
         return card;
     }
 
     private JPanel crearTarjetaConfiguracionMundo() {
-        CardPanel card = new CardPanel(new BorderLayout(), new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Configuración", new Insets(12, 12, 12, 12));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-
-        JLabel titulo = crearTituloTarjeta("Configuracion");
-        card.add(titulo, BorderLayout.NORTH);
 
         JPanel ajustes = new JPanel();
         ajustes.setOpaque(false);
         ajustes.setLayout(new BoxLayout(ajustes, BoxLayout.Y_AXIS));
-        ajustes.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
         ajustes.add(crearTarjetaAjusteBooleano("Permitir Nether", allowNetherCheckBox));
         ajustes.add(Box.createVerticalStrut(4));
         ajustes.add(crearTarjetaAjusteCampo("Region file compression", regionCompressionCombo));
         ajustes.add(Box.createVerticalStrut(4));
-        ajustes.add(crearTarjetaAjusteCampo("Proteccion del spawn", spawnProtectionSpinner));
+        ajustes.add(crearTarjetaAjusteCampo("Protección del spawn", spawnProtectionSpinner));
         ajustes.add(Box.createVerticalStrut(4));
-        ajustes.add(crearTarjetaAjusteCampo("Tamaño maximo del mundo", maxWorldSizeSpinner));
+        ajustes.add(crearTarjetaAjusteCampo("Tamaño máximo del mundo", maxWorldSizeSpinner));
         ajustes.add(Box.createVerticalGlue());
         ajustes.add(Box.createVerticalStrut(6));
         guardarConfiguracionMundoButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         guardarConfiguracionMundoButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, guardarConfiguracionMundoButton.getPreferredSize().height));
         ajustes.add(guardarConfiguracionMundoButton);
 
-        JScrollPane ajustesScroll = new JScrollPane(ajustes);
+        FlatScrollPane ajustesScroll = new FlatScrollPane();
+        ajustesScroll.setViewportView(ajustes);
         ajustesScroll.setBorder(BorderFactory.createEmptyBorder());
         ajustesScroll.getViewport().setOpaque(false);
         ajustesScroll.setOpaque(false);
         ajustesScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         ajustesScroll.getVerticalScrollBar().setUnitIncrement(18);
         ajustesScroll.getVerticalScrollBar().setBlockIncrement(72);
-        card.add(ajustesScroll, BorderLayout.CENTER);
+        card.getContentPanel().add(ajustesScroll, BorderLayout.CENTER);
         return card;
     }
 
     private JPanel crearTarjetaConexiones() {
-        CardPanel card = new CardPanel(new BorderLayout(), new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Últimas conexiones", new Insets(12, 12, 12, 12));
 
-        JLabel titulo = crearTituloTarjeta("Últimas conexiones");
-        card.add(titulo, BorderLayout.NORTH);
-
-        conexionesPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-        card.add(conexionesPanel, BorderLayout.CENTER);
+        card.getContentPanel().add(conexionesPanel, BorderLayout.CENTER);
         return card;
     }
 
@@ -945,7 +947,7 @@ public class PanelMundo extends JPanel {
     private void guardarConfiguracionMundo() {
         Server server = gestorServidores.getServidorSeleccionado();
         if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
-            JOptionPane.showMessageDialog(this, "No hay un servidor seleccionado.", "Configuracion del mundo", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "No hay un servidor seleccionado.", "Configuración del mundo", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -961,7 +963,7 @@ public class PanelMundo extends JPanel {
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this,
                     "No se han podido guardar los ajustes del mundo: " + ex.getMessage(),
-                    "Configuracion del mundo",
+                    "Configuración del mundo",
                     JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -971,12 +973,15 @@ public class PanelMundo extends JPanel {
         allowNetherCheckBox.setFocusPainted(false);
         allowNetherCheckBox.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         allowNetherCheckBox.addActionListener(e -> updateWorldSettingsSaveButtonState());
+        mundosCombo.setRoundRect(true);
         regionCompressionCombo.setOpaque(false);
         regionCompressionCombo.setFocusable(false);
-        regionCompressionCombo.putClientProperty("JComponent.roundRect", true);
+        regionCompressionCombo.setRoundRect(true);
         regionCompressionCombo.setMaximumSize(new Dimension(180, 30));
         regionCompressionCombo.setPreferredSize(new Dimension(180, 30));
         regionCompressionCombo.addActionListener(e -> updateWorldSettingsSaveButtonState());
+        spawnProtectionSpinner.setRoundRect(true);
+        maxWorldSizeSpinner.setRoundRect(true);
         spawnProtectionSpinner.setMaximumSize(new Dimension(180, 30));
         maxWorldSizeSpinner.setMaximumSize(new Dimension(180, 30));
         spawnProtectionSpinner.addChangeListener(e -> updateWorldSettingsSaveButtonState());
@@ -1525,19 +1530,34 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        JTextField nombreField = new JTextField(MinecraftConstants.DEFAULT_WORLD_NAME + "-nuevo");
-        JTextField semillaField = new JTextField();
-        JComboBox<String> tipoBox = new JComboBox<>(MinecraftConstants.WORLD_TYPES.toArray(String[]::new));
-        JTextField generatorSettingsField = new JTextField("{}");
-        JComboBox<String> gamemodeBox = new JComboBox<>(MinecraftConstants.GAMEMODES.toArray(String[]::new));
-        JComboBox<String> dificultadBox = new JComboBox<>(MinecraftConstants.DIFFICULTIES.toArray(String[]::new));
+        FlatTextField nombreField = new FlatTextField();
+        nombreField.setText(MinecraftConstants.DEFAULT_WORLD_NAME + "-nuevo");
+        nombreField.setRoundRect(true);
+        FlatTextField semillaField = new FlatTextField();
+        semillaField.setRoundRect(true);
+        FlatComboBox<String> tipoBox = new FlatComboBox<>();
+        tipoBox.setModel(new DefaultComboBoxModel<>(MinecraftConstants.WORLD_TYPES.toArray(String[]::new)));
+        tipoBox.setRoundRect(true);
+        FlatTextField generatorSettingsField = new FlatTextField();
+        generatorSettingsField.setText("{}");
+        generatorSettingsField.setRoundRect(true);
+        FlatComboBox<String> gamemodeBox = new FlatComboBox<>();
+        gamemodeBox.setModel(new DefaultComboBoxModel<>(MinecraftConstants.GAMEMODES.toArray(String[]::new)));
+        gamemodeBox.setRoundRect(true);
+        FlatComboBox<String> dificultadBox = new FlatComboBox<>();
+        dificultadBox.setModel(new DefaultComboBoxModel<>(MinecraftConstants.DIFFICULTIES.toArray(String[]::new)));
+        dificultadBox.setRoundRect(true);
         JCheckBox estructurasBox = new JCheckBox("Generar estructuras", true);
         JCheckBox hardcoreBox = new JCheckBox("Hardcore", false);
         JCheckBox netherBox = new JCheckBox("Permitir Nether", true);
         JCheckBox activarBox = new JCheckBox("Seleccionar al crear", true);
-        JTextField initialEnabledPacksField = new JTextField();
-        JTextField initialDisabledPacksField = new JTextField();
-        JComboBox<String> regionFileCompressionBox = new JComboBox<>(REGION_FILE_COMPRESSION_OPTIONS);
+        FlatTextField initialEnabledPacksField = new FlatTextField();
+        initialEnabledPacksField.setRoundRect(true);
+        FlatTextField initialDisabledPacksField = new FlatTextField();
+        initialDisabledPacksField.setRoundRect(true);
+        FlatComboBox<String> regionFileCompressionBox = new FlatComboBox<>();
+        regionFileCompressionBox.setModel(new DefaultComboBoxModel<>(REGION_FILE_COMPRESSION_OPTIONS));
+        regionFileCompressionBox.setRoundRect(true);
         regionFileCompressionBox.setSelectedItem("deflate");
         instalarCampoGeneratorSettings(generatorSettingsField);
 
@@ -2783,7 +2803,7 @@ public class PanelMundo extends JPanel {
             actualizarPreviewSeleccionada();
             return;
         }
-        mostrarTextoPreview("La preview todavÃ­a no existe.");
+        mostrarTextoPreview("La preview todavía no existe.");
     }
 
     private void sincronizarEstadoRenderCompartido() {
@@ -3357,7 +3377,8 @@ public class PanelMundo extends JPanel {
         JPanel optionsContainer = new JPanel(new BorderLayout());
         optionsContainer.setOpaque(false);
 
-        JScrollPane optionsScrollPane = new JScrollPane(optionsPanel);
+        FlatScrollPane optionsScrollPane = new FlatScrollPane();
+        optionsScrollPane.setViewportView(optionsPanel);
         optionsScrollPane.setBorder(BorderFactory.createEmptyBorder());
         optionsScrollPane.setOpaque(false);
         optionsScrollPane.getViewport().setOpaque(false);
@@ -3456,7 +3477,7 @@ public class PanelMundo extends JPanel {
     private void configurarLimiteRenderCombo() {
         limiteRenderCombo.setOpaque(false);
         limiteRenderCombo.setFocusable(false);
-        limiteRenderCombo.putClientProperty("JComponent.roundRect", true);
+        limiteRenderCombo.setRoundRect(true);
         limiteRenderCombo.setMaximumSize(new Dimension(180, 30));
         limiteRenderCombo.setPreferredSize(new Dimension(180, 30));
         limiteRenderCombo.addActionListener(e -> {
@@ -3484,7 +3505,7 @@ public class PanelMundo extends JPanel {
     private void configurarCentroRenderCombo() {
         centroRenderCombo.setOpaque(false);
         centroRenderCombo.setFocusable(false);
-        centroRenderCombo.putClientProperty("JComponent.roundRect", true);
+        centroRenderCombo.setRoundRect(true);
         centroRenderCombo.setMaximumSize(new Dimension(180, 30));
         centroRenderCombo.setPreferredSize(new Dimension(180, 30));
         centroRenderCombo.addActionListener(e -> {
@@ -4254,3 +4275,5 @@ public class PanelMundo extends JPanel {
         }
     }
 }
+
+

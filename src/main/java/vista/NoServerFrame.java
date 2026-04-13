@@ -11,6 +11,7 @@
 
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
 import controlador.GestorServidores;
 import modelo.Server;
 
@@ -108,7 +109,8 @@ public class NoServerFrame extends JFrame {
         JPanel botonesNuevo = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0));
         botonesNuevo.setBackground(AppTheme.getPanelBackground());
         panelDerecho.add(botonesNuevo, c2);
-        JButton crearNuevo = new JButton("Crear Nuevo");
+        JButton crearNuevo = new FlatButton();
+        crearNuevo.setText("Crear Nuevo");
         botonesNuevo.add(crearNuevo);
         crearNuevo.addActionListener(e -> {
             Server server = gestorServidores.crearServidor();
@@ -119,7 +121,8 @@ public class NoServerFrame extends JFrame {
                 this.dispose();
             }
         });
-        JButton importar = new JButton("Importar");
+        JButton importar = new FlatButton();
+        importar.setText("Importar");
         importar.addActionListener(e -> {
             Server server = gestorServidores.importarServidor();
             if (server!=null){

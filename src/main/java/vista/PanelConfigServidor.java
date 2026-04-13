@@ -1,5 +1,12 @@
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatComboBox;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
+import com.formdev.flatlaf.extras.components.FlatSlider;
+import com.formdev.flatlaf.extras.components.FlatSpinner;
+import com.formdev.flatlaf.extras.components.FlatTextArea;
+import com.formdev.flatlaf.extras.components.FlatTextField;
 import controlador.GestorServidores;
 import modelo.Server;
 import modelo.ServerConfig;
@@ -82,13 +89,15 @@ public class PanelConfigServidor extends JPanel {
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
 
-        TitledCardPanel section = new TitledCardPanel("Configuración del servidor");
+        CardPanel section = new CardPanel("Configuración del servidor");
         section.setBorder(BorderFactory.createEmptyBorder());
         this.add(section, BorderLayout.CENTER);
 
-        JButton recargar = new JButton(tr("panel.config.reload", "Recargar"));
+        JButton recargar = new FlatButton();
+        recargar.setText(tr("panel.config.reload", "Recargar"));
         styleActionButton(recargar);
-        saveButton = new JButton(tr("panel.config.save", "Guardar"));
+        saveButton = new FlatButton();
+        saveButton.setText(tr("panel.config.save", "Guardar"));
         applyDefaultSaveButtonStyle();
         section.getActionsPanel().add(recargar);
         section.getActionsPanel().add(saveButton);
@@ -98,7 +107,8 @@ public class PanelConfigServidor extends JPanel {
         formPanel.setLayout(new BoxLayout(formPanel, BoxLayout.Y_AXIS));
         formPanel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
 
-        JScrollPane scroll = new JScrollPane(formPanel);
+        FlatScrollPane scroll = new FlatScrollPane();
+        scroll.setViewportView(formPanel);
         scroll.setBorder(null);
         scroll.setOpaque(true);
         scroll.setBackground(AppTheme.getPanelBackground());
@@ -270,7 +280,8 @@ public class PanelConfigServidor extends JPanel {
     }
 
     private JButton createOptionButton(String text){
-        JButton button = new JButton(text);
+        JButton button = new FlatButton();
+        button.setText(text);
         button.setFocusPainted(false);
         button.setOpaque(true);
         button.setContentAreaFilled(true);
@@ -845,7 +856,10 @@ public class PanelConfigServidor extends JPanel {
     }
 
     private JSlider createRamSlider(int value){
-        JSlider slider = new JSlider(RAM_MIN_MB, RAM_MAX_MB, normalizeRamValue(value));
+        FlatSlider slider = new FlatSlider();
+        slider.setMinimum(RAM_MIN_MB);
+        slider.setMaximum(RAM_MAX_MB);
+        slider.setValue(normalizeRamValue(value));
         slider.setOpaque(false);
         slider.setMajorTickSpacing(2048);
         slider.setMinorTickSpacing(RAM_STEP_MB);
@@ -854,7 +868,10 @@ public class PanelConfigServidor extends JPanel {
     }
 
     private JSpinner createRamSpinner(int value){
-        return new JSpinner(new SpinnerNumberModel(normalizeRamValue(value), RAM_MIN_MB, RAM_MAX_MB, RAM_STEP_MB));
+        FlatSpinner spinner = new FlatSpinner();
+        spinner.setModel(new SpinnerNumberModel(normalizeRamValue(value), RAM_MIN_MB, RAM_MAX_MB, RAM_STEP_MB));
+        spinner.setRoundRect(true);
+        return spinner;
     }
 
     private void syncRamFromSliders(boolean changedMin){
@@ -926,7 +943,9 @@ public class PanelConfigServidor extends JPanel {
 
     private JComponent crearEditor(String key, String value){
         if("difficulty".equalsIgnoreCase(key)){
-            JComboBox<String> combo = new JComboBox<>(DIFFICULTY_OPTIONS);
+            FlatComboBox<String> combo = new FlatComboBox<>();
+            combo.setModel(new DefaultComboBoxModel<>(DIFFICULTY_OPTIONS));
+            combo.setRoundRect(true);
             combo.setSelectedItem(normalizeDifficulty(value));
             attachDirtyTracking(combo);
             editors.put(key, combo);
@@ -935,7 +954,9 @@ public class PanelConfigServidor extends JPanel {
         }
 
         if("gamemode".equalsIgnoreCase(key)){
-            JComboBox<String> combo = new JComboBox<>(GAMEMODE_OPTIONS);
+            FlatComboBox<String> combo = new FlatComboBox<>();
+            combo.setModel(new DefaultComboBoxModel<>(GAMEMODE_OPTIONS));
+            combo.setRoundRect(true);
             combo.setSelectedItem(normalizeGamemode(value));
             attachDirtyTracking(combo);
             editors.put(key, combo);
@@ -944,7 +965,9 @@ public class PanelConfigServidor extends JPanel {
         }
 
         if("level-type".equalsIgnoreCase(key)){
-            JComboBox<String> combo = new JComboBox<>(LEVEL_TYPE_OPTIONS);
+            FlatComboBox<String> combo = new FlatComboBox<>();
+            combo.setModel(new DefaultComboBoxModel<>(LEVEL_TYPE_OPTIONS));
+            combo.setRoundRect(true);
             combo.setEditable(true);
             combo.setSelectedItem(normalizeLevelType(value));
             attachDirtyTracking(combo);
@@ -954,11 +977,15 @@ public class PanelConfigServidor extends JPanel {
         }
 
         if(detectFieldKind(key, value) == FieldKind.TEXTAREA){
-            JTextArea ta = new JTextArea(value == null ? "" : value, 2, 20);
+            FlatTextArea ta = new FlatTextArea();
+            ta.setText(value == null ? "" : value);
+            ta.setRows(2);
+            ta.setColumns(20);
             ta.setLineWrap(true);
             ta.setWrapStyleWord(true);
             attachDirtyTracking(ta);
-            JScrollPane sp = new JScrollPane(ta);
+            FlatScrollPane sp = new FlatScrollPane();
+            sp.setViewportView(ta);
             sp.setBorder(BorderFactory.createLineBorder(AppTheme.getSubtleBorderColor(), 1, true));
             sp.setPreferredSize(new Dimension(200, 52));
             editors.put(key, ta);
@@ -969,14 +996,18 @@ public class PanelConfigServidor extends JPanel {
 
         if(detectFieldKind(key, value) == FieldKind.NUMBER){
             int numericValue = parseIntegerValue(value);
-            JSpinner spinner = new JSpinner(new SpinnerNumberModel(numericValue, Integer.MIN_VALUE, Integer.MAX_VALUE, 1));
+            FlatSpinner spinner = new FlatSpinner();
+            spinner.setModel(new SpinnerNumberModel(numericValue, Integer.MIN_VALUE, Integer.MAX_VALUE, 1));
+            spinner.setRoundRect(true);
             attachDirtyTracking(spinner);
             editors.put(key, spinner);
             makeWidthFlexible(spinner);
             return spinner;
         }
 
-        JTextField tf = new JTextField(value == null ? "" : value);
+        FlatTextField tf = new FlatTextField();
+        tf.setText(value == null ? "" : value);
+        tf.setRoundRect(true);
         attachDirtyTracking(tf);
         editors.put(key, tf);
         makeWidthFlexible(tf);

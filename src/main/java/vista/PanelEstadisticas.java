@@ -1,5 +1,9 @@
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatComboBox;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
+import com.formdev.flatlaf.extras.components.FlatSlider;
 import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import modelo.Server;
@@ -104,28 +108,28 @@ public class PanelEstadisticas extends JPanel {
     private final JLabel ramActualValueLabel = new JLabel("-");
     private final JLabel discoActivoValueLabel = new JLabel("-");
     private final JLabel estadoValueLabel = new JLabel("Sin datos");
-    private final JComboBox<TimeRangeOption> rangoCombo = new JComboBox<>(TimeRangeOption.values());
-    private final JButton exportarGraficasButton = new JButton("Exportar gráficas");
-    private final JButton ajustesHistoricoButton = new JButton("Configuración");
+    private final FlatComboBox<TimeRangeOption> rangoCombo = new FlatComboBox<>();
+    private final JButton exportarGraficasButton = new FlatButton();
+    private final JButton ajustesHistoricoButton = new FlatButton();
     private final JLabel posicionHistoricoLabel = new JLabel("Ventana actual");
     private final JCheckBox persistenciaCheckBox = new JCheckBox("Persistencia activa");
-    private final JSlider ventanaRecienteSlider = new JSlider();
-    private final JSlider resolucionHistoricaSlider = new JSlider();
+    private final FlatSlider ventanaRecienteSlider = new FlatSlider();
+    private final FlatSlider resolucionHistoricaSlider = new FlatSlider();
     private final JCheckBox ramActivaCheckBox = new JCheckBox();
     private final JCheckBox ramPersistenciaCheckBox = new JCheckBox();
     private final JCheckBox discoActivaCheckBox = new JCheckBox();
     private final JCheckBox discoPersistenciaCheckBox = new JCheckBox();
     private final JCheckBox jugadoresActivaCheckBox = new JCheckBox();
     private final JCheckBox jugadoresPersistenciaCheckBox = new JCheckBox();
-    private final JButton reiniciarHistoricoButton = new JButton("Reiniciar");
-    private final JButton guardarHistoricoButton = new JButton("Guardar");
+    private final JButton reiniciarHistoricoButton = new FlatButton();
+    private final JButton guardarHistoricoButton = new FlatButton();
     private final JLabel ventanaRecienteValueLabel = new JLabel();
     private final JLabel resolucionHistoricaValueLabel = new JLabel();
     private final UsageChart ramChart = new UsageChart("RAM", UsageMode.MEGABYTES, "Esperando muestras de RAM...");
     private final UsageChart diskChart = new UsageChart("Disco", UsageMode.PERCENT, "Esperando actividad de disco...");
     private final UsageChart playersChart = new UsageChart("Jugadores", UsageMode.COUNT, "Esperando actividad de jugadores...");
     private final JPanel chartsPanel = new JPanel();
-    private final JScrollPane chartsScrollPane = new JScrollPane();
+    private final JScrollPane chartsScrollPane = new FlatScrollPane();
     private final JScrollBar historialScrollBar = new JScrollBar(JScrollBar.HORIZONTAL);
     private Timer refreshTimer;
     private final PropertyChangeListener estadoServidorListener;
@@ -156,11 +160,17 @@ public class PanelEstadisticas extends JPanel {
         setLayout(new BorderLayout());
         setOpaque(false);
 
-        TitledCardPanel card = new TitledCardPanel("Estadísticas", new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Estadísticas", new Insets(12, 12, 12, 12));
         card.setBorder(BorderFactory.createEmptyBorder());
         card.getContentPanel().add(crearContenido(), BorderLayout.CENTER);
         add(card, BorderLayout.CENTER);
 
+        exportarGraficasButton.setText("Exportar gráficas");
+        ajustesHistoricoButton.setText("Configuración");
+        reiniciarHistoricoButton.setText("Reiniciar");
+        guardarHistoricoButton.setText("Guardar");
+        rangoCombo.setModel(new DefaultComboBoxModel<>(TimeRangeOption.values()));
+        rangoCombo.setRoundRect(true);
         rangoCombo.setSelectedItem(TimeRangeOption.fromSeconds(getStatsRangeSeconds()));
         rangoCombo.addActionListener(e -> {
             TimeRangeOption selectedRange = getSelectedRange();
@@ -360,33 +370,28 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private JPanel crearTarjetaResumen(String title, JLabel valueLabel) {
-        CardPanel card = new CardPanel(new BorderLayout(), new Insets(10, 10, 10, 10));
+        CardPanel card = new CardPanel(title, new Insets(10, 10, 10, 10));
         card.setBackground(AppTheme.getSurfaceBackground());
-
-        JLabel titleLabel = new JLabel(title);
+        JLabel titleLabel = card.getTitleLabel();
         titleLabel.setForeground(AppTheme.getMutedForeground());
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
 
         valueLabel.setFont(valueLabel.getFont().deriveFont(Font.BOLD, 16f));
         valueLabel.setForeground(AppTheme.getForeground());
 
-        card.add(titleLabel, BorderLayout.NORTH);
-        card.add(valueLabel, BorderLayout.CENTER);
+        card.getContentPanel().add(valueLabel, BorderLayout.CENTER);
         return card;
     }
 
     private JPanel crearPanelAjustesHistorico() {
-        CardPanel card = new CardPanel(new BorderLayout(), new Insets(10, 10, 10, 10));
+        CardPanel card = new CardPanel("Configuración", new Insets(10, 10, 10, 10));
         card.setBackground(AppTheme.getSurfaceBackground());
-
-        JLabel titulo = new JLabel("Configuracion");
+        JLabel titulo = card.getTitleLabel();
         titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 13f));
         titulo.setForeground(AppTheme.getForeground());
-        card.add(titulo, BorderLayout.NORTH);
 
         JPanel content = new JPanel();
         content.setOpaque(false);
-        content.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
 
         persistenciaCheckBox.setOpaque(false);
@@ -400,7 +405,7 @@ public class PanelEstadisticas extends JPanel {
         content.add(Box.createVerticalStrut(12));
         content.add(crearTablaConfiguracionGraficas());
 
-        card.add(content, BorderLayout.CENTER);
+        card.getContentPanel().add(content, BorderLayout.CENTER);
         return card;
     }
 
@@ -408,7 +413,7 @@ public class PanelEstadisticas extends JPanel {
         cargarAjustesHistoricoPersistidos();
         cargarControlesHistoricoDesdePersistidos();
         Window owner = SwingUtilities.getWindowAncestor(this);
-        JDialog dialog = new JDialog(owner instanceof Frame frame ? frame : null, "Configuracion", Dialog.ModalityType.APPLICATION_MODAL);
+        JDialog dialog = new JDialog(owner instanceof Frame frame ? frame : null, "Configuración", Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
         JPanel wrapper = new JPanel(new BorderLayout());
@@ -417,7 +422,8 @@ public class PanelEstadisticas extends JPanel {
         wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
         wrapper.add(crearPanelAjustesHistorico(), BorderLayout.CENTER);
 
-        JButton cerrarButton = new JButton("Cerrar");
+        JButton cerrarButton = new FlatButton();
+        cerrarButton.setText("Cerrar");
         styleActionButton(cerrarButton);
         cerrarButton.addActionListener(e -> dialog.dispose());
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
@@ -543,12 +549,14 @@ public class PanelEstadisticas extends JPanel {
 
 
     private void configurarControlesHistorico() {
+        ventanaRecienteSlider.setOpaque(false);
         ventanaRecienteSlider.setMinimum(0);
         ventanaRecienteSlider.setMaximum(RECENT_WINDOW_OPTIONS.length - 1);
         ventanaRecienteSlider.setPaintTicks(true);
         ventanaRecienteSlider.setMajorTickSpacing(1);
         ventanaRecienteSlider.setSnapToTicks(true);
 
+        resolucionHistoricaSlider.setOpaque(false);
         resolucionHistoricaSlider.setMinimum(0);
         resolucionHistoricaSlider.setMaximum(HISTORICAL_RESOLUTION_OPTIONS.length - 1);
         resolucionHistoricaSlider.setPaintTicks(true);
@@ -1375,7 +1383,7 @@ public class PanelEstadisticas extends JPanel {
             Files.deleteIfExists(getHistoryFile(getStatsSettingsServer(), getServerHistoryKey()));
             Files.deleteIfExists(getLegacyHistoryFile(getServerHistoryKey()));
         } catch (IOException e) {
-            System.err.println("No se ha podido borrar el historial de estadÃ­sticas de " + getServerHistoryKey() + ": " + e.getMessage());
+            System.err.println("No se ha podido borrar el historial de estadísticas de " + getServerHistoryKey() + ": " + e.getMessage());
         }
     }
 
@@ -1398,11 +1406,19 @@ public class PanelEstadisticas extends JPanel {
 
         ExportPaletteModel paletteModel = createDefaultExportPaletteModel();
         ExportRenderOptionsModel renderOptionsModel = createDefaultExportRenderOptionsModel();
-        JComboBox<ExportFormatOption> formatoCombo = new JComboBox<>(ExportFormatOption.values());
+        FlatComboBox<ExportFormatOption> formatoCombo = new FlatComboBox<>();
+        formatoCombo.setModel(new DefaultComboBoxModel<>(ExportFormatOption.values()));
+        formatoCombo.setRoundRect(true);
         ExportSnapshot exportSnapshot = createFrozenExportSnapshot();
-        JComboBox<ExportInstantOption> desdeCombo = new JComboBox<>(createExportInstantModel(exportSnapshot, true));
-        JComboBox<ExportInstantOption> hastaCombo = new JComboBox<>(createExportInstantModel(exportSnapshot, false));
-        JComboBox<ExportLayoutOption> disposicionCombo = new JComboBox<>(ExportLayoutOption.values());
+        FlatComboBox<ExportInstantOption> desdeCombo = new FlatComboBox<>();
+        desdeCombo.setModel(createExportInstantModel(exportSnapshot, true));
+        desdeCombo.setRoundRect(true);
+        FlatComboBox<ExportInstantOption> hastaCombo = new FlatComboBox<>();
+        hastaCombo.setModel(createExportInstantModel(exportSnapshot, false));
+        hastaCombo.setRoundRect(true);
+        FlatComboBox<ExportLayoutOption> disposicionCombo = new FlatComboBox<>();
+        disposicionCombo.setModel(new DefaultComboBoxModel<>(ExportLayoutOption.values()));
+        disposicionCombo.setRoundRect(true);
         JCheckBox incluirRamCheckBox = new JCheckBox("RAM");
         JCheckBox incluirDiscoCheckBox = new JCheckBox("Disco");
         JCheckBox gridCheckBox = new JCheckBox("Grid");
@@ -1451,12 +1467,18 @@ public class PanelEstadisticas extends JPanel {
         previewLabel.setPreferredSize(new Dimension(920, 320));
         previewLabel.setMinimumSize(new Dimension(720, 260));
 
-        JButton backgroundColorButton = new JButton("Fondo");
-        JButton borderColorButton = new JButton("Borde");
-        JButton gridColorButton = new JButton("Grid");
-        JButton textColorButton = new JButton("Texto");
-        JButton ramColorButton = new JButton("RAM");
-        JButton diskColorButton = new JButton("Disco");
+        JButton backgroundColorButton = new FlatButton();
+        backgroundColorButton.setText("Fondo");
+        JButton borderColorButton = new FlatButton();
+        borderColorButton.setText("Borde");
+        JButton gridColorButton = new FlatButton();
+        gridColorButton.setText("Grid");
+        JButton textColorButton = new FlatButton();
+        textColorButton.setText("Texto");
+        JButton ramColorButton = new FlatButton();
+        ramColorButton.setText("RAM");
+        JButton diskColorButton = new FlatButton();
+        diskColorButton.setText("Disco");
         List<JButton> colorButtons = List.of(backgroundColorButton, borderColorButton, gridColorButton, textColorButton, ramColorButton, diskColorButton);
         for (JButton button : colorButtons) {
             styleActionButton(button);
@@ -1556,29 +1578,25 @@ public class PanelEstadisticas extends JPanel {
         wrapper.setBackground(AppTheme.getBackground());
         wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
-        CardPanel previewCard = new CardPanel(new BorderLayout(), new Insets(10, 10, 10, 10));
+        CardPanel previewCard = new CardPanel("Previsualización", new Insets(10, 10, 10, 10));
         previewCard.setBackground(AppTheme.getSurfaceBackground());
-        JLabel previewTitle = new JLabel("Previsualizacion");
+        JLabel previewTitle = previewCard.getTitleLabel();
         previewTitle.setFont(previewTitle.getFont().deriveFont(Font.BOLD, 13f));
         previewTitle.setForeground(AppTheme.getForeground());
-        previewCard.add(previewTitle, BorderLayout.NORTH);
         JPanel previewContent = new JPanel(new BorderLayout());
         previewContent.setOpaque(false);
-        previewContent.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
         previewContent.add(previewLabel, BorderLayout.CENTER);
-        previewCard.add(previewContent, BorderLayout.CENTER);
+        previewCard.getContentPanel().add(previewContent, BorderLayout.CENTER);
         wrapper.add(previewCard, BorderLayout.NORTH);
 
-        CardPanel configCard = new CardPanel(new BorderLayout(), new Insets(10, 10, 10, 10));
+        CardPanel configCard = new CardPanel("Opciones", new Insets(10, 10, 10, 10));
         configCard.setBackground(AppTheme.getSurfaceBackground());
-        JLabel configTitle = new JLabel("Opciones");
+        JLabel configTitle = configCard.getTitleLabel();
         configTitle.setFont(configTitle.getFont().deriveFont(Font.BOLD, 13f));
         configTitle.setForeground(AppTheme.getForeground());
-        configCard.add(configTitle, BorderLayout.NORTH);
 
         JPanel configContent = new JPanel();
         configContent.setOpaque(false);
-        configContent.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
         configContent.setLayout(new BoxLayout(configContent, BoxLayout.Y_AXIS));
         JLabel datosTitle = crearSubtituloExportacion("Datos");
         configContent.add(datosTitle);
@@ -1621,11 +1639,13 @@ public class PanelEstadisticas extends JPanel {
         coloresPanel.add(ramColorButton);
         coloresPanel.add(diskColorButton);
         configContent.add(coloresPanel);
-        configCard.add(configContent, BorderLayout.CENTER);
+        configCard.getContentPanel().add(configContent, BorderLayout.CENTER);
         wrapper.add(configCard, BorderLayout.CENTER);
 
-        JButton exportarButton = new JButton("Exportar");
-        JButton cancelarButton = new JButton("Cancelar");
+        JButton exportarButton = new FlatButton();
+        exportarButton.setText("Exportar");
+        JButton cancelarButton = new FlatButton();
+        cancelarButton.setText("Cancelar");
         styleActionButton(exportarButton);
         styleActionButton(cancelarButton);
         cancelarButton.addActionListener(e -> dialog.dispose());
@@ -3113,7 +3133,7 @@ public class PanelEstadisticas extends JPanel {
             Files.createDirectories(targetHistoryFile.getParent());
             Files.move(legacyHistoryFile, targetHistoryFile, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            System.err.println("No se ha podido migrar el historial de estadÃ­sticas de " + serverKey + ": " + e.getMessage());
+            System.err.println("No se ha podido migrar el historial de estadísticas de " + serverKey + ": " + e.getMessage());
         }
     }
 
@@ -3611,3 +3631,6 @@ public class PanelEstadisticas extends JPanel {
     private record HoverInfo(int index, ChartSample sample) {
     }
 }
+
+
+

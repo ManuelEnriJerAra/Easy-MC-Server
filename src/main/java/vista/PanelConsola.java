@@ -3,6 +3,7 @@ package vista;
 import controlador.GestorServidores;
 import modelo.Server;
 import com.formdev.flatlaf.extras.components.FlatCheckBox;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
@@ -66,7 +67,8 @@ public class PanelConsola extends JPanel {
         consolaPane.setOpaque(true);
         inicializarEstilo();
 
-        JScrollPane scroll = new JScrollPane(consolaPane);
+        FlatScrollPane scroll = new FlatScrollPane();
+        scroll.setViewportView(consolaPane);
         scroll.setBorder(null);
         scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);

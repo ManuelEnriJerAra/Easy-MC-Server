@@ -14,6 +14,8 @@ package vista;
 import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import controlador.Main;
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatSplitPane;
 import modelo.Server;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.intellijthemes.FlatAllIJThemes;
@@ -51,7 +53,7 @@ public class VentanaPrincipal extends JFrame {
     private JPanel wrapperIzquierdo;
     private JPanel wrapperDerecho;
     private JPanel barraWrapper;
-    private TitledCardPanel servidoresCard; // card de la izquierda con borde redondeado
+    private CardPanel servidoresCard; // card de la izquierda con borde redondeado
     private JPanel servidoresPanel;
     private Server serverMostrado;
     private Consumer<String> consoleListenerActual;
@@ -69,41 +71,11 @@ public class VentanaPrincipal extends JFrame {
     private enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, INFO }
     private record TemaInfo(String name, String className){}
 
-    private static final class RoundedNavButton extends JButton {
-        private RoundedNavButton(String text) {
-            super(text);
-            setContentAreaFilled(false);
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            try {
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int arc = AppTheme.getArc();
-                if (arc > 0) {
-                    g2.clip(new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth(), getHeight(), arc, arc));
-                }
-                if (isOpaque() && getBackground() != null) {
-                    g2.setColor(getBackground());
-                    if (arc > 0) {
-                        g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
-                    } else {
-                        g2.fillRect(0, 0, getWidth(), getHeight());
-                    }
-                }
-                super.paintComponent(g2);
-            } finally {
-                g2.dispose();
-            }
-        }
-    }
-
     private PaginaDerecha paginaDerechaActual = PaginaDerecha.HOME;
     private JPanel panelDerechoCards;
     private CardLayout cardDerecho;
     private JPanel panelBarraVertical;
-    private TitledCardPanel jugadoresCard; // card dentro del split del HOME
+    private CardPanel jugadoresCard; // card dentro del split del HOME
     private JPanel consolaCard; // card dentro del split del HOME
     private final Map<PaginaDerecha, JButton> navButtons = new EnumMap<>(PaginaDerecha.class);
 
@@ -131,7 +103,7 @@ public class VentanaPrincipal extends JFrame {
         panelIzquierdo.add(rendimientoPanel, BorderLayout.NORTH);
 
         // PANEL DE SERVIDORES (card con borde redondeado)
-        servidoresCard = new TitledCardPanel("Lista de servidores", new Insets(8, 8, 8, 8));
+        servidoresCard = new CardPanel("Lista de servidores", new Insets(8, 8, 8, 8));
         servidoresCard.setBorder(BorderFactory.createEmptyBorder());
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
@@ -150,12 +122,16 @@ public class VentanaPrincipal extends JFrame {
         botonesServidoresPanel.setBackground(panelBg);
         servidoresPanel.add(botonesServidoresPanel, BorderLayout.SOUTH);
 
-        nuevoServerButton = new JButton("+");
-        importarServerButton = new JButton("↓");
+        nuevoServerButton = new FlatButton();
+        nuevoServerButton.setText("+");
+        importarServerButton = new FlatButton();
+        importarServerButton.setText("↓");
         importarServerButton.setToolTipText("Importar servidor");
-        borrarServerButton = new JButton("-");
+        borrarServerButton = new FlatButton();
+        borrarServerButton.setText("-");
         borrarServerButton.setToolTipText("Eliminar servidor");
-        abrirCarpetaServerButton = new JButton("📁");
+        abrirCarpetaServerButton = new FlatButton();
+        abrirCarpetaServerButton.setText("📁");
         abrirCarpetaServerButton.setToolTipText("Abrir carpeta del servidor");
         abrirCarpetaServerButton.setEnabled(false);
         borrarServerButton.setEnabled(false);
@@ -198,7 +174,7 @@ public class VentanaPrincipal extends JFrame {
                 if(server.getServerProcess() != null && server.getServerProcess().isAlive()){
                     JOptionPane.showMessageDialog(
                             VentanaPrincipal.this,
-                            "No puedes eliminar un servidor mientras esta activo. Paralo antes de eliminarlo.",
+                            "No puedes eliminar un servidor mientras está activo. Páralo antes de eliminarlo.",
                             "Servidor activo",
                             JOptionPane.WARNING_MESSAGE
                     );
@@ -350,7 +326,10 @@ public class VentanaPrincipal extends JFrame {
         wrapperDerecho.setBackground(bgApp);
         wrapperDerecho.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 8));
 
-        splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, wrapperIzquierdo, wrapperDerecho);
+        splitPrincipal = new FlatSplitPane();
+        splitPrincipal.setOrientation(JSplitPane.HORIZONTAL_SPLIT);
+        splitPrincipal.setLeftComponent(wrapperIzquierdo);
+        splitPrincipal.setRightComponent(wrapperDerecho);
         configurarSplitPane(splitPrincipal, 8);
         splitPrincipal.setResizeWeight(0.1);
         splitPrincipal.setOpaque(true);
@@ -412,14 +391,14 @@ public class VentanaPrincipal extends JFrame {
         panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
 
         // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
-        TitledCardPanel headerCard = new TitledCardPanel("Servidor seleccionado", new Insets(8, 8, 8, 8));
+        CardPanel headerCard = new CardPanel("Servidor seleccionado", new Insets(8, 8, 8, 8));
         headerCard.setBorder(BorderFactory.createEmptyBorder());
         headerCard.getContentPanel().add(panelTotalServidor, BorderLayout.CENTER);
 
         home.add(headerCard, BorderLayout.NORTH);
 
         // Jugadores y consola con splitpane y bordes redondeados
-        jugadoresCard = new TitledCardPanel("Jugadores", new Insets(8, 8, 8, 8));
+        jugadoresCard = new CardPanel("Jugadores", new Insets(8, 8, 8, 8));
         jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
         jugadoresCard.getContentPanel().add(panelJugadores, BorderLayout.CENTER);
 
@@ -429,7 +408,10 @@ public class VentanaPrincipal extends JFrame {
         setBordeRedondoGestionado(consolaCard, false);
         consolaCard.add(panelConsola, BorderLayout.CENTER);
 
-        splitHome = new JSplitPane(JSplitPane.VERTICAL_SPLIT, jugadoresCard, consolaCard);
+        splitHome = new FlatSplitPane();
+        splitHome.setOrientation(JSplitPane.VERTICAL_SPLIT);
+        splitHome.setTopComponent(jugadoresCard);
+        splitHome.setBottomComponent(consolaCard);
         configurarSplitPane(splitHome, 8);
         splitHome.setResizeWeight(0.7);
 
@@ -473,7 +455,7 @@ public class VentanaPrincipal extends JFrame {
 
     private JPanel crearBarraVertical(){
 
-        JPanel barra = new CardPanel(new BorderLayout(), new Insets(6, 6, 6, 6));
+        CardPanel barra = new CardPanel(new BorderLayout(), new Insets(6, 6, 6, 6));
         barra.setBackground(AppTheme.getPanelBackground());
         barra.setPreferredSize(new Dimension(56, 0)); // más estrecha
 
@@ -543,12 +525,13 @@ public class VentanaPrincipal extends JFrame {
         };
         temas.addMouseListener(temasHover);
 
-        barra.add(botones, BorderLayout.CENTER);
+        barra.getContentPanel().add(botones, BorderLayout.CENTER);
         return barra;
     }
 
     private JButton crearNavButton(String emoji, String tooltip, PaginaDerecha pagina){
-        JButton b = new RoundedNavButton(emoji);
+        FlatButton b = new FlatButton();
+        b.setText(emoji);
         b.setFocusPainted(false);
         b.setAlignmentX(Component.LEFT_ALIGNMENT); // fijar a la izquierda
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
@@ -570,7 +553,8 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private JButton crearActionButton(String emoji, String tooltip, Runnable action){
-        JButton b = new RoundedNavButton(emoji);
+        FlatButton b = new FlatButton();
+        b.setText(emoji);
         b.setFocusPainted(false);
         b.setAlignmentX(Component.LEFT_ALIGNMENT); // fijar a la izquierda
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
@@ -771,8 +755,8 @@ public class VentanaPrincipal extends JFrame {
         Color borderColor = AppTheme.getBorderColor();
 
         if (servidoresCard != null) {
-            servidoresCard.getCard().setBackground(panelBg);
-            servidoresCard.getCard().setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
+            servidoresCard.setBackground(panelBg);
+            servidoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
         }
         if (servidoresPanel != null) {
             servidoresPanel.setBackground(panelBg);
@@ -789,8 +773,8 @@ public class VentanaPrincipal extends JFrame {
             aplicarBordeRedondoGestionado(panelBarraVertical, new Insets(6, 6, 6, 6), borderColor, 1f, arc);
         }
         if (jugadoresCard != null) {
-            jugadoresCard.getCard().setBackground(panelBg);
-            jugadoresCard.getCard().setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
+            jugadoresCard.setBackground(panelBg);
+            jugadoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
         }
         if (consolaCard != null) {
             aplicarBordeRedondoGestionado(consolaCard, new Insets(8, 8, 8, 8), borderColor, 1f, arc);
@@ -820,7 +804,6 @@ public class VentanaPrincipal extends JFrame {
         split.setOneTouchExpandable(false);
         split.setBorder(null);
         split.setDividerSize(dividerSize);
-        split.setUI(new NoGripSplitPaneUI());
         Color bg = AppTheme.getBackground();
         if(bg != null) split.setBackground(bg);
 

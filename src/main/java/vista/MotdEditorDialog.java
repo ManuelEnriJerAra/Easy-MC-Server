@@ -1,5 +1,8 @@
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
+
 import javax.swing.*;
 import javax.swing.text.*;
 import java.awt.*;
@@ -23,7 +26,8 @@ public class MotdEditorDialog {
 
         applyInitial(pane.getStyledDocument(), initial);
 
-        JScrollPane scroll = new JScrollPane(pane);
+        FlatScrollPane scroll = new FlatScrollPane();
+        scroll.setViewportView(pane);
         scroll.setBorder(BorderFactory.createTitledBorder("MOTD (máx. 2 líneas)"));
 
         JToolBar bar = new JToolBar();
@@ -60,14 +64,17 @@ public class MotdEditorDialog {
 
         bar.addSeparator();
 
-        JButton reset = new JButton("Reset");
+        JButton reset = new FlatButton();
+        reset.setText("Reset");
         reset.setToolTipText("Reset (§r)");
         reset.setFocusable(false);
         reset.addActionListener(e -> applyResetToSelection(pane));
         bar.add(reset);
 
-        JButton cancel = new JButton("Cancelar");
-        JButton ok = new JButton("Guardar");
+        JButton cancel = new FlatButton();
+        cancel.setText("Cancelar");
+        JButton ok = new FlatButton();
+        ok.setText("Guardar");
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttons.add(cancel);
         buttons.add(ok);
@@ -122,7 +129,7 @@ public class MotdEditorDialog {
     }
 
     private static void addColorButton(JToolBar bar, String code, Color color, JTextPane pane) {
-        JButton b = new JButton();
+        JButton b = new FlatButton();
         b.setFocusable(false);
         b.setPreferredSize(new Dimension(18, 18));
         b.setMinimumSize(new Dimension(18, 18));
@@ -140,7 +147,8 @@ public class MotdEditorDialog {
     }
 
     private static JButton makeToggle(String text, String tooltip, JTextPane pane, Font font, AttrMutator mutator) {
-        JButton b = new JButton(text);
+        JButton b = new FlatButton();
+        b.setText(text);
         b.setFocusable(false);
         b.setToolTipText(tooltip);
         b.setMargin(new Insets(2, 6, 2, 6));
