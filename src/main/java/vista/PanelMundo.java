@@ -10,16 +10,17 @@ import controlador.GestorServidores;
 import controlador.MCARenderer;
 import controlador.MojangAPI;
 import controlador.WorldDataReader;
+import controlador.world.PreviewOverlayData;
+import controlador.world.PreviewPlayerData;
+import controlador.world.PreviewPlayerPoint;
+import controlador.world.WorldFilesService;
+import controlador.world.WorldPlayerDataService;
+import controlador.world.WorldPreviewOverlayService;
+import controlador.world.WorldStorageAnalyzer;
+import controlador.world.WorldStorageStats;
 import modelo.MinecraftConstants;
 import modelo.Server;
 import modelo.World;
-import net.querz.nbt.io.NBTUtil;
-import net.querz.nbt.io.NamedTag;
-import net.querz.nbt.tag.CompoundTag;
-import net.querz.nbt.tag.ListTag;
-import net.querz.nbt.tag.Tag;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -40,15 +41,10 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -67,7 +63,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -87,13 +82,10 @@ public class PanelMundo extends JPanel {
     private static final DateTimeFormatter FORMATO_HORA_LOG = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter FORMATO_CONEXION = DateTimeFormatter.ofPattern("dd/MM/yyyy - HH:mm:ss");
-    private static final String WORLD_METADATA_FILE = ".emw-world.properties";
-    private static final String PREVIEW_METADATA_FILE = ".preview-overlay.properties";
     private static final Map<Path, RegionVisibilityCacheEntry> REGION_VISIBILITY_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, ImageIcon> PLAYER_HEAD_CACHE = new ConcurrentHashMap<>();
     private static final Set<String> PLAYER_HEADS_LOADING = ConcurrentHashMap.newKeySet();
     private static final Set<PanelMundo> INSTANCIAS_ACTIVAS = java.util.Collections.newSetFromMap(new WeakHashMap<>());
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final GestorServidores gestorServidores;
     private final Runnable onWorldChanged;
@@ -758,8 +750,8 @@ public class PanelMundo extends JPanel {
     private void actualizarConfiguracionMundo() {
         Server server = gestorServidores.getServidorSeleccionado();
         World mundo = getMundoSeleccionadoOActivo();
-        Properties metadata = leerMetadataMundo(mundo);
-        Properties serverProps = leerPropiedadesServidor(server);
+        Properties metadata = WorldFilesService.readWorldMetadata(mundo);
+        Properties serverProps = WorldFilesService.readServerProperties(server);
 
         dayTimeValueLabel.setText(valorOPlaceholder(WorldDataReader.getDayTime(mundo)));
         hardcoreValueLabel.setText(valorOPlaceholder(primeroNoVacio(WorldDataReader.getHardcore(mundo), formatearBoolean(metadata.getProperty("hardcore")))));
@@ -939,12 +931,12 @@ public class PanelMundo extends JPanel {
         }
 
         try {
-            Properties props = leerPropiedadesServidor(server);
+            Properties props = WorldFilesService.readServerProperties(server);
             props.setProperty("allow-nether", String.valueOf(allowNetherCheckBox.isSelected()));
             props.setProperty("region-file-compression", String.valueOf(regionCompressionCombo.getSelectedItem()));
             props.setProperty("spawn-protection", String.valueOf(((Number) spawnProtectionSpinner.getValue()).intValue()));
             props.setProperty("max-world-size", String.valueOf(((Number) maxWorldSizeSpinner.getValue()).intValue()));
-            guardarPropiedadesServidor(server, props);
+            WorldFilesService.writeServerProperties(server, props);
             gestorServidores.guardarServidor(server);
             actualizarConfiguracionMundo();
         } catch (IOException ex) {
@@ -975,49 +967,6 @@ public class PanelMundo extends JPanel {
         maxWorldSizeSpinner.addChangeListener(e -> updateWorldSettingsSaveButtonState());
         applyDefaultWorldSettingsSaveButtonStyle();
         guardarConfiguracionMundoButton.setEnabled(false);
-    }
-
-    private Properties leerMetadataMundo(World mundo) {
-        Properties metadata = new Properties();
-        if (mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) {
-            return metadata;
-        }
-
-        Path metadataPath = Path.of(mundo.getWorldDir()).resolve(WORLD_METADATA_FILE);
-        if (!Files.isRegularFile(metadataPath)) {
-            return metadata;
-        }
-
-        try (InputStream in = Files.newInputStream(metadataPath)) {
-            metadata.load(in);
-        } catch (IOException ignored) {
-        }
-        return metadata;
-    }
-
-    private Properties leerPropiedadesServidor(Server server) {
-        Properties props = new Properties();
-        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
-            return props;
-        }
-
-        Path propertiesPath = Path.of(server.getServerDir()).resolve("server.properties");
-        if (!Files.isRegularFile(propertiesPath)) {
-            return props;
-        }
-
-        try (FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
-            props.load(fis);
-        } catch (IOException ignored) {
-        }
-        return props;
-    }
-
-    private void guardarPropiedadesServidor(Server server, Properties props) throws IOException {
-        Path propertiesPath = Path.of(server.getServerDir()).resolve("server.properties");
-        try (FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
-            props.store(fos, null);
-        }
     }
 
     private String formatearBoolean(String value) {
@@ -1199,34 +1148,10 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        Path worldDir = Path.of(mundo.getWorldDir());
-        if (!Files.isDirectory(worldDir)) {
-            pesoMundoValueLabel.setText("-");
-            pesoStatsSavesValueLabel.setText("-");
-            pesoTotalValueLabel.setText("-");
-            return;
-        }
-
-        long total = calcularTamanoDirectorio(worldDir);
-        long datosJugador = calcularTamanoDirectorio(worldDir.resolve("playerdata"))
-                + calcularTamanoDirectorio(worldDir.resolve("stats"))
-                + calcularTamanoDirectorio(worldDir.resolve("advancements"))
-                + calcularTamanoDirectorio(worldDir.resolve("data"));
-
-        long regiones = calcularTamanoDirectorio(worldDir.resolve("region"))
-                + calcularTamanoDirectorio(worldDir.resolve("entities"))
-                + calcularTamanoDirectorio(worldDir.resolve("poi"))
-                + calcularTamanoDirectorio(worldDir.resolve("DIM-1"))
-                + calcularTamanoDirectorio(worldDir.resolve("DIM1"))
-                + calcularTamanoDirectorio(worldDir.resolve("dimensions"));
-
-        if (regiones <= 0L) {
-            regiones = Math.max(0L, total - datosJugador);
-        }
-
-        pesoMundoValueLabel.setText(formatearTamano(regiones));
-        pesoStatsSavesValueLabel.setText(formatearTamano(datosJugador));
-        pesoTotalValueLabel.setText(formatearTamano(total));
+        WorldStorageStats storageStats = WorldStorageAnalyzer.analyze(mundo);
+        pesoMundoValueLabel.setText(formatearTamano(storageStats.worldBytes()));
+        pesoStatsSavesValueLabel.setText(formatearTamano(storageStats.playerAndStatsBytes()));
+        pesoTotalValueLabel.setText(formatearTamano(storageStats.totalBytes()));
     }
 
     private void actualizarConexionesRecientes() {
@@ -1274,7 +1199,7 @@ public class PanelMundo extends JPanel {
     }
 
     private List<RecentConnection> obtenerUltimosJugadoresDesdePlayerdata(Server server, World mundo) {
-        return obtenerJugadoresRecientesDesdePlayerdata(server, mundo).stream()
+        return WorldPlayerDataService.findRecentPlayers(server, mundo, 4).stream()
                 .map(player -> new RecentConnection(
                         player.username(),
                         FORMATO_CONEXION.format(player.lastSeen().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime()),
@@ -1285,116 +1210,11 @@ public class PanelMundo extends JPanel {
     }
 
     private List<PreviewPlayerData> obtenerJugadoresRecientesDesdePlayerdata(Server server, World mundo) {
-        if (server == null || mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) {
-            return List.of();
-        }
-
-        Path playerdataDir = Path.of(mundo.getWorldDir()).resolve("playerdata");
-        if (!Files.isDirectory(playerdataDir)) {
-            return List.of();
-        }
-
-        Map<UUID, String> nombresPorUuid = cargarNombresJugadores(server);
-        try (Stream<Path> stream = Files.list(playerdataDir)) {
-            return stream
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName() != null)
-                    .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".dat"))
-                    .map(path -> leerJugadorRecienteDesdePlayerdata(path, nombresPorUuid))
-                    .filter(Objects::nonNull)
-                    .sorted(Comparator.comparing(PreviewPlayerData::lastSeen, Comparator.reverseOrder()))
-                    .limit(4)
-                    .toList();
-        } catch (IOException ex) {
-            return List.of();
-        }
-    }
-
-    private PreviewPlayerData leerJugadorRecienteDesdePlayerdata(Path playerFile, Map<UUID, String> nombresPorUuid) {
-        try {
-            String fileName = playerFile.getFileName().toString();
-            String uuidText = fileName.substring(0, fileName.length() - 4);
-            UUID uuid = UUID.fromString(uuidText);
-            String username = nombresPorUuid.getOrDefault(uuid, uuidText);
-            FileTime lastModified = Files.getLastModifiedTime(playerFile);
-            MCARenderer.WorldPoint point = leerPosicionJugador(playerFile);
-            if (point == null) {
-                return null;
-            }
-            return new PreviewPlayerData(username, point, lastModified);
-        } catch (Exception ex) {
-            return null;
-        }
+        return WorldPlayerDataService.findRecentPlayers(server, mundo, 4);
     }
 
     private List<PreviewPlayerPoint> obtenerJugadoresRecientesParaOverlay(World mundo) {
-        return obtenerJugadoresRecientesDesdePlayerdata(gestorServidores.getServidorSeleccionado(), mundo).stream()
-                .map(player -> new PreviewPlayerPoint(player.username(), player.point()))
-                .toList();
-    }
-
-    private MCARenderer.WorldPoint leerPosicionJugador(Path playerFile) {
-        try {
-            NamedTag namedTag = NBTUtil.read(playerFile.toFile());
-            if (namedTag == null || !(namedTag.getTag() instanceof CompoundTag root)) {
-                return null;
-            }
-
-            ListTag<?> pos = root.getListTag("Pos");
-            if (pos == null || pos.size() < 3) {
-                return null;
-            }
-
-            Double x = leerNumeroTag(pos.get(0));
-            Double z = leerNumeroTag(pos.get(2));
-            if (x == null || z == null) {
-                return null;
-            }
-
-            return new MCARenderer.WorldPoint((int) Math.round(x), (int) Math.round(z));
-        } catch (Exception ex) {
-            return null;
-        }
-    }
-
-    private Double leerNumeroTag(Tag<?> tag) {
-        if (tag instanceof net.querz.nbt.tag.NumberTag<?> numberTag) {
-            return numberTag.asDouble();
-        }
-        return null;
-    }
-
-    private Map<UUID, String> cargarNombresJugadores(Server server) {
-        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
-            return Map.of();
-        }
-
-        Path usercachePath = Path.of(server.getServerDir()).resolve("usercache.json");
-        if (!Files.isRegularFile(usercachePath)) {
-            return Map.of();
-        }
-
-        try {
-            JsonNode root = objectMapper.readTree(usercachePath.toFile());
-            if (root == null || !root.isArray()) {
-                return Map.of();
-            }
-
-            Map<UUID, String> nombres = new HashMap<>();
-            for (JsonNode node : root) {
-                if (node == null) continue;
-                String uuidText = node.path("uuid").asString(null);
-                String name = node.path("name").asString(null);
-                if (uuidText == null || name == null || name.isBlank()) continue;
-                try {
-                    nombres.put(UUID.fromString(uuidText), name.strip());
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
-            return nombres;
-        } catch (Exception ex) {
-            return Map.of();
-        }
+        return WorldPlayerDataService.findRecentPlayerPoints(gestorServidores.getServidorSeleccionado(), mundo, 4);
     }
 
     private void renderConexiones(List<RecentConnection> conexiones) {
@@ -1700,7 +1520,7 @@ public class PanelMundo extends JPanel {
         String worldDir = mundo.getWorldDir();
         Server selectedServer = gestorServidores.getServidorSeleccionado();
         String serverId = selectedServer == null ? null : selectedServer.getId();
-        Path outputPath = getPreviewPath(mundo);
+        Path outputPath = WorldFilesService.getPreviewPath(mundo);
         boolean habiaPreviewAnterior = Files.isRegularFile(outputPath);
         previewDisponibleAntesDeGenerar = habiaPreviewAnterior;
         previewGenerationInProgress = true;
@@ -1806,7 +1626,7 @@ public class PanelMundo extends JPanel {
                                     .map(player -> new PreviewPlayerPoint(player.username(), player.point()))
                                     .toList()
                     );
-                    guardarPreviewOverlayData(mundo, overlayData);
+                    WorldPreviewOverlayService.saveOverlayData(mundo, overlayData);
                 } catch (RuntimeException ex) {
                     System.out.println("[PanelMundo] No se ha podido construir la metadata de overlay de la preview: " + ex.getMessage());
                     ex.printStackTrace(System.out);
@@ -2742,7 +2562,7 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        Path previewPath = getPreviewPath(mundo);
+        Path previewPath = WorldFilesService.getPreviewPath(mundo);
         if (!Files.isRegularFile(previewPath)) {
             mostrarTextoPreview("La preview todavía no existe.");
             return;
@@ -2754,7 +2574,7 @@ public class PanelMundo extends JPanel {
                 mostrarTextoPreview("No se ha podido leer la preview.");
                 return;
             }
-            PreviewOverlayData overlayData = leerPreviewOverlayData(mundo);
+            PreviewOverlayData overlayData = WorldPreviewOverlayService.loadOverlayData(mundo);
             previewImageLabel.setImage(image);
             previewImageLabel.setOverlayData(overlayData);
             previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
@@ -2857,7 +2677,7 @@ public class PanelMundo extends JPanel {
 
     private boolean existePreviewSeleccionada() {
         World mundo = getMundoSeleccionadoOActivo();
-        return mundo != null && Files.isRegularFile(getPreviewPath(mundo));
+        return mundo != null && Files.isRegularFile(WorldFilesService.getPreviewPath(mundo));
     }
 
     private void copiarPreviewAlPortapapeles() {
@@ -2867,7 +2687,7 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        Path previewPath = getPreviewPath(mundo);
+        Path previewPath = WorldFilesService.getPreviewPath(mundo);
         if (!Files.isRegularFile(previewPath)) {
             JOptionPane.showMessageDialog(this, "La preview todavía no existe.", "Copiar", JOptionPane.WARNING_MESSAGE);
             return;
@@ -2891,7 +2711,7 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        Path previewPath = getPreviewPath(mundo);
+        Path previewPath = WorldFilesService.getPreviewPath(mundo);
         if (!Files.isRegularFile(previewPath)) {
             JOptionPane.showMessageDialog(this, "La preview todavía no existe.", "Ver archivo", JOptionPane.WARNING_MESSAGE);
             return;
@@ -2917,7 +2737,7 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        Path previewPath = getPreviewPath(mundo);
+        Path previewPath = WorldFilesService.getPreviewPath(mundo);
         if (!Files.isRegularFile(previewPath)) {
             JOptionPane.showMessageDialog(this, "La preview todavía no existe.", "Guardar como", JOptionPane.WARNING_MESSAGE);
             return;
@@ -2974,98 +2794,13 @@ public class PanelMundo extends JPanel {
         return nombreSeguro + "_preview_" + timestamp + ".png";
     }
 
-    private Path getPreviewPath(World mundo) {
-        return Path.of(mundo.getWorldDir()).resolve("preview.png");
-    }
-
-    private Path getPreviewOverlayMetadataPath(World mundo) {
-        return Path.of(mundo.getWorldDir()).resolve(PREVIEW_METADATA_FILE);
-    }
-
-    private void guardarPreviewOverlayData(World mundo, PreviewOverlayData overlayData) {
-        if (mundo == null || overlayData == null) {
-            return;
-        }
-
-        Properties props = new Properties();
-        props.setProperty("originBlockX", Integer.toString(overlayData.originBlockX()));
-        props.setProperty("originBlockZ", Integer.toString(overlayData.originBlockZ()));
-        props.setProperty("pixelsPerBlock", Integer.toString(overlayData.pixelsPerBlock()));
-        if (overlayData.spawnPoint() != null) {
-            props.setProperty("spawnX", Integer.toString(overlayData.spawnPoint().x()));
-            props.setProperty("spawnZ", Integer.toString(overlayData.spawnPoint().z()));
-        }
-        List<PreviewPlayerPoint> playerPoints = overlayData.playerPoints();
-        int playerIndex = 0;
-        if (playerPoints != null) {
-            for (PreviewPlayerPoint point : playerPoints) {
-                if (point == null || point.username() == null || point.username().isBlank() || point.point() == null) {
-                    continue;
-                }
-                props.setProperty("player." + playerIndex + ".name", point.username());
-                props.setProperty("player." + playerIndex + ".x", Integer.toString(point.point().x()));
-                props.setProperty("player." + playerIndex + ".z", Integer.toString(point.point().z()));
-                playerIndex++;
-            }
-        }
-        props.setProperty("playerCount", Integer.toString(playerIndex));
-
-        Path metadataPath = getPreviewOverlayMetadataPath(mundo);
-        try (OutputStream out = Files.newOutputStream(metadataPath)) {
-            props.store(out, "Preview overlay metadata");
-        } catch (Exception ex) {
-            System.out.println("No se ha podido guardar la metadata de overlay de la preview: " + metadataPath);
-        }
-    }
-
-    private PreviewOverlayData leerPreviewOverlayData(World mundo) {
-        if (mundo == null) {
-            return null;
-        }
-
-        Path metadataPath = getPreviewOverlayMetadataPath(mundo);
-        if (!Files.isRegularFile(metadataPath)) {
-            return null;
-        }
-
-        Properties props = new Properties();
-        try (InputStream in = Files.newInputStream(metadataPath)) {
-            props.load(in);
-            int originBlockX = Integer.parseInt(props.getProperty("originBlockX"));
-            int originBlockZ = Integer.parseInt(props.getProperty("originBlockZ"));
-            int pixelsPerBlock = Integer.parseInt(props.getProperty("pixelsPerBlock", "1"));
-            String spawnX = props.getProperty("spawnX");
-            String spawnZ = props.getProperty("spawnZ");
-            MCARenderer.WorldPoint spawnPoint = (spawnX != null && spawnZ != null)
-                    ? new MCARenderer.WorldPoint(Integer.parseInt(spawnX), Integer.parseInt(spawnZ))
-                    : null;
-            int playerCount = Integer.parseInt(props.getProperty("playerCount", "0"));
-            List<PreviewPlayerPoint> playerPoints = new ArrayList<>();
-            for (int i = 0; i < playerCount; i++) {
-                String name = props.getProperty("player." + i + ".name");
-                String x = props.getProperty("player." + i + ".x");
-                String z = props.getProperty("player." + i + ".z");
-                if (name == null || x == null || z == null || name.isBlank()) {
-                    continue;
-                }
-                playerPoints.add(new PreviewPlayerPoint(
-                        name,
-                        new MCARenderer.WorldPoint(Integer.parseInt(x), Integer.parseInt(z))
-                ));
-            }
-            return new PreviewOverlayData(originBlockX, originBlockZ, pixelsPerBlock, spawnPoint, playerPoints);
-        } catch (IOException | NumberFormatException ex) {
-            return null;
-        }
-    }
-
     private void avisarSuperposicionesNoDisponiblesSiHaceFalta() {
         if (!limitesChunksEnPreview && !mostrarSpawnEnPreview && !mostrarJugadoresEnPreview) {
             return;
         }
 
         World mundo = getMundoSeleccionadoOActivo();
-        if (mundo == null || leerPreviewOverlayData(mundo) != null) {
+        if (mundo == null || WorldPreviewOverlayService.loadOverlayData(mundo) != null) {
             return;
         }
 
@@ -3089,7 +2824,7 @@ public class PanelMundo extends JPanel {
             return;
         }
         World mundo = getMundoSeleccionadoOActivo();
-        boolean existePreview = mundo != null && Files.isRegularFile(getPreviewPath(mundo));
+        boolean existePreview = mundo != null && Files.isRegularFile(WorldFilesService.getPreviewPath(mundo));
         generarPreviewButton.setText(existePreview ? "Regenerar preview" : "Generar preview");
         ajustarAnchoBotonPreview();
     }
@@ -3619,33 +3354,7 @@ public class PanelMundo extends JPanel {
     }
 
     private String leerTipoMundo(World mundo) {
-        if (mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) return null;
-
-        Path metadataPath = Path.of(mundo.getWorldDir()).resolve(WORLD_METADATA_FILE);
-        if (!Files.isRegularFile(metadataPath)) return null;
-
-        Properties metadata = new Properties();
-        try (InputStream in = Files.newInputStream(metadataPath)) {
-            metadata.load(in);
-            return metadata.getProperty("level-type");
-        } catch (IOException ex) {
-            return null;
-        }
-    }
-
-    private long calcularTamanoDirectorio(Path path) {
-        if (path == null || !Files.exists(path)) return 0L;
-        try (Stream<Path> walk = Files.walk(path)) {
-            return walk.filter(Files::isRegularFile).mapToLong(p -> {
-                try {
-                    return Files.size(p);
-                } catch (IOException ex) {
-                    return 0L;
-                }
-            }).sum();
-        } catch (IOException ex) {
-            return 0L;
-        }
+        return WorldFilesService.readWorldMetadata(mundo).getProperty("level-type");
     }
 
     private String formatearTamano(long bytes) {
@@ -4148,10 +3857,6 @@ public class PanelMundo extends JPanel {
     }
 
     private record PreviewGenerationResult(Path outputPath, boolean sinRegiones, BufferedImage preview, PreviewOverlayData overlayData, MCARenderer.RenderStats stats) {}
-    private record PreviewOverlayData(int originBlockX, int originBlockZ, int pixelsPerBlock,
-                                      MCARenderer.WorldPoint spawnPoint, List<PreviewPlayerPoint> playerPoints) {}
-    private record PreviewPlayerPoint(String username, MCARenderer.WorldPoint point) {}
-    private record PreviewPlayerData(String username, MCARenderer.WorldPoint point, FileTime lastSeen) {}
     private record CroppedPreview(BufferedImage image, int originBlockX, int originBlockZ) {}
     private record RenderWorldBounds(int minBlockX, int maxBlockX, int minBlockZ, int maxBlockZ) {}
 

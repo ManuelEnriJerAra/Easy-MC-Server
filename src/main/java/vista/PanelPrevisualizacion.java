@@ -3,11 +3,11 @@ package vista;
 import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import com.formdev.flatlaf.extras.components.FlatTextField;
-import controlador.GestorMundos;
 import controlador.GestorServidores;
 import controlador.Utilidades;
+import controlador.world.WorldPreviewCatalogService;
+import controlador.world.WorldPreviewOption;
 import modelo.Server;
-import modelo.World;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -308,33 +308,6 @@ public class PanelPrevisualizacion extends JPanel {
         return SelectorImagenServidorDialog.show(owner, servidores, server, easyMcImages, this::elegirImagenNativa);
     }
 
-    private List<PreviewMundoOption> obtenerPreviewsMundosServidor(Server server) {
-        if(server == null) return List.of();
-
-        try{
-            GestorMundos.sincronizarMundosServidor(server);
-            World mundoActivo = GestorMundos.getMundoActivo(server);
-            String mundoActivoNombre = mundoActivo != null ? mundoActivo.getWorldName() : null;
-            List<PreviewMundoOption> previews = new ArrayList<>();
-            for(World mundo : GestorMundos.listarMundos(server)){
-                if(mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) continue;
-                Path previewPath = Path.of(mundo.getWorldDir()).resolve("preview.png");
-                if(!Files.isRegularFile(previewPath)) continue;
-                boolean activo = mundoActivoNombre != null && mundoActivoNombre.equalsIgnoreCase(mundo.getWorldName());
-                previews.add(new PreviewMundoOption(mundo.getWorldName(), previewPath, activo));
-            }
-            previews.sort((a, b) -> {
-                if(a.activeWorld() != b.activeWorld()){
-                    return a.activeWorld() ? -1 : 1;
-                }
-                return a.worldName().compareToIgnoreCase(b.worldName());
-            });
-            return previews;
-        } catch (RuntimeException ex){
-            return List.of();
-        }
-    }
-
     private File elegirImagenNativa(){
         Window owner = SwingUtilities.getWindowAncestor(this);
         Frame frameOwner = (owner instanceof Frame f) ? f : null;
@@ -363,12 +336,6 @@ public class PanelPrevisualizacion extends JPanel {
         return new File(dir, file);
     }
 
-    private record PreviewMundoOption(String worldName, Path previewPath, boolean activeWorld) {
-        @Override
-        public String toString() {
-            return worldName == null ? "(sin nombre)" : worldName;
-        }
-    }
     private record EasyMcImageOption(String name, String resourcePath) {}
     private record ImageSelectionResult(BufferedImage image, boolean useDirectly) {}
 
@@ -593,13 +560,13 @@ public class PanelPrevisualizacion extends JPanel {
             Runnable recargarPreviews = () -> {
                 wrap.removeAll();
                 Object selected = serverCombo.getSelectedItem();
-                List<PreviewMundoOption> previews = selected instanceof Server server
+                List<WorldPreviewOption> previews = selected instanceof Server server
                         ? cargarPreviewsServidor(server)
                         : List.of();
                 if(previews.isEmpty()){
                     wrap.add(crearTarjetaVacia("No hay previews generadas todavía para este servidor."));
                 } else {
-                    for(PreviewMundoOption preview : previews){
+                    for(WorldPreviewOption preview : previews){
                         wrap.add(crearTarjetaPreview(dialog, preview, result));
                     }
                 }
@@ -631,7 +598,7 @@ public class PanelPrevisualizacion extends JPanel {
             return empty;
         }
 
-        private static JComponent crearTarjetaPreview(JDialog dialog, PreviewMundoOption preview, ImageSelectionResult[] result) {
+        private static JComponent crearTarjetaPreview(JDialog dialog, WorldPreviewOption preview, ImageSelectionResult[] result) {
             JButton card = new FlatButton();
             card.setLayout(new BorderLayout(0, 6));
             card.setPreferredSize(new Dimension(198, 154));
@@ -753,30 +720,8 @@ public class PanelPrevisualizacion extends JPanel {
             worker.execute();
         }
 
-        private static List<PreviewMundoOption> cargarPreviewsServidor(Server server) {
-            if(server == null) return List.of();
-            try{
-                GestorMundos.sincronizarMundosServidor(server);
-                World mundoActivo = GestorMundos.getMundoActivo(server);
-                String mundoActivoNombre = mundoActivo != null ? mundoActivo.getWorldName() : null;
-                List<PreviewMundoOption> previews = new ArrayList<>();
-                for(World mundo : GestorMundos.listarMundos(server)){
-                    if(mundo == null || mundo.getWorldDir() == null || mundo.getWorldDir().isBlank()) continue;
-                    Path previewPath = Path.of(mundo.getWorldDir()).resolve("preview.png");
-                    if(!Files.isRegularFile(previewPath)) continue;
-                    boolean activo = mundoActivoNombre != null && mundoActivoNombre.equalsIgnoreCase(mundo.getWorldName());
-                    previews.add(new PreviewMundoOption(mundo.getWorldName(), previewPath, activo));
-                }
-                previews.sort((a, b) -> {
-                    if(a.activeWorld() != b.activeWorld()){
-                        return a.activeWorld() ? -1 : 1;
-                    }
-                    return a.worldName().compareToIgnoreCase(b.worldName());
-                });
-                return previews;
-            } catch (RuntimeException ex){
-                return List.of();
-            }
+        private static List<WorldPreviewOption> cargarPreviewsServidor(Server server) {
+            return WorldPreviewCatalogService.listWorldPreviews(server);
         }
 
         private static Dimension ajustarDentro(int srcWidth, int srcHeight, int maxWidth, int maxHeight) {
