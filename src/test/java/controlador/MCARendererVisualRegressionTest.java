@@ -117,6 +117,74 @@ class MCARendererVisualRegressionTest {
     }
 
     @Test
+    void renderWorld_debeResolverBloquesEnLimitesEntreRegiones() throws Exception {
+        Path regionDir = tempDir.resolve("world-bounds");
+        Path westRegion = TestWorldFixtures.createRegion(regionDir, 0, 0, mcaFile -> {
+            Chunk edgeChunk = TestWorldFixtures.createFullChunk();
+            TestWorldFixtures.setBlock(edgeChunk, 15, 70, 0, "minecraft:stone");
+            mcaFile.setChunk(31, 0, edgeChunk);
+        });
+        Path eastRegion = TestWorldFixtures.createRegion(regionDir, 1, 0, mcaFile -> {
+            Chunk edgeChunk = TestWorldFixtures.createFullChunk();
+            TestWorldFixtures.setBlock(edgeChunk, 0, 71, 0, "minecraft:grass_block");
+            mcaFile.setChunk(0, 0, edgeChunk);
+        });
+
+        MCARenderer renderer = new MCARenderer();
+        BufferedImage image = renderer.renderWorld(
+                java.util.List.of(westRegion, eastRegion),
+                MCARenderer.RenderOptions.balanced()
+                        .withPreferSquareCrop(false)
+                        .withWorldBounds(511, 512, 0, 0)
+        );
+
+        assertThat(image.getWidth()).isEqualTo(2);
+        assertThat(image.getHeight()).isEqualTo(1);
+        assertThat(image.getRGB(0, 0)).isNotEqualTo(MCARenderer.RenderOptions.balanced().defaultArgb());
+        assertThat(image.getRGB(1, 0)).isNotEqualTo(MCARenderer.RenderOptions.balanced().defaultArgb());
+    }
+
+    @Test
+    void renderWorld_debeResolverEsquinasEnRecortesDePreview() throws Exception {
+        Path regionDir = tempDir.resolve("world-corners");
+        Path northWest = TestWorldFixtures.createRegion(regionDir, 0, 0, mcaFile -> {
+            Chunk edgeChunk = TestWorldFixtures.createFullChunk();
+            TestWorldFixtures.setBlock(edgeChunk, 15, 70, 15, "minecraft:stone");
+            mcaFile.setChunk(31, 31, edgeChunk);
+        });
+        Path northEast = TestWorldFixtures.createRegion(regionDir, 1, 0, mcaFile -> {
+            Chunk edgeChunk = TestWorldFixtures.createFullChunk();
+            TestWorldFixtures.setBlock(edgeChunk, 0, 71, 15, "minecraft:grass_block");
+            mcaFile.setChunk(0, 31, edgeChunk);
+        });
+        Path southWest = TestWorldFixtures.createRegion(regionDir, 0, 1, mcaFile -> {
+            Chunk edgeChunk = TestWorldFixtures.createFullChunk();
+            TestWorldFixtures.setBlock(edgeChunk, 15, 72, 0, "minecraft:sand");
+            mcaFile.setChunk(31, 0, edgeChunk);
+        });
+        Path southEast = TestWorldFixtures.createRegion(regionDir, 1, 1, mcaFile -> {
+            Chunk edgeChunk = TestWorldFixtures.createFullChunk();
+            TestWorldFixtures.setBlock(edgeChunk, 0, 73, 0, "minecraft:snow_block");
+            mcaFile.setChunk(0, 0, edgeChunk);
+        });
+
+        MCARenderer renderer = new MCARenderer();
+        BufferedImage image = renderer.renderWorld(
+                java.util.List.of(northWest, northEast, southWest, southEast),
+                MCARenderer.RenderOptions.balanced()
+                        .withPreferSquareCrop(false)
+                        .withWorldBounds(511, 512, 511, 512)
+        );
+
+        assertThat(image.getWidth()).isEqualTo(2);
+        assertThat(image.getHeight()).isEqualTo(2);
+        assertThat(image.getRGB(0, 0)).isNotEqualTo(MCARenderer.RenderOptions.balanced().defaultArgb());
+        assertThat(image.getRGB(1, 0)).isNotEqualTo(MCARenderer.RenderOptions.balanced().defaultArgb());
+        assertThat(image.getRGB(0, 1)).isNotEqualTo(MCARenderer.RenderOptions.balanced().defaultArgb());
+        assertThat(image.getRGB(1, 1)).isNotEqualTo(MCARenderer.RenderOptions.balanced().defaultArgb());
+    }
+
+    @Test
     void colorMath_debeOscurecerAguaProfundaMasQueAguaSomera() throws Exception {
         MCARenderer renderer = new MCARenderer();
         Method resolveBaseColor = MCARenderer.class.getDeclaredMethod("resolveBaseColor", String.class);
@@ -201,7 +269,7 @@ class MCARendererVisualRegressionTest {
         assertThat(performance.advancedBiomeColoring()).isFalse();
         assertThat(performance.shadeByHeight()).isTrue();
         assertThat(performance.waterSubsurfaceShading()).isFalse();
-        assertThat(performance.biomeColoring()).isFalse();
+        assertThat(performance.biomeColoring()).isTrue();
         assertThat(ultraPerformance.shadeByHeight()).isFalse();
         assertThat(ultraPerformance.waterSubsurfaceShading()).isFalse();
         assertThat(ultraPerformance.biomeColoring()).isFalse();

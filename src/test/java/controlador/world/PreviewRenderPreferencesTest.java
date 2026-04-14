@@ -33,7 +33,7 @@ class PreviewRenderPreferencesTest {
 
         assertThat(performance.isEnabled(PreviewRenderPreferences.RenderToggle.SHADE_BY_HEIGHT)).isTrue();
         assertThat(performance.isEnabled(PreviewRenderPreferences.RenderToggle.WATER_SUBSURFACE_SHADING)).isFalse();
-        assertThat(performance.isEnabled(PreviewRenderPreferences.RenderToggle.BIOME_COLORING)).isFalse();
+        assertThat(performance.isEnabled(PreviewRenderPreferences.RenderToggle.BIOME_COLORING)).isTrue();
         assertThat(ultraPerformance.isEnabled(PreviewRenderPreferences.RenderToggle.SHADE_BY_HEIGHT)).isFalse();
         assertThat(ultraPerformance.isEnabled(PreviewRenderPreferences.RenderToggle.WATER_SUBSURFACE_SHADING)).isFalse();
         assertThat(ultraPerformance.isEnabled(PreviewRenderPreferences.RenderToggle.BIOME_COLORING)).isFalse();
@@ -103,6 +103,7 @@ class PreviewRenderPreferencesTest {
 
         assertThat(restored.preset()).isEqualTo(PreviewRenderPreferences.PreviewRenderPreset.ULTRA_PERFORMANCE);
         assertThat(restored.isEnabled(PreviewRenderPreferences.RenderToggle.SHADE_BY_HEIGHT)).isFalse();
+        assertThat(restored.isEnabled(PreviewRenderPreferences.RenderToggle.BIOME_COLORING)).isFalse();
     }
 
     @Test

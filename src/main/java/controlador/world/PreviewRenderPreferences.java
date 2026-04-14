@@ -434,8 +434,8 @@ public final class PreviewRenderPreferences {
                             ADVANCED_WATER_COLORING, ADVANCED_BIOME_COLORING -> true;
                 };
                 case PERFORMANCE -> switch (this) {
-                    case SHADE_BY_HEIGHT -> true;
-                    case WATER_SUBSURFACE_SHADING, BIOME_COLORING, ADVANCED_MATERIAL_SHADING,
+                    case SHADE_BY_HEIGHT, BIOME_COLORING -> true;
+                    case WATER_SUBSURFACE_SHADING, ADVANCED_MATERIAL_SHADING,
                             ADVANCED_WATER_COLORING, ADVANCED_BIOME_COLORING -> false;
                 };
                 case ULTRA_PERFORMANCE -> switch (this) {

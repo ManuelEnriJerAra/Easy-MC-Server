@@ -12,6 +12,7 @@
 package controlador;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileSystemView;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
@@ -22,7 +23,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Stream;
 
@@ -220,6 +223,98 @@ public class Utilidades {
 
     public static String fromMStoDateString(Long ms){
         return Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
+    }
+
+    public static File resolveSystemPicturesDirectory() {
+        return resolveSystemPicturesDirectory(System.getProperty("os.name", ""), System.getProperty("user.home"), System.getenv());
+    }
+
+    static File resolveSystemPicturesDirectory(String osName, String userHome, Map<String, String> environment) {
+        String normalizedOs = osName == null ? "" : osName.toLowerCase();
+        LinkedHashSet<Path> candidates = new LinkedHashSet<>();
+
+        if(normalizedOs.contains("win")) {
+            addCandidate(candidates, readEnv(environment, "OneDrive"), "Pictures");
+            addCandidate(candidates, readEnv(environment, "USERPROFILE"), "Pictures");
+        } else {
+            Path xdgPictures = resolveXdgPicturesDirectory(userHome, environment);
+            if(xdgPictures != null) {
+                candidates.add(xdgPictures);
+            }
+        }
+
+        addCandidate(candidates, userHome, "Pictures");
+        addCandidate(candidates, userHome, "Imagenes");
+        addCandidate(candidates, userHome, "Imágenes");
+
+        for(Path candidate : candidates) {
+            if(candidate != null && Files.isDirectory(candidate)) {
+                return candidate.toFile();
+            }
+        }
+
+        File defaultDirectory = FileSystemView.getFileSystemView().getDefaultDirectory();
+        if(defaultDirectory != null && defaultDirectory.isDirectory()) {
+            return defaultDirectory;
+        }
+
+        if(userHome != null && !userHome.isBlank()) {
+            File home = Path.of(userHome).toFile();
+            if(home.isDirectory()) {
+                return home;
+            }
+        }
+        return null;
+    }
+
+    private static void addCandidate(LinkedHashSet<Path> candidates, String basePath, String child) {
+        if(basePath == null || basePath.isBlank()) {
+            return;
+        }
+        Path base = Path.of(basePath);
+        candidates.add(child == null || child.isBlank() ? base : base.resolve(child));
+    }
+
+    private static String readEnv(Map<String, String> environment, String key) {
+        if(environment == null || key == null || key.isBlank()) {
+            return null;
+        }
+        return environment.get(key);
+    }
+
+    private static Path resolveXdgPicturesDirectory(String userHome, Map<String, String> environment) {
+        if(userHome == null || userHome.isBlank()) {
+            return null;
+        }
+        String xdgConfigHome = readEnv(environment, "XDG_CONFIG_HOME");
+        Path configFile = xdgConfigHome == null || xdgConfigHome.isBlank()
+                ? Path.of(userHome, ".config", "user-dirs.dirs")
+                : Path.of(xdgConfigHome, "user-dirs.dirs");
+        if(!Files.isRegularFile(configFile)) {
+            return null;
+        }
+
+        try {
+            for(String line : Files.readAllLines(configFile)) {
+                if(line == null) {
+                    continue;
+                }
+                String trimmed = line.trim();
+                if(!trimmed.startsWith("XDG_PICTURES_DIR=")) {
+                    continue;
+                }
+                String value = trimmed.substring("XDG_PICTURES_DIR=".length()).trim();
+                if(value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                value = value.replace("$HOME", userHome);
+                if(!value.isBlank()) {
+                    return Path.of(value);
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        return null;
     }
 
 }

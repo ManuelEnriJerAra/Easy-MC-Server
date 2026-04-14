@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -90,5 +91,31 @@ class UtilidadesTest {
     @Tag("smoke")
     void extraerPorcentaje_debeLeerNumeroAntesDelSimboloPorcentaje() {
         assertThat(Utilidades.extraerPorcentaje("Downloading libraries 83%")).isEqualTo(83);
+    }
+
+    @Test
+    void resolveSystemPicturesDirectory_debePriorizarPicturesDeWindows() throws Exception {
+        Path home = tempDir.resolve("home");
+        Path pictures = home.resolve("Pictures");
+        Files.createDirectories(pictures);
+
+        assertThat(Utilidades.resolveSystemPicturesDirectory("Windows 11", home.toString(), Map.of("USERPROFILE", home.toString())))
+                .isEqualTo(pictures.toFile());
+    }
+
+    @Test
+    void resolveSystemPicturesDirectory_debeLeerXdgPicturesDir() throws Exception {
+        Path home = tempDir.resolve("home");
+        Path configDir = tempDir.resolve("config");
+        Path pictures = home.resolve("Media").resolve("Capturas");
+        Files.createDirectories(pictures);
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("user-dirs.dirs"), "XDG_PICTURES_DIR=\"$HOME/Media/Capturas\"");
+
+        assertThat(Utilidades.resolveSystemPicturesDirectory(
+                "Linux",
+                home.toString(),
+                Map.of("XDG_CONFIG_HOME", configDir.toString())
+        )).isEqualTo(pictures.toFile());
     }
 }

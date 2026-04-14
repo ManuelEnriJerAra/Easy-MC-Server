@@ -316,7 +316,7 @@ public class PanelPrevisualizacion extends JPanel {
         dialog.setMultipleMode(false);
 
         try{
-            File pictures = Path.of(System.getProperty("user.home"), "Pictures").toFile();
+            File pictures = Utilidades.resolveSystemPicturesDirectory();
             if(pictures.isDirectory()){
                 dialog.setDirectory(pictures.getAbsolutePath());
             }

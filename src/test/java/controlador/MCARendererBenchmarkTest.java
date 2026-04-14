@@ -176,6 +176,14 @@ class MCARendererBenchmarkTest {
         List<Double> regionMillis = new ArrayList<>();
         List<Double> worldMillis = new ArrayList<>();
         List<Double> trackedMillis = new ArrayList<>();
+        List<Double> dataLoadMillis = new ArrayList<>();
+        List<Double> blockSampleMillis = new ArrayList<>();
+        List<Double> biomeSampleMillis = new ArrayList<>();
+        List<Double> shadeColorMillis = new ArrayList<>();
+        List<Double> regionComposeMillis = new ArrayList<>();
+        List<Double> worldComposeMillis = new ArrayList<>();
+        List<Double> cropMillis = new ArrayList<>();
+        int threadCount = 1;
         for(int i = 0; i < MEASURE_ITERATIONS; i++) {
             long regionStart = System.nanoTime();
             renderer.renderRegion(regions.getFirst(), options);
@@ -185,8 +193,29 @@ class MCARendererBenchmarkTest {
             MCARenderer.RenderedWorld renderedWorld = renderer.renderWorldWithMetadata(regions, options);
             worldMillis.add(nanosToMillis(System.nanoTime() - worldStart));
             trackedMillis.add(nanosToMillis(renderedWorld.stats().totalTrackedNanos()));
+            MCARenderer.RenderPhases phases = renderedWorld.stats().phases();
+            dataLoadMillis.add(nanosToMillis(phases.dataLoadNanos()));
+            blockSampleMillis.add(nanosToMillis(phases.blockSampleNanos()));
+            biomeSampleMillis.add(nanosToMillis(phases.biomeSampleNanos()));
+            shadeColorMillis.add(nanosToMillis(phases.shadeColorNanos()));
+            regionComposeMillis.add(nanosToMillis(phases.regionComposeNanos()));
+            worldComposeMillis.add(nanosToMillis(phases.worldComposeNanos()));
+            cropMillis.add(nanosToMillis(phases.cropNanos()));
+            threadCount = renderedWorld.stats().threadCount();
         }
-        return new BenchmarkResult(summary(regionMillis), summary(worldMillis), summary(trackedMillis));
+        return new BenchmarkResult(
+                summary(regionMillis),
+                summary(worldMillis),
+                summary(trackedMillis),
+                threadCount,
+                summary(dataLoadMillis),
+                summary(blockSampleMillis),
+                summary(biomeSampleMillis),
+                summary(shadeColorMillis),
+                summary(regionComposeMillis),
+                summary(worldComposeMillis),
+                summary(cropMillis)
+        );
     }
 
     private String renderBenchmarkReport(Map<String, BenchmarkResult> results) {
@@ -200,6 +229,14 @@ class MCARendererBenchmarkTest {
             builder.append(formatStats("region", result.region())).append(System.lineSeparator());
             builder.append(formatStats("world", result.world())).append(System.lineSeparator());
             builder.append(formatStats("tracked", result.tracked())).append(System.lineSeparator());
+            builder.append("threads=").append(result.threadCount()).append(System.lineSeparator());
+            builder.append(formatStats("phase.dataLoad", result.dataLoad())).append(System.lineSeparator());
+            builder.append(formatStats("phase.blockSample", result.blockSample())).append(System.lineSeparator());
+            builder.append(formatStats("phase.biomeSample", result.biomeSample())).append(System.lineSeparator());
+            builder.append(formatStats("phase.shadeColor", result.shadeColor())).append(System.lineSeparator());
+            builder.append(formatStats("phase.regionCompose", result.regionCompose())).append(System.lineSeparator());
+            builder.append(formatStats("phase.worldCompose", result.worldCompose())).append(System.lineSeparator());
+            builder.append(formatStats("phase.crop", result.crop())).append(System.lineSeparator());
         }
         return builder.toString();
     }
@@ -242,7 +279,17 @@ class MCARendererBenchmarkTest {
         return nanos / 1_000_000.0d;
     }
 
-    record BenchmarkResult(MetricSummary region, MetricSummary world, MetricSummary tracked) {
+    record BenchmarkResult(MetricSummary region,
+                           MetricSummary world,
+                           MetricSummary tracked,
+                           int threadCount,
+                           MetricSummary dataLoad,
+                           MetricSummary blockSample,
+                           MetricSummary biomeSample,
+                           MetricSummary shadeColor,
+                           MetricSummary regionCompose,
+                           MetricSummary worldCompose,
+                           MetricSummary crop) {
         double worldMedianMillis() {
             return world.medianMillis();
         }

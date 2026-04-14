@@ -34,6 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -81,10 +82,9 @@ public final class MCARenderer {
     private static final int DEBUG_MAX_CHUNK_LINES = 20;
     private static final int DEBUG_MAX_SAMPLE_LINES = 10;
     private static final int REGION_RENDER_TILE_CHUNKS = 4;
-    private static final int WORLD_RENDER_PARALLELISM = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() - 1));
-    private static final int REGION_TILE_PARALLELISM = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors() - 1));
-    private static final ExecutorService WORLD_RENDER_EXECUTOR = WORLD_RENDER_PARALLELISM > 1 ? Executors.newFixedThreadPool(WORLD_RENDER_PARALLELISM) : null;
-    private static final ForkJoinPool REGION_TILE_POOL = REGION_TILE_PARALLELISM > 1 ? new ForkJoinPool(REGION_TILE_PARALLELISM) : null;
+    private static final int MAX_RENDER_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+    private static final ExecutorService WORLD_RENDER_EXECUTOR = MAX_RENDER_THREADS > 1 ? Executors.newFixedThreadPool(MAX_RENDER_THREADS) : null;
+    private static final ForkJoinPool REGION_TILE_POOL = MAX_RENDER_THREADS > 1 ? new ForkJoinPool(MAX_RENDER_THREADS) : null;
     private static final double SHADE_LIGHT_X = -0.5828079709722181d;
     private static final double SHADE_LIGHT_Y = -0.5828079709722181d;
     private static final double SHADE_LIGHT_Z = 0.5727599000930402d;
@@ -128,7 +128,7 @@ public final class MCARenderer {
      * 7. Recorta la imagen para eliminar bordes totalmente vacios.
      */
     public BufferedImage renderRegion(Path mcaPath, RenderOptions options) throws IOException {
-        return renderRegion(mcaPath, options, true).image();
+        return renderRegion(mcaPath, options, true, 1).image();
     }
 
     /**
@@ -259,6 +259,7 @@ public final class MCARenderer {
         }
         int width = Math.max(1, canvasWidthBlocks * pixelsPerBlock);
         int height = Math.max(1, canvasHeightBlocks * pixelsPerBlock);
+        int worldParallelism = resolveWorldParallelism(normalizedPaths.size());
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         if(progressListener != null) {
             progressListener.onCanvasInitialized(width, height, normalizedOptions.defaultArgb(), normalizedPaths.size());
@@ -276,8 +277,13 @@ public final class MCARenderer {
             long[] sampleNanos = {0L};
             long[] paintNanos = {0L};
             long[] cropNanos = {0L};
+            long[] dataLoadNanos = {0L};
+            long[] blockSampleNanos = {0L};
+            long[] biomeSampleNanos = {0L};
+            long[] shadeColorNanos = {0L};
+            long[] regionComposeNanos = {0L};
             int[] composedRegions = {0};
-            renderWorldRegions(normalizedPaths, coords, normalizedOptions, renderedRegion -> {
+            renderWorldRegions(normalizedPaths, coords, normalizedOptions, worldParallelism, renderedRegion -> {
                 RegionCoordinates region = renderedRegion.region();
                 int regionOriginBlockX = region.x() * REGION_BLOCK_SIDE;
                 int regionOriginBlockZ = region.z() * REGION_BLOCK_SIDE;
@@ -303,6 +309,12 @@ public final class MCARenderer {
                 } else {
                     g2.drawImage(regionImage, drawX, drawY, null);
                 }
+                RenderPhases renderedRegionPhases = renderedRegion.stats().phases();
+                dataLoadNanos[0] += renderedRegionPhases.dataLoadNanos();
+                blockSampleNanos[0] += renderedRegionPhases.blockSampleNanos();
+                biomeSampleNanos[0] += renderedRegionPhases.biomeSampleNanos();
+                shadeColorNanos[0] += renderedRegionPhases.shadeColorNanos();
+                regionComposeNanos[0] += renderedRegionPhases.regionComposeNanos();
                 sampleNanos[0] += renderedRegion.stats().sampleNanos();
                 paintNanos[0] += renderedRegion.stats().paintNanos();
                 cropNanos[0] += renderedRegion.stats().cropNanos();
@@ -336,12 +348,23 @@ public final class MCARenderer {
             int originBlockX = canvasOriginBlockX + Math.floorDiv(cropArea.x, pixelsPerBlock);
             int originBlockZ = canvasOriginBlockZ + Math.floorDiv(cropArea.y, pixelsPerBlock);
             debug("renderWorld finish result=%dx%d", result.getWidth(), result.getHeight());
+            RenderPhases phases = new RenderPhases(
+                    dataLoadNanos[0],
+                    blockSampleNanos[0],
+                    biomeSampleNanos[0],
+                    shadeColorNanos[0],
+                    regionComposeNanos[0],
+                    composeNanos,
+                    cropNanos[0] + worldCropNanos,
+                    markerNanos,
+                    0L
+            );
             return new RenderedWorld(
                     result,
                     originBlockX,
                     originBlockZ,
                     normalizedOptions.pixelsPerBlock(),
-                    new RenderStats(sampleNanos[0], paintNanos[0], composeNanos, cropNanos[0] + worldCropNanos, markerNanos)
+                    new RenderStats(sampleNanos[0], paintNanos[0], composeNanos, cropNanos[0] + worldCropNanos, markerNanos, phases, worldParallelism)
             );
         } catch(RegionRenderRuntimeException ex) {
             throw ex.ioException();
@@ -353,6 +376,7 @@ public final class MCARenderer {
     private void renderWorldRegions(List<Path> normalizedPaths,
                                     List<RegionCoordinates> coords,
                                     RenderOptions normalizedOptions,
+                                    int worldParallelism,
                                     Consumer<RenderedRegion> onRegionReady) throws IOException {
         if(normalizedPaths == null || coords == null || normalizedOptions == null) {
             throw new IllegalArgumentException("Los argumentos del render por regiones no pueden ser null");
@@ -366,9 +390,9 @@ public final class MCARenderer {
             return;
         }
         List<Integer> regionOrder = buildRegionRenderOrder(coords, normalizedOptions);
-        if(normalizedOptions.spiralTraversal() || WORLD_RENDER_PARALLELISM <= 1 || regionCount == 1) {
+        if(normalizedOptions.spiralTraversal() || worldParallelism <= 1 || regionCount == 1) {
             for(int i : regionOrder) {
-                onRegionReady.accept(renderSingleWorldRegion(normalizedPaths, coords, normalizedOptions, i));
+                onRegionReady.accept(renderSingleWorldRegion(normalizedPaths, coords, normalizedOptions, i, worldParallelism));
             }
             return;
         }
@@ -377,7 +401,7 @@ public final class MCARenderer {
         try {
             for(int i = 0; i < regionCount; i++) {
                 final int regionIndex = i;
-                completionService.submit(() -> renderSingleWorldRegion(normalizedPaths, coords, normalizedOptions, regionIndex));
+                completionService.submit(() -> renderSingleWorldRegion(normalizedPaths, coords, normalizedOptions, regionIndex, worldParallelism));
             }
             for(int i = 0; i < regionCount; i++) {
                 Future<RenderedRegion> future = completionService.take();
@@ -404,12 +428,13 @@ public final class MCARenderer {
     private RenderedRegion renderSingleWorldRegion(List<Path> normalizedPaths,
                                                    List<RegionCoordinates> coords,
                                                    RenderOptions normalizedOptions,
-                                                   int index) {
+                                                   int index,
+                                                   int worldParallelism) {
         try {
             // Muy importante: al componer varias regiones no debemos recortar cada una por separado.
             // Si lo hiciésemos, cada imagen regional tendría un tamaño distinto y al dibujarla en su
             // "slot" de 512x512 se desplazaría, provocando cortes rectos o mezclas entre previews.
-            RenderedRegionResult regionResult = renderRegion(normalizedPaths.get(index), normalizedOptions, false);
+            RenderedRegionResult regionResult = renderRegion(normalizedPaths.get(index), normalizedOptions, false, worldParallelism);
             return new RenderedRegion(coords.get(index), regionResult.image(), regionResult.stats());
         } catch(IOException ex) {
             throw new RegionRenderRuntimeException(ex);
@@ -476,11 +501,11 @@ public final class MCARenderer {
     }
 
     // Variante interna para decidir si la region se devuelve recortada o con su tamaño completo de 512x512 bloques.
-    private void runWithRegionTilePool(int tileCount, Runnable task) throws IOException {
+    private void runWithRegionTilePool(int tileCount, int tileParallelism, Runnable task) throws IOException {
         if(task == null) {
             throw new IllegalArgumentException("task no puede ser null");
         }
-        if(REGION_TILE_PARALLELISM <= 1 || tileCount <= 1) {
+        if(tileParallelism <= 1 || tileCount <= 1) {
             task.run();
             return;
         }
@@ -499,7 +524,7 @@ public final class MCARenderer {
         }
     }
 
-    private RenderedRegionResult renderRegion(Path mcaPath, RenderOptions options, boolean cropResult) throws IOException {
+    private RenderedRegionResult renderRegion(Path mcaPath, RenderOptions options, boolean cropResult, int expectedConcurrentWorldTasks) throws IOException {
         Path normalizedPath = validateMcaPath(mcaPath);
         RenderOptions normalizedOptions = options == null ? RenderOptions.defaults() : options.normalized();
         RegionCoordinates region = parseRegionCoordinates(normalizedPath);
@@ -510,10 +535,12 @@ public final class MCARenderer {
                 normalizedOptions.minY(),
                 normalizedOptions.maxY(),
                 normalizedOptions.pixelsPerBlock());
+        long dataLoadStart = System.nanoTime();
         MCAFile mcaFile = MCAUtil.read(normalizedPath.toFile(), RAW_DATA_FLAG);
+        long dataLoadNanos = System.nanoTime() - dataLoadStart;
         BufferedImage image = createRegionImage(normalizedOptions);
         fillImageBackground(image, normalizedOptions.defaultArgb());
-        RegionPaintStats paintStats = paintRegion(mcaFile, image, region, normalizedOptions, cropResult);
+        RegionPaintStats paintStats = paintRegion(mcaFile, image, region, normalizedOptions, cropResult, expectedConcurrentWorldTasks);
         long cropNanos = 0L;
         BufferedImage result = image;
         if(cropResult) {
@@ -522,7 +549,30 @@ public final class MCARenderer {
             cropNanos = System.nanoTime() - cropStart;
         }
         debug("renderRegion finish path=%s result=%dx%d", normalizedPath, result.getWidth(), result.getHeight());
-        return new RenderedRegionResult(result, new RenderStats(paintStats.sampleNanos(), paintStats.paintNanos(), 0L, cropNanos, 0L));
+        RenderPhases phases = new RenderPhases(
+                dataLoadNanos,
+                paintStats.blockSampleNanos(),
+                paintStats.biomeSampleNanos(),
+                paintStats.shadeColorNanos(),
+                paintStats.imageComposeNanos(),
+                0L,
+                cropNanos,
+                0L,
+                0L
+        );
+        return new RenderedRegionResult(
+                result,
+                new RenderStats(
+                        paintStats.sampleNanos(),
+                        paintStats.paintNanos(),
+                        0L,
+                        cropNanos,
+                        0L,
+                        phases,
+                        resolveRegionTileParallelism((int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS)
+                                * (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS), expectedConcurrentWorldTasks)
+                )
+        );
     }
 
     // Exporta una sola region a PNG con opciones por defecto.
@@ -758,7 +808,8 @@ public final class MCARenderer {
                                          BufferedImage image,
                                          RegionCoordinates region,
                                          RenderOptions options,
-                                         boolean allowParallelTiles) throws IOException {
+                                         boolean allowParallelTiles,
+                                         int expectedConcurrentWorldTasks) throws IOException {
         String[] blockNames = new String[REGION_BLOCK_COUNT];
         String[] biomeNames = new String[REGION_BLOCK_COUNT];
         String[] waterFloorNames = new String[REGION_BLOCK_COUNT];
@@ -767,29 +818,36 @@ public final class MCARenderer {
         Arrays.fill(heights, Integer.MIN_VALUE);
         int tilesPerSide = (int) Math.ceil((double) REGION_CHUNK_SIDE / REGION_RENDER_TILE_CHUNKS);
         int tileCount = tilesPerSide * tilesPerSide;
+        int tileParallelism = resolveRegionTileParallelism(tileCount, expectedConcurrentWorldTasks);
+        RegionPhaseAccumulator phaseAccumulator = new RegionPhaseAccumulator();
         long sampleStart = System.nanoTime();
-        if(allowParallelTiles && REGION_TILE_PARALLELISM > 1 && tileCount > 1) {
-            runWithRegionTilePool(tileCount, () -> IntStream.range(0, tileCount)
+        if(allowParallelTiles && tileParallelism > 1 && tileCount > 1) {
+            runWithRegionTilePool(tileCount, tileParallelism, () -> IntStream.range(0, tileCount)
                     .parallel()
                     .forEach(tileIndex -> {
                         int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
                         int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
+                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths, phaseAccumulator);
                     }));
         } else {
             IntStream.range(0, tileCount)
                     .forEach(tileIndex -> {
                         int tileChunkX = (tileIndex % tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
                         int tileChunkZ = (tileIndex / tilesPerSide) * REGION_RENDER_TILE_CHUNKS;
-                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
+                        sampleChunkTile(mcaFile, region, options, tileChunkX, tileChunkZ, blockNames, biomeNames, waterFloorNames, heights, waterDepths, phaseAccumulator);
                     });
         }
         long sampleNanos = System.nanoTime() - sampleStart;
 
-        long paintStart = System.nanoTime();
-        paintRegionFromSamples(image, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options);
-        long paintNanos = System.nanoTime() - paintStart;
-        return new RegionPaintStats(sampleNanos, paintNanos);
+        PaintPhaseStats paintPhaseStats = paintRegionFromSamples(image, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options);
+        return new RegionPaintStats(
+                sampleNanos,
+                paintPhaseStats.totalNanos(),
+                phaseAccumulator.blockSampleNanos.sum(),
+                phaseAccumulator.biomeSampleNanos.sum(),
+                paintPhaseStats.shadeColorNanos(),
+                paintPhaseStats.imageComposeNanos()
+        );
     }
 
     private void sampleChunkTile(
@@ -802,7 +860,8 @@ public final class MCARenderer {
             String[] biomeNames,
             String[] waterFloorNames,
             int[] heights,
-            int[] waterDepths
+            int[] waterDepths,
+            RegionPhaseAccumulator phaseAccumulator
     ) {
         int endChunkX = Math.min(REGION_CHUNK_SIDE, startChunkX + REGION_RENDER_TILE_CHUNKS);
         int endChunkZ = Math.min(REGION_CHUNK_SIDE, startChunkZ + REGION_RENDER_TILE_CHUNKS);
@@ -815,7 +874,7 @@ public final class MCARenderer {
                 if(chunk == null) {
                     continue;
                 }
-                sampleChunk(chunk, localChunkX, localChunkZ, region, options, blockNames, biomeNames, waterFloorNames, heights, waterDepths);
+                sampleChunk(chunk, localChunkX, localChunkZ, region, options, blockNames, biomeNames, waterFloorNames, heights, waterDepths, phaseAccumulator);
             }
         }
     }
@@ -842,7 +901,8 @@ public final class MCARenderer {
             String[] biomeNames,
             String[] waterFloorNames,
             int[] heights,
-            int[] waterDepths
+            int[] waterDepths,
+            RegionPhaseAccumulator phaseAccumulator
     ) {
         ChunkData chunkData = resolveChunkData(chunk);
         if(chunkData.root() == null) {
@@ -874,11 +934,21 @@ public final class MCARenderer {
                 int currentBlockX = regionBlockX + localX;
                 int currentBlockZ = regionBlockZ + localZ;
                 int currentIndex = regionIndex(currentBlockX, currentBlockZ);
+                long blockSampleStart = System.nanoTime();
                 TopBlockSample sample = findTopBlock(chunkData, localX, localZ, worldBlockX, worldBlockZ, options);
+                if(phaseAccumulator != null) {
+                    phaseAccumulator.blockSampleNanos.add(System.nanoTime() - blockSampleStart);
+                }
                 blockNames[currentIndex] = sample.blockName();
-                biomeNames[currentIndex] = options.biomeColoring()
-                        ? findBiomeName(chunkData, localX, localZ, sample.y(), options)
-                        : null;
+                if(options.biomeColoring() && !sample.isEmpty()) {
+                    long biomeSampleStart = System.nanoTime();
+                    biomeNames[currentIndex] = findBiomeName(chunkData, localX, localZ, sample.y(), options);
+                    if(phaseAccumulator != null) {
+                        phaseAccumulator.biomeSampleNanos.add(System.nanoTime() - biomeSampleStart);
+                    }
+                } else {
+                    biomeNames[currentIndex] = null;
+                }
                 waterFloorNames[currentIndex] = sample.waterFloorBlockName();
                 heights[currentIndex] = sample.isEmpty() ? Integer.MIN_VALUE : sample.y();
                 waterDepths[currentIndex] = sample.waterDepth();
@@ -902,25 +972,29 @@ public final class MCARenderer {
                 && chunkMinZ <= options.maxWorldBlockZ();
     }
 
-    private void paintRegionFromSamples(BufferedImage image, String[] blockNames, String[] biomeNames, String[] waterFloorNames, int[] heights, int[] waterDepths, RenderOptions options) {
+    private PaintPhaseStats paintRegionFromSamples(BufferedImage image, String[] blockNames, String[] biomeNames, String[] waterFloorNames, int[] heights, int[] waterDepths, RenderOptions options) {
         RenderColorCache colorCache = new RenderColorCache();
         boolean fastPlainColorPath = !options.biomeColoring() && !options.waterSubsurfaceShading();
         int[] pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
         if(options.pixelsPerBlock() == 1) {
-            paintRegionFromSamplesSinglePixel(pixels, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options, colorCache, fastPlainColorPath);
-            return;
+            return paintRegionFromSamplesSinglePixel(pixels, blockNames, biomeNames, waterFloorNames, heights, waterDepths, options, colorCache, fastPlainColorPath);
         }
 
         int pixelsPerBlock = options.pixelsPerBlock();
         int imageWidth = image.getWidth();
         int[] scaledRow = new int[imageWidth];
         int[] blockRowColors = new int[REGION_BLOCK_SIDE];
+        long shadeColorNanos = 0L;
+        long imageComposeNanos = 0L;
         for(int blockZ = 0; blockZ < REGION_BLOCK_SIDE; blockZ++) {
+            long shadeRowStart = System.nanoTime();
             for(int blockX = 0; blockX < REGION_BLOCK_SIDE; blockX++) {
                 blockRowColors[blockX] = fastPlainColorPath
                         ? resolveBlockColorPlain(blockNames, heights, blockX, blockZ, options, colorCache, null, null)
                         : resolveBlockColor(blockNames, biomeNames, waterFloorNames, heights, waterDepths, blockX, blockZ, options, colorCache);
             }
+            shadeColorNanos += System.nanoTime() - shadeRowStart;
+            long composeRowStart = System.nanoTime();
             for(int blockX = 0; blockX < REGION_BLOCK_SIDE; blockX++) {
                 int pixelStartX = blockX * pixelsPerBlock;
                 Arrays.fill(scaledRow, pixelStartX, pixelStartX + pixelsPerBlock, blockRowColors[blockX]);
@@ -929,10 +1003,12 @@ public final class MCARenderer {
             for(int rowRepeat = 0; rowRepeat < pixelsPerBlock; rowRepeat++) {
                 System.arraycopy(scaledRow, 0, pixels, rowStart + (rowRepeat * imageWidth), imageWidth);
             }
+            imageComposeNanos += System.nanoTime() - composeRowStart;
         }
+        return new PaintPhaseStats(shadeColorNanos, imageComposeNanos);
     }
 
-    private void paintRegionFromSamplesSinglePixel(
+    private PaintPhaseStats paintRegionFromSamplesSinglePixel(
             int[] pixels,
             String[] blockNames,
             String[] biomeNames,
@@ -943,12 +1019,16 @@ public final class MCARenderer {
             RenderColorCache colorCache,
             boolean fastPlainColorPath
     ) {
+        int[] rowColors = new int[REGION_BLOCK_SIDE];
+        long shadeColorNanos = 0L;
+        long imageComposeNanos = 0L;
         for(int blockZ = 0; blockZ < REGION_BLOCK_SIDE; blockZ++) {
             String previousBlockName = null;
             Color previousBaseColor = null;
+            long shadeRowStart = System.nanoTime();
             for(int blockX = 0; blockX < REGION_BLOCK_SIDE; blockX++) {
                 int currentIndex = regionIndex(blockX, blockZ);
-                pixels[currentIndex] = fastPlainColorPath
+                rowColors[blockX] = fastPlainColorPath
                         ? resolveBlockColorPlain(blockNames, heights, blockX, blockZ, options, colorCache, previousBlockName, previousBaseColor)
                         : resolveBlockColor(blockNames, biomeNames, waterFloorNames, heights, waterDepths, blockX, blockZ, options, colorCache);
                 if(fastPlainColorPath) {
@@ -956,7 +1036,12 @@ public final class MCARenderer {
                     previousBaseColor = resolveBaseColorCached(previousBlockName, colorCache);
                 }
             }
+            shadeColorNanos += System.nanoTime() - shadeRowStart;
+            long composeRowStart = System.nanoTime();
+            System.arraycopy(rowColors, 0, pixels, blockZ * REGION_BLOCK_SIDE, REGION_BLOCK_SIDE);
+            imageComposeNanos += System.nanoTime() - composeRowStart;
         }
+        return new PaintPhaseStats(shadeColorNanos, imageComposeNanos);
     }
 
     /**
@@ -2618,7 +2703,7 @@ public final class MCARenderer {
         }
 
         public static RenderOptions performance() {
-            return new RenderOptions(1, -64, 319, true, false, false, false, false, false, true, DEFAULT_ARGB, null, null, null, null, false, null, null);
+            return new RenderOptions(1, -64, 319, true, false, true, false, false, false, true, DEFAULT_ARGB, null, null, null, null, false, null, null);
         }
 
         public static RenderOptions ultraPerformance() {
@@ -2726,8 +2811,34 @@ public final class MCARenderer {
                               RenderStats partialStats);
     }
 
-    public record RenderStats(long sampleNanos, long paintNanos, long composeNanos, long cropNanos, long markerNanos) {
+    public record RenderPhases(long dataLoadNanos,
+                               long blockSampleNanos,
+                               long biomeSampleNanos,
+                               long shadeColorNanos,
+                               long regionComposeNanos,
+                               long worldComposeNanos,
+                               long cropNanos,
+                               long markerNanos,
+                               long writeNanos) {
+        public static final RenderPhases EMPTY = new RenderPhases(0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+
+        public long totalNanos() {
+            return dataLoadNanos + blockSampleNanos + biomeSampleNanos + shadeColorNanos + regionComposeNanos + worldComposeNanos + cropNanos + markerNanos + writeNanos;
+        }
+    }
+
+    public record RenderStats(long sampleNanos,
+                              long paintNanos,
+                              long composeNanos,
+                              long cropNanos,
+                              long markerNanos,
+                              RenderPhases phases,
+                              int threadCount) {
         public static final RenderStats EMPTY = new RenderStats(0L, 0L, 0L, 0L, 0L);
+
+        public RenderStats(long sampleNanos, long paintNanos, long composeNanos, long cropNanos, long markerNanos) {
+            this(sampleNanos, paintNanos, composeNanos, cropNanos, markerNanos, RenderPhases.EMPTY, 1);
+        }
 
         public long totalTrackedNanos() {
             return sampleNanos + paintNanos + composeNanos + cropNanos + markerNanos;
@@ -2881,7 +2992,23 @@ public final class MCARenderer {
         private static final MaterialProfile DEFAULT = new MaterialProfile(1.0d, 0, 0, false, false);
     }
 
-    private record RegionPaintStats(long sampleNanos, long paintNanos) {}
+    private record RegionPaintStats(long sampleNanos,
+                                    long paintNanos,
+                                    long blockSampleNanos,
+                                    long biomeSampleNanos,
+                                    long shadeColorNanos,
+                                    long imageComposeNanos) {}
+
+    private record PaintPhaseStats(long shadeColorNanos, long imageComposeNanos) {
+        private long totalNanos() {
+            return shadeColorNanos + imageComposeNanos;
+        }
+    }
+
+    private static final class RegionPhaseAccumulator {
+        private final LongAdder blockSampleNanos = new LongAdder();
+        private final LongAdder biomeSampleNanos = new LongAdder();
+    }
 
     private record RenderedRegionResult(BufferedImage image, RenderStats stats) {}
 
@@ -2907,6 +3034,22 @@ public final class MCARenderer {
 
     private static String formatRegion(RegionCoordinates region) {
         return region == null ? "?" : "(" + region.x() + "," + region.z() + ")";
+    }
+
+    private static int resolveWorldParallelism(int regionCount) {
+        if(regionCount <= 1 || MAX_RENDER_THREADS <= 1) {
+            return 1;
+        }
+        return Math.max(1, Math.min(regionCount, MAX_RENDER_THREADS));
+    }
+
+    private static int resolveRegionTileParallelism(int tileCount, int expectedConcurrentWorldTasks) {
+        if(tileCount <= 1 || MAX_RENDER_THREADS <= 1) {
+            return 1;
+        }
+        int concurrentWorldTasks = Math.max(1, expectedConcurrentWorldTasks);
+        int budgetPerRegion = Math.max(1, MAX_RENDER_THREADS / concurrentWorldTasks);
+        return Math.max(1, Math.min(tileCount, budgetPerRegion));
     }
 
     private static void markReason(ColumnDiagnostics diagnostics, String reason) {

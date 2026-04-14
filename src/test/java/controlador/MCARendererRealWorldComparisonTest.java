@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.DoubleSummaryStatistics;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -65,6 +66,8 @@ class MCARendererRealWorldComparisonTest {
                 outputDir.resolve("quality_balanced_performance-triptych.png").toFile()
         );
         Files.writeString(outputDir.resolve("benchmark.txt"), renderReport(worldPath, regions.size(), center, results));
+        Files.writeString(outputDir.resolve("benchmark.md"), renderMarkdownReport(worldPath, regions.size(), center, results));
+        Files.writeString(outputDir.resolve("benchmark.csv"), renderCsvReport(results));
 
         assertThat(results.get("performance").medianMillis()).isLessThan(results.get("quality").medianMillis());
         assertThat(results.get("ultra-performance").medianMillis()).isLessThan(results.get("performance").medianMillis());
@@ -84,13 +87,43 @@ class MCARendererRealWorldComparisonTest {
         }
 
         List<Double> samples = new ArrayList<>();
+        List<Double> dataLoadSamples = new ArrayList<>();
+        List<Double> blockSamples = new ArrayList<>();
+        List<Double> biomeSamples = new ArrayList<>();
+        List<Double> shadeSamples = new ArrayList<>();
+        List<Double> regionComposeSamples = new ArrayList<>();
+        List<Double> worldComposeSamples = new ArrayList<>();
+        List<Double> cropSamples = new ArrayList<>();
         BufferedImage lastImage = null;
+        int threadCount = 1;
         for (int i = 0; i < MEASURE_ITERATIONS; i++) {
             long start = System.nanoTime();
-            lastImage = renderer.renderWorld(regions, options);
+            MCARenderer.RenderedWorld renderedWorld = renderer.renderWorldWithMetadata(regions, options);
+            lastImage = renderedWorld.image();
             samples.add((System.nanoTime() - start) / 1_000_000.0d);
+            MCARenderer.RenderPhases phases = renderedWorld.stats().phases();
+            dataLoadSamples.add(nanosToMillis(phases.dataLoadNanos()));
+            blockSamples.add(nanosToMillis(phases.blockSampleNanos()));
+            biomeSamples.add(nanosToMillis(phases.biomeSampleNanos()));
+            shadeSamples.add(nanosToMillis(phases.shadeColorNanos()));
+            regionComposeSamples.add(nanosToMillis(phases.regionComposeNanos()));
+            worldComposeSamples.add(nanosToMillis(phases.worldComposeNanos()));
+            cropSamples.add(nanosToMillis(phases.cropNanos()));
+            threadCount = renderedWorld.stats().threadCount();
         }
-        return new ScenarioResult(median(samples), average(samples), lastImage);
+        return new ScenarioResult(
+                median(samples),
+                average(samples),
+                lastImage,
+                threadCount,
+                summary(dataLoadSamples),
+                summary(blockSamples),
+                summary(biomeSamples),
+                summary(shadeSamples),
+                summary(regionComposeSamples),
+                summary(worldComposeSamples),
+                summary(cropSamples)
+        );
     }
 
     private MCARenderer.RenderOptions buildWorldOptions(
@@ -237,8 +270,81 @@ class MCARendererRealWorldComparisonTest {
                     .append(".avgMs=")
                     .append(String.format(Locale.US, "%.3f", entry.getValue().averageMillis()))
                     .append('\n');
+            report.append(entry.getKey()).append(".threads=").append(entry.getValue().threadCount()).append('\n');
+            appendPhase(report, entry.getKey(), "dataLoad", entry.getValue().dataLoad());
+            appendPhase(report, entry.getKey(), "blockSample", entry.getValue().blockSample());
+            appendPhase(report, entry.getKey(), "biomeSample", entry.getValue().biomeSample());
+            appendPhase(report, entry.getKey(), "shadeColor", entry.getValue().shadeColor());
+            appendPhase(report, entry.getKey(), "regionCompose", entry.getValue().regionCompose());
+            appendPhase(report, entry.getKey(), "worldCompose", entry.getValue().worldCompose());
+            appendPhase(report, entry.getKey(), "crop", entry.getValue().crop());
         }
         return report.toString();
+    }
+
+    private String renderMarkdownReport(
+            Path worldPath,
+            int regionCount,
+            MCARenderer.WorldPoint center,
+            Map<String, ScenarioResult> results
+    ) {
+        StringBuilder report = new StringBuilder();
+        report.append("# Real World Preview Benchmark").append('\n').append('\n');
+        report.append("- world: ").append(worldPath).append('\n');
+        report.append("- regions: ").append(regionCount).append('\n');
+        report.append("- center: ").append(center.x()).append(',').append(center.z()).append('\n');
+        report.append("- limitBlocks: ").append(DEFAULT_LIMIT_BLOCKS).append('\n').append('\n');
+        report.append("| preset | median ms | avg ms | data load | blocks | biomes | shade/color | region compose | world compose | crop | threads |").append('\n');
+        report.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |").append('\n');
+        for(Map.Entry<String, ScenarioResult> entry : results.entrySet()) {
+            ScenarioResult result = entry.getValue();
+            report.append("| ")
+                    .append(entry.getKey())
+                    .append(" | ")
+                    .append(formatMillis(result.medianMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.averageMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.dataLoad().medianMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.blockSample().medianMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.biomeSample().medianMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.shadeColor().medianMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.regionCompose().medianMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.worldCompose().medianMillis()))
+                    .append(" | ")
+                    .append(formatMillis(result.crop().medianMillis()))
+                    .append(" | ")
+                    .append(result.threadCount())
+                    .append(" |")
+                    .append('\n');
+        }
+        return report.toString();
+    }
+
+    private String renderCsvReport(Map<String, ScenarioResult> results) {
+        StringBuilder csv = new StringBuilder();
+        csv.append("preset,median_ms,avg_ms,data_load_ms,block_sample_ms,biome_sample_ms,shade_color_ms,region_compose_ms,world_compose_ms,crop_ms,threads").append('\n');
+        for(Map.Entry<String, ScenarioResult> entry : results.entrySet()) {
+            ScenarioResult result = entry.getValue();
+            csv.append(entry.getKey()).append(',')
+                    .append(formatMillis(result.medianMillis())).append(',')
+                    .append(formatMillis(result.averageMillis())).append(',')
+                    .append(formatMillis(result.dataLoad().medianMillis())).append(',')
+                    .append(formatMillis(result.blockSample().medianMillis())).append(',')
+                    .append(formatMillis(result.biomeSample().medianMillis())).append(',')
+                    .append(formatMillis(result.shadeColor().medianMillis())).append(',')
+                    .append(formatMillis(result.regionCompose().medianMillis())).append(',')
+                    .append(formatMillis(result.worldCompose().medianMillis())).append(',')
+                    .append(formatMillis(result.crop().medianMillis())).append(',')
+                    .append(result.threadCount())
+                    .append('\n');
+        }
+        return csv.toString();
     }
 
     private double median(List<Double> samples) {
@@ -265,6 +371,56 @@ class MCARendererRealWorldComparisonTest {
         return sum / samples.size();
     }
 
-    private record ScenarioResult(double medianMillis, double averageMillis, BufferedImage image) {
+    private MetricSummary summary(List<Double> values) {
+        if(values.isEmpty()) {
+            return new MetricSummary(0d, 0d, 0d, 0d, 0d);
+        }
+        List<Double> sorted = values.stream().sorted(Comparator.naturalOrder()).toList();
+        DoubleSummaryStatistics stats = values.stream().mapToDouble(Double::doubleValue).summaryStatistics();
+        double average = stats.getAverage();
+        double median = sorted.size() % 2 == 0
+                ? (sorted.get((sorted.size() / 2) - 1) + sorted.get(sorted.size() / 2)) / 2.0d
+                : sorted.get(sorted.size() / 2);
+        double variance = values.stream()
+                .mapToDouble(value -> {
+                    double delta = value - average;
+                    return delta * delta;
+                })
+                .average()
+                .orElse(0d);
+        return new MetricSummary(average, median, stats.getMin(), stats.getMax(), Math.sqrt(variance));
+    }
+
+    private void appendPhase(StringBuilder report, String preset, String phaseName, MetricSummary summary) {
+        report.append(preset)
+                .append('.')
+                .append(phaseName)
+                .append(".medianMs=")
+                .append(formatMillis(summary.medianMillis()))
+                .append('\n');
+    }
+
+    private String formatMillis(double value) {
+        return String.format(Locale.US, "%.3f", value);
+    }
+
+    private double nanosToMillis(long nanos) {
+        return nanos / 1_000_000.0d;
+    }
+
+    private record ScenarioResult(double medianMillis,
+                                  double averageMillis,
+                                  BufferedImage image,
+                                  int threadCount,
+                                  MetricSummary dataLoad,
+                                  MetricSummary blockSample,
+                                  MetricSummary biomeSample,
+                                  MetricSummary shadeColor,
+                                  MetricSummary regionCompose,
+                                  MetricSummary worldCompose,
+                                  MetricSummary crop) {
+    }
+
+    private record MetricSummary(double averageMillis, double medianMillis, double minMillis, double maxMillis, double stddevMillis) {
     }
 }

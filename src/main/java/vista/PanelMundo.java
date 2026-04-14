@@ -9,6 +9,7 @@ import controlador.GestorMundos;
 import controlador.GestorServidores;
 import controlador.MCARenderer;
 import controlador.MojangAPI;
+import controlador.Utilidades;
 import controlador.WorldDataReader;
 import controlador.world.PreviewOverlayData;
 import controlador.world.PreviewPlayerData;
@@ -2778,7 +2779,7 @@ public class PanelMundo extends JPanel {
 
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Guardar preview como");
-        java.io.File imagenesDir = FileSystemView.getFileSystemView().getDefaultDirectory();
+        java.io.File imagenesDir = Utilidades.resolveSystemPicturesDirectory();
         if (imagenesDir != null && imagenesDir.isDirectory()) {
             chooser.setCurrentDirectory(imagenesDir);
         }
