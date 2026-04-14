@@ -50,6 +50,9 @@ public final class WorldFilesService {
         if (propertiesPath == null) {
             throw new IOException("La ruta de server.properties no es valida.");
         }
+        if (propertiesPath.getParent() != null) {
+            Files.createDirectories(propertiesPath.getParent());
+        }
         try (OutputStream out = Files.newOutputStream(propertiesPath)) {
             properties.store(out, null);
         }

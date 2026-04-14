@@ -167,6 +167,11 @@ public class Utilidades {
         if(puerto <= 0) return;
 
         Path propertiesPath = direccion.resolve("server.properties");
+        try {
+            Files.createDirectories(direccion);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
         Properties properties = new Properties();
         if(Files.exists(propertiesPath)){
@@ -190,6 +195,11 @@ public class Utilidades {
         if(motd == null) motd = "";
 
         Path propertiesPath = direccion.resolve("server.properties");
+        try {
+            Files.createDirectories(direccion);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
         Properties properties = new Properties();
         if(Files.exists(propertiesPath)){

@@ -183,21 +183,21 @@ public class WorldDataReader {
             // En mundos modernos la seed suele vivir en Data.WorldGenSettings.seed.
             CompoundTag worldGenSettings = data.getCompoundTag("WorldGenSettings");
             if(worldGenSettings != null) {
-                LongTag longSeedTag = worldGenSettings.getLongTag("seed");
-                if(longSeedTag != null) {
+                Tag<?> seedTag = worldGenSettings.get("seed");
+                if(seedTag instanceof LongTag longSeedTag) {
                     return Long.toString(longSeedTag.asLong());
                 }
-
-                // Algunas lecturas pueden devolver el tag como entero o string, asi que dejamos
-                // estos fallbacks para poder comparar la seed sin depender del tipo exacto.
-                IntTag intSeedTag = worldGenSettings.getIntTag("seed");
-                if(intSeedTag != null) {
+                if(seedTag instanceof IntTag intSeedTag) {
                     return Integer.toString(intSeedTag.asInt());
                 }
-
-                StringTag stringSeedTag = worldGenSettings.getStringTag("seed");
-                if(stringSeedTag != null) {
-                    return stringSeedTag.getValue();
+                if(seedTag instanceof StringTag stringSeedTag) {
+                    return normalizeRawString(stringSeedTag.getValue());
+                }
+                if(seedTag != null) {
+                    String genericSeedValue = normalizeRawString(seedTag.valueToString());
+                    if(genericSeedValue != null && !genericSeedValue.isBlank()) {
+                        return genericSeedValue;
+                    }
                 }
             }
 
@@ -446,9 +446,19 @@ public class WorldDataReader {
     }
 
     private static String normalizeRuleValue(String value) {
+        value = normalizeRawString(value);
         if("true".equalsIgnoreCase(value)) return "✓";
         if("false".equalsIgnoreCase(value)) return "✗";
         return value;
+    }
+
+    private static String normalizeRawString(String value) {
+        if(value == null) return null;
+        String normalized = value.trim();
+        if(normalized.length() >= 2 && normalized.startsWith("\"") && normalized.endsWith("\"")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     private static String readStringValue(Map<String, String> values, String key) {

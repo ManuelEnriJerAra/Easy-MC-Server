@@ -82,6 +82,7 @@ public class GestorServidores {
     }
 
     private final ObjectMapper mapper = new ObjectMapper();
+    private final File jsonFile;
 
     private String avisoServidoresNoCargados;
 
@@ -96,6 +97,11 @@ public class GestorServidores {
 
     // Constructor por defecto
     public GestorServidores() {
+        this(getJsonFile());
+    }
+
+    GestorServidores(File jsonFile) {
+        this.jsonFile = jsonFile == null ? getJsonFile() : jsonFile;
         this.listaServidores = cargarServidores();
         boolean cambiosOrden = normalizarMetadatosOrden(true);
         validarYLimpiarServidoresPersistidos();
@@ -123,7 +129,7 @@ public class GestorServidores {
 
     // cargamos todos los servidores del JSON
     private List<Server> cargarServidores(){
-        File file = getJsonFile();
+        File file = jsonFile;
         if (!file.exists()) {
             List<Server> servidores = new ArrayList<>();
             try{
@@ -614,7 +620,7 @@ public class GestorServidores {
     public void guardarServidores(){
         normalizarMetadatosOrden(true);
         try{
-            mapper.writerWithDefaultPrettyPrinter().writeValue(getJsonFile(), copiarListaServidoresOrdenada());
+            mapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, copiarListaServidoresOrdenada());
         } catch (JacksonException e) {
             System.err.println("Error al guardar servidores: " + e.getMessage());
         }
