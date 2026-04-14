@@ -37,6 +37,45 @@ class GestorServidoresTest {
         assertThat(persisted.getFirst().getId()).isNotBlank();
         assertThat(persisted.getFirst().getServerConfig()).isNotNull();
         assertThat(persisted.getFirst().getOrdenLista()).isZero();
+        assertThat(persisted.getFirst().getPreviewRenderProfileId()).isEqualTo("balanced");
+        assertThat(persisted.getFirst().getPreviewRenderRealtime()).isFalse();
+        assertThat(persisted.getFirst().getPreviewShowSpawn()).isFalse();
+        assertThat(persisted.getFirst().getPreviewShowPlayers()).isFalse();
+        assertThat(persisted.getFirst().getPreviewShowChunkGrid()).isFalse();
+        assertThat(persisted.getFirst().getPreviewUseWholeMap()).isFalse();
+        assertThat(persisted.getFirst().getPreviewRenderLimitPixels()).isEqualTo(256);
+        assertThat(persisted.getFirst().getPreviewRenderCenterId()).isEqualTo("spawn");
+    }
+
+    @Test
+    void constructor_debeCompletarPreferenciasPreviewFaltantes() throws Exception {
+        Path jsonPath = tempDir.resolve("ServerList.json");
+        Path serverDir = tempDir.resolve("previewless-server");
+        TestWorldFixtures.createValidServerJar(serverDir, "server.jar");
+        Server server = new Server();
+        server.setDisplayName("Previewless");
+        server.setServerDir(serverDir.toString());
+        server.setPreviewRenderProfileId(null);
+        server.setPreviewRenderRealtime(null);
+        server.setPreviewShowSpawn(null);
+        server.setPreviewShowPlayers(null);
+        server.setPreviewShowChunkGrid(null);
+        server.setPreviewUseWholeMap(null);
+        server.setPreviewRenderLimitPixels(null);
+        server.setPreviewRenderCenterId(null);
+        new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(jsonPath.toFile(), List.of(server));
+
+        GestorServidores gestor = new GestorServidores(jsonPath.toFile());
+
+        Server persisted = gestor.getListaServidores().getFirst();
+        assertThat(persisted.getPreviewRenderProfileId()).isEqualTo("balanced");
+        assertThat(persisted.getPreviewRenderRealtime()).isFalse();
+        assertThat(persisted.getPreviewShowSpawn()).isFalse();
+        assertThat(persisted.getPreviewShowPlayers()).isFalse();
+        assertThat(persisted.getPreviewShowChunkGrid()).isFalse();
+        assertThat(persisted.getPreviewUseWholeMap()).isFalse();
+        assertThat(persisted.getPreviewRenderLimitPixels()).isEqualTo(256);
+        assertThat(persisted.getPreviewRenderCenterId()).isEqualTo("spawn");
     }
 
     @Test

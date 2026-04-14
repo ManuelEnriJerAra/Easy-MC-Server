@@ -39,6 +39,14 @@ public class Main {
         UIManager.put("TitlePane.borderColor", AppTheme.getTransparentColor());
         UIManager.put("TitlePane.embeddedForeground", AppTheme.getForeground());
         UIManager.put("TitlePane.unifiedBackground", false);
+        aplicarPreferenciasTooltips();
+    }
+
+    private static void aplicarPreferenciasTooltips() {
+        ToolTipManager toolTipManager = ToolTipManager.sharedInstance();
+        toolTipManager.setInitialDelay(450);
+        toolTipManager.setReshowDelay(120);
+        toolTipManager.setDismissDelay(10_000);
     }
 
     public static void main(String[] args){

@@ -134,9 +134,6 @@ public class PanelEstadisticas extends JPanel {
     private Timer refreshTimer;
     private final PropertyChangeListener estadoServidorListener;
     private boolean estadoListenerRegistrado = false;
-    private final int originalTooltipInitialDelay;
-    private final int originalTooltipReshowDelay;
-    private final int originalTooltipDismissDelay;
     private boolean updatingSettingsControls = false;
     private boolean updatingTimelineControls = false;
     private int timelineMaxOffsetSeconds = 0;
@@ -152,11 +149,6 @@ public class PanelEstadisticas extends JPanel {
         this.gestorServidores = gestorServidores;
         this.server = server;
         this.statsHistory = getOrCreateHistory(server);
-        ToolTipManager toolTipManager = ToolTipManager.sharedInstance();
-        originalTooltipInitialDelay = toolTipManager.getInitialDelay();
-        originalTooltipReshowDelay = toolTipManager.getReshowDelay();
-        originalTooltipDismissDelay = toolTipManager.getDismissDelay();
-
         setLayout(new BorderLayout());
         setOpaque(false);
 
@@ -716,9 +708,6 @@ public class PanelEstadisticas extends JPanel {
     @Override
     public void addNotify() {
         super.addNotify();
-        ToolTipManager.sharedInstance().setInitialDelay(0);
-        ToolTipManager.sharedInstance().setReshowDelay(0);
-        ToolTipManager.sharedInstance().setDismissDelay(Integer.MAX_VALUE);
         iniciarRecursosSiHaceFalta();
         SwingUtilities.invokeLater(this::solicitarMuestras);
     }
@@ -726,9 +715,6 @@ public class PanelEstadisticas extends JPanel {
     @Override
     public void removeNotify() {
         detenerRecursos();
-        ToolTipManager.sharedInstance().setInitialDelay(originalTooltipInitialDelay);
-        ToolTipManager.sharedInstance().setReshowDelay(originalTooltipReshowDelay);
-        ToolTipManager.sharedInstance().setDismissDelay(originalTooltipDismissDelay);
         super.removeNotify();
     }
 

@@ -31,6 +31,19 @@ public final class WorldFilesService {
         return metadata;
     }
 
+    public static void writeWorldMetadata(World world, Properties metadata) throws IOException {
+        Path metadataPath = getWorldMetadataPath(world);
+        if (metadataPath == null) {
+            throw new IOException("La ruta de metadata del mundo no es valida.");
+        }
+        if (metadataPath.getParent() != null) {
+            Files.createDirectories(metadataPath.getParent());
+        }
+        try (OutputStream out = Files.newOutputStream(metadataPath)) {
+            metadata.store(out, "Easy MC Server managed world metadata");
+        }
+    }
+
     public static Properties readServerProperties(Server server) {
         Properties properties = new Properties();
         Path propertiesPath = getServerPropertiesPath(server);

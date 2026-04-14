@@ -249,6 +249,38 @@ public class GestorServidores {
             server.setEstadisticasJugadoresHistorial(Boolean.TRUE);
             cambios = true;
         }
+        if (server.getPreviewRenderProfileId() == null || server.getPreviewRenderProfileId().isBlank()) {
+            server.setPreviewRenderProfileId("balanced");
+            cambios = true;
+        }
+        if (server.getPreviewRenderRealtime() == null) {
+            server.setPreviewRenderRealtime(Boolean.FALSE);
+            cambios = true;
+        }
+        if (server.getPreviewShowSpawn() == null) {
+            server.setPreviewShowSpawn(Boolean.FALSE);
+            cambios = true;
+        }
+        if (server.getPreviewShowPlayers() == null) {
+            server.setPreviewShowPlayers(Boolean.FALSE);
+            cambios = true;
+        }
+        if (server.getPreviewShowChunkGrid() == null) {
+            server.setPreviewShowChunkGrid(Boolean.FALSE);
+            cambios = true;
+        }
+        if (server.getPreviewUseWholeMap() == null) {
+            server.setPreviewUseWholeMap(Boolean.FALSE);
+            cambios = true;
+        }
+        if (server.getPreviewRenderLimitPixels() == null || server.getPreviewRenderLimitPixels() < 0) {
+            server.setPreviewRenderLimitPixels(256);
+            cambios = true;
+        }
+        if (server.getPreviewRenderCenterId() == null || server.getPreviewRenderCenterId().isBlank()) {
+            server.setPreviewRenderCenterId("spawn");
+            cambios = true;
+        }
         return cambios;
     }
 

@@ -56,6 +56,14 @@ public class Server {
     private Boolean estadisticasDiscoHistorial;
     private Boolean estadisticasJugadoresActiva;
     private Boolean estadisticasJugadoresHistorial;
+    private String previewRenderProfileId;
+    private Boolean previewRenderRealtime;
+    private Boolean previewShowSpawn;
+    private Boolean previewShowPlayers;
+    private Boolean previewShowChunkGrid;
+    private Boolean previewUseWholeMap;
+    private Integer previewRenderLimitPixels;
+    private String previewRenderCenterId;
 
     // ===== DATOS DE EJECUCIÓN =====
     // lo que sea transient no se va a guardar en el JSON
@@ -83,6 +91,14 @@ public class Server {
         this.estadisticasDiscoHistorial = true;
         this.estadisticasJugadoresActiva = false;
         this.estadisticasJugadoresHistorial = true;
+        this.previewRenderProfileId = "balanced";
+        this.previewRenderRealtime = false;
+        this.previewShowSpawn = false;
+        this.previewShowPlayers = false;
+        this.previewShowChunkGrid = false;
+        this.previewUseWholeMap = false;
+        this.previewRenderLimitPixels = 256;
+        this.previewRenderCenterId = "spawn";
     }
 
     // ===== CONSOLA =====

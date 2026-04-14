@@ -18,6 +18,11 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
 public final class TestWorldFixtures {
+    @FunctionalInterface
+    public interface RegionWriter {
+        void write(MCAFile mcaFile) throws IOException;
+    }
+
     private TestWorldFixtures() {
     }
 
@@ -62,18 +67,40 @@ public final class TestWorldFixtures {
     }
 
     public static Path createSimpleRegion(Path regionDir, int regionX, int regionZ, int blockY, String blockName) throws IOException {
+        return createRegion(regionDir, regionX, regionZ, mcaFile -> {
+            Chunk chunk = createFullChunk();
+            setBlock(chunk, 0, blockY, 0, blockName);
+            mcaFile.setChunk(0, 0, chunk);
+        });
+    }
+
+    public static Path createRegion(Path regionDir, int regionX, int regionZ, RegionWriter writer) throws IOException {
         Files.createDirectories(regionDir);
         Path regionFile = regionDir.resolve(MCAUtil.createNameFromRegionLocation(regionX, regionZ));
         MCAFile mcaFile = new MCAFile(regionX, regionZ);
+        if(writer != null) {
+            writer.write(mcaFile);
+        }
+        MCAUtil.write(mcaFile, regionFile.toFile());
+        return regionFile;
+    }
+
+    public static Chunk createFullChunk() {
         Chunk chunk = Chunk.newChunk();
         chunk.setDataVersion(3578);
         chunk.setStatus("minecraft:full");
+        return chunk;
+    }
 
+    public static void setBlock(Chunk chunk, int x, int y, int z, String blockName) {
         CompoundTag block = new CompoundTag();
         block.putString("Name", blockName);
-        chunk.setBlockStateAt(0, blockY, 0, block, false);
-        mcaFile.setChunk(0, 0, chunk);
-        MCAUtil.write(mcaFile, regionFile.toFile());
-        return regionFile;
+        chunk.setBlockStateAt(x, y, z, block, false);
+    }
+
+    public static void fillColumn(Chunk chunk, int x, int z, int minY, int maxYInclusive, String blockName) {
+        for(int y = minY; y <= maxYInclusive; y++) {
+            setBlock(chunk, x, y, z, blockName);
+        }
     }
 }

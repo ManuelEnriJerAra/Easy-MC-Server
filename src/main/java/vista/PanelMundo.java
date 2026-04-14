@@ -13,6 +13,7 @@ import controlador.WorldDataReader;
 import controlador.world.PreviewOverlayData;
 import controlador.world.PreviewPlayerData;
 import controlador.world.PreviewPlayerPoint;
+import controlador.world.PreviewRenderPreferences;
 import controlador.world.WorldFilesService;
 import controlador.world.WorldPlayerDataService;
 import controlador.world.WorldPreviewOverlayService;
@@ -35,8 +36,10 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.AWTEventListener;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -54,6 +57,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -132,19 +136,17 @@ public class PanelMundo extends JPanel {
     private final FlatComboBox<String> regionCompressionCombo = new FlatComboBox<>();
     private JDialog previewOptionsDialog;
     private JPanel previewOptionsPanel;
-    private final JCheckBox sombreadoMenuItem = new JCheckBox("Sombreado", true);
-    private final JCheckBox sombreadoAguaMenuItem = new JCheckBox("Sombreado agua", true);
-    private final JCheckBox colorearBiomasMenuItem = new JCheckBox("Colorear biomas", true);
-    private final JCheckBox calcularVecinoMenuItem = new JCheckBox("Calcular vecino", false);
-    private final JCheckBox espiralPreviewMenuItem = new JCheckBox("Espiral centrada", false);
-    private final JCheckBox renderEspiralPreviewMenuItem = new JCheckBox("Render espiral (prueba)", false);
+    private transient AWTEventListener previewOptionsOutsideClickListener;
     private final JCheckBox tiempoRealPreviewMenuItem = new JCheckBox("Renderizado en tiempo real", false);
     private final JCheckBox mostrarSpawnMenuItem = new JCheckBox("Mostrar spawn", false);
     private final JCheckBox mostrarJugadoresMenuItem = new JCheckBox("Mostrar jugadores", false);
     private final JCheckBox limitesChunksMenuItem = new JCheckBox("Límites de chunks", false);
     private final JCheckBox usarTodoMenuItem = new JCheckBox("Mapa completo", false);
+    private final FlatComboBox<PreviewRenderPreferences.PreviewRenderPreset> perfilRenderCombo = new FlatComboBox<>();
     private final FlatComboBox<PreviewRenderLimitOption> limiteRenderCombo = new FlatComboBox<>();
     private final FlatComboBox<PreviewCenterOption> centroRenderCombo = new FlatComboBox<>();
+    private final EnumMap<PreviewRenderPreferences.RenderToggle, JCheckBox> renderToggleCheckBoxes =
+            new EnumMap<>(PreviewRenderPreferences.RenderToggle.class);
     private final JLabel pesoMundoLabel = new JLabel("-");
     private final JLabel pesoStatsSavesLabel = new JLabel("Peso stats y saves: -");
     private final JLabel pesoTotalLabel = new JLabel("-");
@@ -155,21 +157,9 @@ public class PanelMundo extends JPanel {
 
     private World mundoActivoActual;
     private boolean actualizandoComboMundos = false;
-    private boolean sombreadoEnPreview = true;
-    private boolean sombreadoAguaEnPreview = true;
-    private boolean colorearBiomasEnPreview = true;
-    private boolean calcularVecinoEnPreview = false;
-    private boolean espiralCentradaEnPreview = false;
-    private boolean renderEspiralEnPreview = false;
-    private boolean renderTiempoRealEnPreview = false;
-    private boolean mostrarSpawnEnPreview = false;
-    private boolean mostrarJugadoresEnPreview = false;
-    private boolean limitesChunksEnPreview = false;
-    private boolean usarTodoEnPreview = false;
-    private int limiteMaximoRenderPreview = 256;
+    private PreviewRenderPreferences previewPreferences = PreviewRenderPreferences.defaults();
     private static final int EMPTY_SPIRAL_RINGS_TO_STOP = 2;
     private static final int PREVIEW_RENDER_MARGIN_BLOCKS = MCARenderer.CHUNK_BLOCK_SIDE;
-    private String centroRenderPreviewId = "spawn";
     private static boolean previewGenerationInProgress = false;
     private static SwingWorker<PreviewGenerationResult, PreviewGenerationUpdate> previewGenerationWorker;
     private final AtomicLong previewGenerationSequence = new AtomicLong();
@@ -182,6 +172,7 @@ public class PanelMundo extends JPanel {
     private String ultimoDetalleTiempoRenderPreview;
     private String progresoRenderPreviewActual;
     private BufferedImage previewRealtimeCanvas;
+    private boolean actualizandoOpcionesPreview = false;
     private boolean updatingWorldSettingsControls = false;
     private boolean persistedAllowNether = true;
     private int persistedSpawnProtection = 16;
@@ -216,6 +207,7 @@ public class PanelMundo extends JPanel {
         spawnProtectionSpinner.setModel(new SpinnerNumberModel(16, 0, Integer.MAX_VALUE, 1));
         maxWorldSizeSpinner.setModel(new SpinnerNumberModel(29999984, 1, Integer.MAX_VALUE, 1));
         regionCompressionCombo.setModel(new DefaultComboBoxModel<>(REGION_FILE_COMPRESSION_OPTIONS));
+        perfilRenderCombo.setModel(new DefaultComboBoxModel<>(PreviewRenderPreferences.PreviewRenderPreset.values()));
         limiteRenderCombo.setModel(new DefaultComboBoxModel<>(new PreviewRenderLimitOption[]{
                 new PreviewRenderLimitOption("64x64", 64),
                 new PreviewRenderLimitOption("128x128", 128),
@@ -659,7 +651,63 @@ public class PanelMundo extends JPanel {
         actualizarVistaMundos();
     }
 
+    private void cargarPreferenciasPreviewServidorActual() {
+        Server server = gestorServidores.getServidorSeleccionado();
+        World mundo = getMundoSeleccionadoOActivo();
+        actualizandoOpcionesPreview = true;
+        try {
+            PreviewRenderPreferences fallback = PreviewRenderPreferences.fromLegacyServer(server);
+            Properties metadata = WorldFilesService.readWorldMetadata(mundo);
+            previewPreferences = PreviewRenderPreferences.fromProperties(metadata, fallback);
+            aplicarPreferenciasPreviewAControles();
+            seleccionarLimiteRenderComboActual();
+        } finally {
+            actualizandoOpcionesPreview = false;
+        }
+        aplicarPreferenciasPreviewAOverlay();
+        actualizarEstadoControlesRender();
+    }
+
+    private void guardarPreferenciasPreviewServidorActual() {
+        if (actualizandoOpcionesPreview) {
+            return;
+        }
+        World mundo = getMundoSeleccionadoOActivo();
+        if (mundo == null) {
+            return;
+        }
+        try {
+            Properties metadata = WorldFilesService.readWorldMetadata(mundo);
+            previewPreferences.writeTo(metadata);
+            WorldFilesService.writeWorldMetadata(mundo, metadata);
+        } catch (IOException ex) {
+            System.out.println("[PanelMundo] No se ha podido guardar la configuracion de preview del mundo: " + ex.getMessage());
+        }
+    }
+
+    private void aplicarPreferenciasPreviewAControles() {
+        tiempoRealPreviewMenuItem.setSelected(previewPreferences.renderRealtime());
+        mostrarSpawnMenuItem.setSelected(previewPreferences.showSpawn());
+        mostrarJugadoresMenuItem.setSelected(previewPreferences.showPlayers());
+        limitesChunksMenuItem.setSelected(previewPreferences.showChunkGrid());
+        usarTodoMenuItem.setSelected(previewPreferences.useWholeMap());
+        seleccionarPerfilRenderPreview(previewPreferences.preset());
+        for (PreviewRenderPreferences.RenderToggle toggle : PreviewRenderPreferences.RenderToggle.values()) {
+            JCheckBox checkBox = renderToggleCheckBoxes.get(toggle);
+            if (checkBox != null) {
+                checkBox.setSelected(previewPreferences.isEnabled(toggle));
+            }
+        }
+    }
+
+    private void aplicarPreferenciasPreviewAOverlay() {
+        previewImageLabel.setSpawnVisible(previewPreferences.showSpawn());
+        previewImageLabel.setPlayersVisible(previewPreferences.showPlayers());
+        previewImageLabel.setChunkGridVisible(previewPreferences.showChunkGrid());
+    }
+
     private void limpiarVistaSinServidor() {
+        cargarPreferenciasPreviewServidorActual();
         updatingWorldSettingsControls = true;
         tiempoRealValueLabel.setText("-");
         seedValueLabel.setText("-");
@@ -699,6 +747,7 @@ public class PanelMundo extends JPanel {
 
     private void actualizarVistaMundos() {
         updateUseWorldButtonState();
+        cargarPreferenciasPreviewServidorActual();
         actualizarLabelsDatosServidor();
         actualizarConfiguracionMundo();
         actualizarPreviewSeleccionada();
@@ -1546,24 +1595,20 @@ public class PanelMundo extends JPanel {
             @Override
             protected PreviewGenerationResult doInBackground() throws Exception {
                 List<PreviewPlayerData> recentPlayers = obtenerJugadoresRecientesDesdePlayerdata(selectedServer, mundo);
-                MCARenderer.WorldPoint centerPoint = usarTodoEnPreview ? null : resolverCentroRender(mundo, spawnPoint, recentPlayers);
-                List<Path> regionesPreview = encontrarRegionesPreview(mundo, usarTodoEnPreview, spawnPoint, centerPoint);
+                MCARenderer.WorldPoint centerPoint = previewPreferences.useWholeMap() ? null : resolverCentroRender(mundo, spawnPoint, recentPlayers);
+                List<Path> regionesPreview = encontrarRegionesPreview(mundo, previewPreferences.useWholeMap(), spawnPoint, centerPoint);
                 if (isCancelled()) {
                     return null;
                 }
                 if (regionesPreview.isEmpty()) {
                     return new PreviewGenerationResult(outputPath, true, null, null, null);
                 }
-                RenderWorldBounds targetRenderBounds = usarTodoEnPreview
+                RenderWorldBounds targetRenderBounds = previewPreferences.useWholeMap()
                         ? null
-                        : resolverLimitesRender(regionesPreview, centerPoint, limiteMaximoRenderPreview);
+                        : resolverLimitesRender(regionesPreview, centerPoint, previewPreferences.renderLimitPixels());
                 RenderWorldBounds renderBounds = expandirLimitesRender(regionesPreview, targetRenderBounds, PREVIEW_RENDER_MARGIN_BLOCKS);
-                MCARenderer.RenderOptions renderOptions = MCARenderer.RenderOptions.defaults()
-                        .withShadeByHeight(sombreadoEnPreview)
-                        .withWaterSubsurfaceShading(sombreadoAguaEnPreview)
-                        .withBiomeColoring(colorearBiomasEnPreview)
-                        .withNeighborHeightHints(calcularVecinoEnPreview)
-                        .withPreferSquareCrop(!usarTodoEnPreview);
+                MCARenderer.RenderOptions renderOptions = crearRenderOptionsPreview()
+                        .withPreferSquareCrop(!previewPreferences.useWholeMap());
                 if (renderBounds != null) {
                     renderOptions = renderOptions.withWorldBounds(
                             renderBounds.minBlockX(),
@@ -1572,11 +1617,8 @@ public class PanelMundo extends JPanel {
                             renderBounds.maxBlockZ()
                     );
                 }
-                if (renderEspiralEnPreview && centerPoint != null) {
-                    renderOptions = renderOptions.withSpiralTraversal(centerPoint.x(), centerPoint.z());
-                }
                 MCARenderer.WorldRenderProgressListener progressListener = null;
-                if (renderTiempoRealEnPreview) {
+                if (previewPreferences.renderRealtime()) {
                     progressListener = new MCARenderer.WorldRenderProgressListener() {
                         @Override
                         public void onCanvasInitialized(int width, int height, int defaultArgb, int totalRegions) {
@@ -1608,11 +1650,11 @@ public class PanelMundo extends JPanel {
                 if (isCancelled()) {
                     return null;
                 }
-                CroppedPreview croppedPreview = (!usarTodoEnPreview && targetRenderBounds != null)
+                CroppedPreview croppedPreview = (!previewPreferences.useWholeMap() && targetRenderBounds != null)
                         ? recortarPreviewAObjetivo(renderedWorld, targetRenderBounds)
-                        : usarTodoEnPreview
+                        : previewPreferences.useWholeMap()
                         ? new CroppedPreview(renderedWorld.image(), renderedWorld.originBlockX(), renderedWorld.originBlockZ())
-                        : recortarPreviewPorLimite(renderedWorld, centerPoint, limiteMaximoRenderPreview);
+                        : recortarPreviewPorLimite(renderedWorld, centerPoint, previewPreferences.renderLimitPixels());
                 BufferedImage preview = croppedPreview.image();
                 guardarPreview(preview, outputPath);
                 PreviewOverlayData overlayData = null;
@@ -1720,9 +1762,9 @@ public class PanelMundo extends JPanel {
                     if (result.preview() != null && sigueEnMismoMundo) {
                         previewImageLabel.setImage(result.preview());
                         previewImageLabel.setOverlayData(result.overlayData());
-                        previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
-                        previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
-                        previewImageLabel.setPlayersVisible(mostrarJugadoresEnPreview);
+                        previewImageLabel.setChunkGridVisible(previewPreferences.showChunkGrid());
+                        previewImageLabel.setSpawnVisible(previewPreferences.showSpawn());
+                        previewImageLabel.setPlayersVisible(previewPreferences.showPlayers());
                     } else if (sigueEnMismoMundo) {
                         actualizarPreviewSeleccionada();
                     }
@@ -1772,11 +1814,11 @@ public class PanelMundo extends JPanel {
                     .toList();
 
             if (generarTodo) {
-                return seleccionarGrupoPrincipalRegiones(regiones, spawnPoint, centerPoint, limiteMaximoRenderPreview);
+                return seleccionarGrupoPrincipalRegiones(regiones, spawnPoint, centerPoint, previewPreferences.renderLimitPixels());
             }
 
             List<Path> regionesBase;
-            if (centerPoint != null && limiteMaximoRenderPreview > 0) {
+            if (centerPoint != null && previewPreferences.renderLimitPixels() > 0) {
                 regionesBase = regiones;
             } else {
                 List<Path> visibles = IntStream.range(0, regiones.size())
@@ -1792,7 +1834,7 @@ public class PanelMundo extends JPanel {
                         .toList();
                 regionesBase = visibles.isEmpty() ? regiones : visibles;
             }
-            return seleccionarGrupoPrincipalRegiones(regionesBase, spawnPoint, centerPoint, limiteMaximoRenderPreview);
+            return seleccionarGrupoPrincipalRegiones(regionesBase, spawnPoint, centerPoint, previewPreferences.renderLimitPixels());
         }
     }
 
@@ -1905,25 +1947,16 @@ public class PanelMundo extends JPanel {
             return regiones;
         }
 
-        if (usarTodoEnPreview) {
+        if (previewPreferences.useWholeMap()) {
             return candidatas.stream()
                     .sorted(Comparator.comparing((RegionPreviewCandidate r) -> r.path().getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
                     .map(RegionPreviewCandidate::path)
                     .toList();
         }
 
-        if (renderEspiralEnPreview) {
-            List<Path> regionesContinuas = seleccionarRegionesCuadradoContinuo(candidatas, centerPoint, limiteMaximoRender);
-            if (!regionesContinuas.isEmpty()) {
-                return regionesContinuas;
-            }
-        }
-
-        if (espiralCentradaEnPreview) {
-            List<Path> regionesEspiral = seleccionarRegionesEnEspiral(candidatas, centerPoint, limiteMaximoRender);
-            if (!regionesEspiral.isEmpty()) {
-                return regionesEspiral;
-            }
+        List<Path> regionesContinuas = seleccionarRegionesCuadradoContinuo(candidatas, centerPoint, limiteMaximoRender);
+        if (!regionesContinuas.isEmpty()) {
+            return regionesContinuas;
         }
 
         List<Path> regionesVentana = seleccionarRegionesParaVentana(candidatas, centerPoint, limiteMaximoRender);
@@ -2577,10 +2610,10 @@ public class PanelMundo extends JPanel {
             PreviewOverlayData overlayData = WorldPreviewOverlayService.loadOverlayData(mundo);
             previewImageLabel.setImage(image);
             previewImageLabel.setOverlayData(overlayData);
-            previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
-            previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
-            previewImageLabel.setPlayersVisible(mostrarJugadoresEnPreview);
-            if ((limitesChunksEnPreview || mostrarSpawnEnPreview || mostrarJugadoresEnPreview) && overlayData == null) {
+            previewImageLabel.setChunkGridVisible(previewPreferences.showChunkGrid());
+            previewImageLabel.setSpawnVisible(previewPreferences.showSpawn());
+            previewImageLabel.setPlayersVisible(previewPreferences.showPlayers());
+            if ((previewPreferences.showChunkGrid() || previewPreferences.showSpawn() || previewPreferences.showPlayers()) && overlayData == null) {
                 System.out.println("[PanelMundo] Overlay metadata missing for preview. Regenerate the preview once to enable local overlays.");
                 JOptionPane.showMessageDialog(
                         this,
@@ -2795,7 +2828,7 @@ public class PanelMundo extends JPanel {
     }
 
     private void avisarSuperposicionesNoDisponiblesSiHaceFalta() {
-        if (!limitesChunksEnPreview && !mostrarSpawnEnPreview && !mostrarJugadoresEnPreview) {
+        if (!previewPreferences.showChunkGrid() && !previewPreferences.showSpawn() && !previewPreferences.showPlayers()) {
             return;
         }
 
@@ -2981,182 +3014,300 @@ public class PanelMundo extends JPanel {
         ));
     }
 
+    private void seleccionarPerfilRenderPreview(PreviewRenderPreferences.PreviewRenderPreset preset) {
+        if (preset == null) {
+            return;
+        }
+        perfilRenderCombo.setSelectedItem(preset);
+    }
+
+    private void aplicarPerfilRenderPreviewSeleccionado() {
+        PreviewRenderPreferences.PreviewRenderPreset selected =
+                (PreviewRenderPreferences.PreviewRenderPreset) perfilRenderCombo.getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        previewPreferences = selected == PreviewRenderPreferences.PreviewRenderPreset.CUSTOM
+                ? previewPreferences.withPreset(PreviewRenderPreferences.PreviewRenderPreset.CUSTOM)
+                : previewPreferences.withPreset(selected);
+        actualizandoOpcionesPreview = true;
+        try {
+            aplicarPreferenciasPreviewAControles();
+        } finally {
+            actualizandoOpcionesPreview = false;
+        }
+        aplicarPreferenciasPreviewAOverlay();
+        actualizarEstadoControlesRender();
+        guardarPreferenciasPreviewServidorActual();
+    }
+
+    private MCARenderer.RenderOptions crearRenderOptionsPreview() {
+        return previewPreferences.toRenderOptions();
+    }
+
     private void instalarMenuOpcionesPreview() {
-        sombreadoMenuItem.setSelected(sombreadoEnPreview);
-        sombreadoMenuItem.addActionListener(e -> sombreadoEnPreview = sombreadoMenuItem.isSelected());
-        sombreadoAguaMenuItem.setSelected(sombreadoAguaEnPreview);
-        sombreadoAguaMenuItem.addActionListener(e -> sombreadoAguaEnPreview = sombreadoAguaMenuItem.isSelected());
-        colorearBiomasMenuItem.setSelected(colorearBiomasEnPreview);
-        colorearBiomasMenuItem.addActionListener(e -> colorearBiomasEnPreview = colorearBiomasMenuItem.isSelected());
-        calcularVecinoMenuItem.setSelected(calcularVecinoEnPreview);
-        calcularVecinoMenuItem.addActionListener(e -> calcularVecinoEnPreview = calcularVecinoMenuItem.isSelected());
-        espiralPreviewMenuItem.setSelected(espiralCentradaEnPreview);
-        espiralPreviewMenuItem.addActionListener(e -> espiralCentradaEnPreview = espiralPreviewMenuItem.isSelected());
-        renderEspiralPreviewMenuItem.setSelected(renderEspiralEnPreview);
-        renderEspiralPreviewMenuItem.addActionListener(e -> renderEspiralEnPreview = renderEspiralPreviewMenuItem.isSelected());
-        tiempoRealPreviewMenuItem.setSelected(renderTiempoRealEnPreview);
-        tiempoRealPreviewMenuItem.addActionListener(e -> renderTiempoRealEnPreview = tiempoRealPreviewMenuItem.isSelected());
-        mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
-        mostrarSpawnMenuItem.addActionListener(e -> {
-            mostrarSpawnEnPreview = mostrarSpawnMenuItem.isSelected();
-            previewImageLabel.setSpawnVisible(mostrarSpawnEnPreview);
-            avisarSuperposicionesNoDisponiblesSiHaceFalta();
+        configurarPerfilRenderCombo();
+        perfilRenderCombo.setToolTipText("<html><b>Preset de calidad:</b> Personalizado conserva el estado actual. Calidad, Equilibrado y Rendimiento aplican un conjunto completo y visible de toggles.</html>");
+        perfilRenderCombo.addActionListener(e -> {
+            if (actualizandoOpcionesPreview) {
+                return;
+            }
+            aplicarPerfilRenderPreviewSeleccionado();
         });
-        mostrarJugadoresMenuItem.setSelected(mostrarJugadoresEnPreview);
-        mostrarJugadoresMenuItem.addActionListener(e -> {
-            mostrarJugadoresEnPreview = mostrarJugadoresMenuItem.isSelected();
-            previewImageLabel.setPlayersVisible(mostrarJugadoresEnPreview);
-            avisarSuperposicionesNoDisponiblesSiHaceFalta();
-        });
-        limitesChunksMenuItem.setSelected(limitesChunksEnPreview);
-        limitesChunksMenuItem.addActionListener(e -> {
-            limitesChunksEnPreview = limitesChunksMenuItem.isSelected();
-            previewImageLabel.setChunkGridVisible(limitesChunksEnPreview);
-            avisarSuperposicionesNoDisponiblesSiHaceFalta();
-        });
-        usarTodoMenuItem.setSelected(usarTodoEnPreview);
+
+        stylePreviewOptionCheckBox(usarTodoMenuItem);
+        usarTodoMenuItem.setToolTipText("<html><b>Que hace:</b> renderiza todo el mundo disponible en vez de recortar una ventana alrededor del centro.<br><b>Rendimiento:</b> puede disparar mucho tiempo, memoria y tamano de salida.<br><b>Visual:</b> ofrece contexto completo.<br><b>Efectos secundarios:</b> desactiva centro y limite porque dejan de tener sentido.</html>");
         usarTodoMenuItem.addActionListener(e -> {
-            usarTodoEnPreview = usarTodoMenuItem.isSelected();
+            previewPreferences = previewPreferences.withUseWholeMap(usarTodoMenuItem.isSelected());
             actualizarEstadoControlesRender();
+            guardarPreferenciasPreviewServidorActual();
         });
+
+        stylePreviewOptionCheckBox(tiempoRealPreviewMenuItem);
+        tiempoRealPreviewMenuItem.setToolTipText("<html><b>Que hace:</b> actualiza el lienzo conforme se van componiendo regiones durante la generacion.<br><b>Rendimiento:</b> anade repintados Swing y copias de imagen; el coste es de CPU/UI, no de GPU del renderer.<br><b>Visual:</b> permite ver progreso real.<br><b>Efectos secundarios:</b> puede hacer la generacion algo menos estable en equipos justos.</html>");
+        tiempoRealPreviewMenuItem.addActionListener(e -> {
+            previewPreferences = previewPreferences.withRenderRealtime(tiempoRealPreviewMenuItem.isSelected());
+            guardarPreferenciasPreviewServidorActual();
+        });
+
+        stylePreviewOptionCheckBox(mostrarSpawnMenuItem);
+        mostrarSpawnMenuItem.setToolTipText("<html><b>Que hace:</b> superpone la marca del spawn usando metadata de overlay de la preview.<br><b>Rendimiento:</b> impacto minimo; solo dibujo de overlay en la UI.<br><b>Visual:</b> facilita orientarse en el mapa.<br><b>Efectos secundarios:</b> si la preview no tiene metadata de overlay hay que regenerarla una vez.</html>");
+        mostrarSpawnMenuItem.addActionListener(e -> {
+            previewPreferences = previewPreferences.withShowSpawn(mostrarSpawnMenuItem.isSelected());
+            aplicarPreferenciasPreviewAOverlay();
+            avisarSuperposicionesNoDisponiblesSiHaceFalta();
+            guardarPreferenciasPreviewServidorActual();
+        });
+
+        stylePreviewOptionCheckBox(mostrarJugadoresMenuItem);
+        mostrarJugadoresMenuItem.setToolTipText("<html><b>Que hace:</b> muestra sobre la preview las ultimas posiciones de jugadores conocidas.<br><b>Rendimiento:</b> impacto minimo; solo overlay 2D en la interfaz.<br><b>Visual:</b> ayuda a localizar actividad reciente.<br><b>Efectos secundarios:</b> depende de playerdata y metadata de overlay disponibles.</html>");
+        mostrarJugadoresMenuItem.addActionListener(e -> {
+            previewPreferences = previewPreferences.withShowPlayers(mostrarJugadoresMenuItem.isSelected());
+            aplicarPreferenciasPreviewAOverlay();
+            avisarSuperposicionesNoDisponiblesSiHaceFalta();
+            guardarPreferenciasPreviewServidorActual();
+        });
+
+        stylePreviewOptionCheckBox(limitesChunksMenuItem);
+        limitesChunksMenuItem.setToolTipText("<html><b>Que hace:</b> dibuja la reticula de chunks sobre la preview cargada.<br><b>Rendimiento:</b> impacto minimo; solo overlay local en la UI.<br><b>Visual:</b> facilita depurar alineacion, estructuras y medidas.<br><b>Efectos secundarios:</b> puede ensuciar mapas muy densos.</html>");
+        limitesChunksMenuItem.addActionListener(e -> {
+            previewPreferences = previewPreferences.withShowChunkGrid(limitesChunksMenuItem.isSelected());
+            aplicarPreferenciasPreviewAOverlay();
+            avisarSuperposicionesNoDisponiblesSiHaceFalta();
+            guardarPreferenciasPreviewServidorActual();
+        });
+
+        for (PreviewRenderPreferences.RenderToggle toggle : PreviewRenderPreferences.RenderToggle.values()) {
+            renderToggleCheckBoxes.put(toggle, createRenderToggleCheckBox(toggle));
+        }
+
         configurarLimiteRenderCombo();
         configurarCentroRenderCombo();
         actualizarEstadoControlesRender();
 
-        JPanel optionsPanel = BoxCategory.createSurfacePanel(new GridLayout(1, 2, 14, 0), new Insets(8, 8, 8, 8));
+        JPanel generationSection = createPreviewOptionsSectionPanel("Generacion");
+        generationSection.add(createPreviewStackedOptionRow("Area máxima", limiteRenderCombo,
+                "<html><b>Que hace:</b> define el tamano maximo de la ventana de bloques que se intentara renderizar alrededor del centro.<br><b>Rendimiento:</b> cuanto mayor sea, mas regiones/chunks se leeran y mas tiempo consumira.<br><b>Visual:</b> mas contexto a cambio de previews mas pesadas.<br><b>Efectos secundarios:</b> valores altos pueden disparar memoria y tiempo.</html>"));
+        generationSection.add(Box.createVerticalStrut(4));
+        generationSection.add(createPreviewStackedOptionRow("Centro de generación", centroRenderCombo,
+                "<html><b>Que hace:</b> elige el punto alrededor del que se recorta la preview cuando no se genera el mundo completo.<br><b>Rendimiento:</b> no cambia el coste por pixel, pero si que zona se procesa.<br><b>Visual:</b> cambia totalmente el encuadre final.<br><b>Efectos secundarios:</b> si el jugador ya no existe o no tiene datos recientes se vuelve al spawn.</html>"));
+        generationSection.add(Box.createVerticalStrut(4));
+        generationSection.add(createPreviewCheckBoxRow(usarTodoMenuItem, usarTodoMenuItem.getToolTipText()));
+        generationSection.add(Box.createVerticalStrut(4));
+        generationSection.add(createPreviewCheckBoxRow(tiempoRealPreviewMenuItem, tiempoRealPreviewMenuItem.getToolTipText()));
+        generationSection.add(Box.createVerticalGlue());
 
-        JPanel leftColumn = new JPanel();
-        leftColumn.setOpaque(false);
-        leftColumn.setLayout(new BoxLayout(leftColumn, BoxLayout.Y_AXIS));
+        JPanel qualitySection = createPreviewOptionsSectionPanel("Calidad del rendering");
+        qualitySection.add(createPreviewOptionRow("Preset", perfilRenderCombo, perfilRenderCombo.getToolTipText()));
+        qualitySection.add(Box.createVerticalStrut(4));
+        for (PreviewRenderPreferences.RenderToggle toggle : renderToggleOrder()) {
+            JCheckBox checkBox = renderToggleCheckBoxes.get(toggle);
+            qualitySection.add(createPreviewCheckBoxRow(checkBox, toggle.helpText()));
+            qualitySection.add(Box.createVerticalStrut(3));
+        }
+        qualitySection.add(Box.createVerticalGlue());
 
-        JPanel rightColumn = new JPanel();
-        rightColumn.setOpaque(false);
-        rightColumn.setLayout(new BoxLayout(rightColumn, BoxLayout.Y_AXIS));
+        JPanel overlaySection = createPreviewOptionsSectionPanel("Superposicion");
+        overlaySection.add(createPreviewCheckBoxRow(mostrarSpawnMenuItem, mostrarSpawnMenuItem.getToolTipText()));
+        overlaySection.add(Box.createVerticalStrut(4));
+        overlaySection.add(createPreviewCheckBoxRow(mostrarJugadoresMenuItem, mostrarJugadoresMenuItem.getToolTipText()));
+        overlaySection.add(Box.createVerticalStrut(4));
+        overlaySection.add(createPreviewCheckBoxRow(limitesChunksMenuItem, limitesChunksMenuItem.getToolTipText()));
+        overlaySection.add(Box.createVerticalGlue());
 
-        stylePreviewOptionCheckBox(mostrarSpawnMenuItem);
-        stylePreviewOptionCheckBox(usarTodoMenuItem);
-        stylePreviewOptionCheckBox(sombreadoMenuItem);
-        stylePreviewOptionCheckBox(sombreadoAguaMenuItem);
-        stylePreviewOptionCheckBox(colorearBiomasMenuItem);
-        stylePreviewOptionCheckBox(calcularVecinoMenuItem);
-        stylePreviewOptionCheckBox(espiralPreviewMenuItem);
-        stylePreviewOptionCheckBox(renderEspiralPreviewMenuItem);
-        stylePreviewOptionCheckBox(tiempoRealPreviewMenuItem);
-        stylePreviewOptionCheckBox(mostrarJugadoresMenuItem);
-        stylePreviewOptionCheckBox(limitesChunksMenuItem);
-        leftColumn.add(createPreviewOptionsSectionLabel("Generación"));
-        leftColumn.add(createPreviewOptionRow("Límite render", limiteRenderCombo));
-        leftColumn.add(Box.createVerticalStrut(8));
-        leftColumn.add(createPreviewOptionRow("Centro render", centroRenderCombo));
-        leftColumn.add(Box.createVerticalStrut(8));
-        leftColumn.add(sombreadoMenuItem);
-        leftColumn.add(Box.createVerticalStrut(4));
-        leftColumn.add(sombreadoAguaMenuItem);
-        leftColumn.add(Box.createVerticalStrut(4));
-        leftColumn.add(colorearBiomasMenuItem);
-        leftColumn.add(Box.createVerticalStrut(4));
-        leftColumn.add(usarTodoMenuItem);
-        leftColumn.add(Box.createVerticalStrut(12));
-        leftColumn.add(createPreviewOptionsSectionLabel("Superposición"));
-        leftColumn.add(mostrarSpawnMenuItem);
-        leftColumn.add(Box.createVerticalStrut(4));
-        leftColumn.add(mostrarJugadoresMenuItem);
-        leftColumn.add(Box.createVerticalStrut(4));
-        leftColumn.add(limitesChunksMenuItem);
-        leftColumn.add(Box.createVerticalGlue());
+        JPanel columnsPanel = new JPanel(new GridBagLayout());
+        columnsPanel.setOpaque(false);
+        columnsPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        JPanel generationWrapper = wrapPreviewOptionsSection(generationSection);
+        JPanel qualityWrapper = wrapPreviewOptionsSection(qualitySection);
+        JPanel overlayWrapper = wrapPreviewOptionsSection(overlaySection);
 
-        rightColumn.add(createPreviewOptionsSectionLabel("Rendimiento"));
-        rightColumn.add(calcularVecinoMenuItem);
-        rightColumn.add(Box.createVerticalStrut(4));
-        rightColumn.add(espiralPreviewMenuItem);
-        rightColumn.add(Box.createVerticalStrut(4));
-        rightColumn.add(renderEspiralPreviewMenuItem);
-        rightColumn.add(Box.createVerticalStrut(4));
-        rightColumn.add(tiempoRealPreviewMenuItem);
-        rightColumn.add(Box.createVerticalGlue());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridy = 0;
+        gbc.insets = new Insets(0, 0, 0, 16);
+        gbc.anchor = GridBagConstraints.NORTHWEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        optionsPanel.add(leftColumn);
-        optionsPanel.add(rightColumn);
+        gbc.gridx = 0;
+        gbc.weightx = 0.0d;
+        gbc.fill = GridBagConstraints.NONE;
+        columnsPanel.add(generationWrapper, gbc);
 
-        JPanel optionsContainer = new JPanel(new BorderLayout());
-        optionsContainer.setOpaque(false);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0d;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        columnsPanel.add(qualityWrapper, gbc);
+
+        gbc.gridx = 2;
+        gbc.weightx = 0.0d;
+        gbc.insets = new Insets(0, 0, 0, 0);
+        gbc.fill = GridBagConstraints.NONE;
+        columnsPanel.add(overlayWrapper, gbc);
 
         FlatScrollPane optionsScrollPane = new FlatScrollPane();
-        optionsScrollPane.setViewportView(optionsPanel);
+        optionsScrollPane.setViewportView(columnsPanel);
         optionsScrollPane.setBorder(BorderFactory.createEmptyBorder());
         optionsScrollPane.setOpaque(false);
         optionsScrollPane.getViewport().setOpaque(false);
-        optionsScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        optionsScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         optionsScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         optionsScrollPane.getVerticalScrollBar().setUnitIncrement(18);
         optionsScrollPane.getVerticalScrollBar().setBlockIncrement(72);
-        optionsScrollPane.setPreferredSize(new Dimension(500, 360));
-        optionsContainer.add(optionsScrollPane, BorderLayout.CENTER);
+        optionsScrollPane.getHorizontalScrollBar().setUnitIncrement(18);
+        optionsScrollPane.getHorizontalScrollBar().setBlockIncrement(72);
+        optionsScrollPane.setPreferredSize(new Dimension(550, 250));
 
-        previewOptionsPanel = optionsContainer;
+        previewOptionsPanel = new JPanel(new BorderLayout());
+        AppTheme.applySurfacePreviewStyle(previewOptionsPanel, new Insets(6, 6, 6, 6));
+        previewOptionsPanel.add(optionsScrollPane, BorderLayout.CENTER);
 
         previewMenuButton.addActionListener(e -> mostrarMenuOpcionesPreview(previewMenuButton));
     }
 
-    private void mostrarMenuOpcionesPreview(Component anchor) {
-        if (anchor == null) {
-            return;
-        }
-        sombreadoMenuItem.setSelected(sombreadoEnPreview);
-        sombreadoAguaMenuItem.setSelected(sombreadoAguaEnPreview);
-        colorearBiomasMenuItem.setSelected(colorearBiomasEnPreview);
-        calcularVecinoMenuItem.setSelected(calcularVecinoEnPreview);
-        espiralPreviewMenuItem.setSelected(espiralCentradaEnPreview);
-        renderEspiralPreviewMenuItem.setSelected(renderEspiralEnPreview);
-        tiempoRealPreviewMenuItem.setSelected(renderTiempoRealEnPreview);
-        mostrarSpawnMenuItem.setSelected(mostrarSpawnEnPreview);
-        mostrarJugadoresMenuItem.setSelected(mostrarJugadoresEnPreview);
-        limitesChunksMenuItem.setSelected(limitesChunksEnPreview);
-        usarTodoMenuItem.setSelected(usarTodoEnPreview);
-        actualizarEstadoControlesRender();
-        seleccionarLimiteRenderComboActual();
-        actualizarCentroRenderCombo();
-        if (previewOptionsDialog != null && previewOptionsDialog.isVisible()) {
-            previewOptionsDialog.setVisible(false);
-            previewOptionsDialog.dispose();
-            previewOptionsDialog = null;
-            return;
-        }
+    private List<PreviewRenderPreferences.RenderToggle> renderToggleOrder() {
+        return List.of(
+                PreviewRenderPreferences.RenderToggle.SHADE_BY_HEIGHT,
+                PreviewRenderPreferences.RenderToggle.ADVANCED_MATERIAL_SHADING,
+                PreviewRenderPreferences.RenderToggle.WATER_SUBSURFACE_SHADING,
+                PreviewRenderPreferences.RenderToggle.ADVANCED_WATER_COLORING,
+                PreviewRenderPreferences.RenderToggle.BIOME_COLORING,
+                PreviewRenderPreferences.RenderToggle.ADVANCED_BIOME_COLORING
+        );
+    }
 
-        Window owner = SwingUtilities.getWindowAncestor(this);
-        if (owner == null || previewOptionsPanel == null) {
-            return;
-        }
-
-        JDialog dialog = new JDialog(owner);
-        dialog.setUndecorated(true);
-        dialog.setModal(false);
-        dialog.setAlwaysOnTop(false);
-        dialog.setFocusableWindowState(true);
-        dialog.setBackground(new Color(0, 0, 0, 0));
-        dialog.setContentPane(previewOptionsPanel);
-        dialog.pack();
-        Dimension preferredSize = new Dimension(520, Math.max(360, dialog.getPreferredSize().height));
-        dialog.setMinimumSize(preferredSize);
-        dialog.setSize(preferredSize);
-
-        Point screenLocation = anchor.getLocationOnScreen();
-        int x = screenLocation.x + anchor.getWidth() - dialog.getWidth();
-        int y = screenLocation.y + anchor.getHeight();
-        dialog.setLocation(x, y);
-        dialog.addWindowFocusListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowLostFocus(java.awt.event.WindowEvent e) {
-                dialog.setVisible(false);
-                dialog.dispose();
-                if (previewOptionsDialog == dialog) {
-                    previewOptionsDialog = null;
-                }
+    private JCheckBox createRenderToggleCheckBox(PreviewRenderPreferences.RenderToggle toggle) {
+        JCheckBox checkBox = new JCheckBox(toggle.label(), previewPreferences.isEnabled(toggle));
+        stylePreviewOptionCheckBox(checkBox);
+        checkBox.setToolTipText(toggle.helpText());
+        checkBox.addActionListener(e -> {
+            if (actualizandoOpcionesPreview) {
+                return;
             }
+            previewPreferences = previewPreferences.withRenderToggle(toggle, checkBox.isSelected());
+            seleccionarPerfilRenderPreview(PreviewRenderPreferences.PreviewRenderPreset.CUSTOM);
+            guardarPreferenciasPreviewServidorActual();
         });
+        return checkBox;
+    }
 
-        previewOptionsDialog = dialog;
-        dialog.setVisible(true);
+    private void mostrarMenuOpcionesPreview(Component anchor) {
+        if (anchor == null || previewOptionsPanel == null) {
+            return;
+        }
+        if (previewOptionsDialog != null && previewOptionsDialog.isVisible()) {
+            ocultarMenuOpcionesPreview();
+            return;
+        }
+        cargarPreferenciasPreviewServidorActual();
+        actualizarCentroRenderCombo();
+        actualizarEstadoControlesRender();
+        mostrarPreviewOptionsDialog(anchor);
+    }
+
+    private void mostrarPreviewOptionsDialog(Component anchor) {
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        if (!(owner instanceof Frame frameOwner)) {
+            return;
+        }
+        if (previewOptionsDialog == null || previewOptionsDialog.getOwner() != frameOwner) {
+            previewOptionsDialog = new JDialog(frameOwner, Dialog.ModalityType.MODELESS);
+            previewOptionsDialog.setUndecorated(true);
+            previewOptionsDialog.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+            previewOptionsDialog.setFocusableWindowState(true);
+            previewOptionsDialog.setContentPane(previewOptionsPanel);
+            previewOptionsDialog.getRootPane().registerKeyboardAction(
+                    e -> ocultarMenuOpcionesPreview(),
+                    KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+                    JComponent.WHEN_IN_FOCUSED_WINDOW
+            );
+        }
+
+        previewOptionsDialog.pack();
+        previewOptionsDialog.setLocation(calcularUbicacionPreviewOptionsDialog(anchor, previewOptionsDialog.getSize()));
+        previewOptionsDialog.setVisible(true);
+        previewOptionsDialog.toFront();
+        instalarPreviewOptionsOutsideClickListener();
+    }
+
+    private Point calcularUbicacionPreviewOptionsDialog(Component anchor, Dimension dialogSize) {
+        Point anchorOnScreen = anchor.getLocationOnScreen();
+        Rectangle screenBounds = anchor.getGraphicsConfiguration() != null
+                ? anchor.getGraphicsConfiguration().getBounds()
+                : GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        int x = anchorOnScreen.x + anchor.getWidth() - dialogSize.width;
+        int y = anchorOnScreen.y + anchor.getHeight() + 6;
+        x = Math.max(screenBounds.x + 8, Math.min(x, screenBounds.x + screenBounds.width - dialogSize.width - 8));
+        y = Math.max(screenBounds.y + 8, Math.min(y, screenBounds.y + screenBounds.height - dialogSize.height - 8));
+        return new Point(x, y);
+    }
+
+    private void ocultarMenuOpcionesPreview() {
+        desinstalarPreviewOptionsOutsideClickListener();
+        if (previewOptionsDialog != null) {
+            previewOptionsDialog.setVisible(false);
+        }
+    }
+
+    private void instalarPreviewOptionsOutsideClickListener() {
+        desinstalarPreviewOptionsOutsideClickListener();
+        previewOptionsOutsideClickListener = event -> {
+            if (!(event instanceof MouseEvent mouseEvent) || mouseEvent.getID() != MouseEvent.MOUSE_PRESSED) {
+                return;
+            }
+            Object source = mouseEvent.getSource();
+            if (!(source instanceof Component component) || isPreviewOptionsInteraction(component)) {
+                return;
+            }
+            SwingUtilities.invokeLater(this::ocultarMenuOpcionesPreview);
+        };
+        Toolkit.getDefaultToolkit().addAWTEventListener(previewOptionsOutsideClickListener, AWTEvent.MOUSE_EVENT_MASK);
+    }
+
+    private void desinstalarPreviewOptionsOutsideClickListener() {
+        if (previewOptionsOutsideClickListener != null) {
+            Toolkit.getDefaultToolkit().removeAWTEventListener(previewOptionsOutsideClickListener);
+            previewOptionsOutsideClickListener = null;
+        }
+    }
+
+    private boolean isPreviewOptionsInteraction(Component component) {
+        if (component == null) {
+            return false;
+        }
+        if (previewOptionsDialog != null && SwingUtilities.isDescendingFrom(component, previewOptionsDialog)) {
+            return true;
+        }
+        if (SwingUtilities.isDescendingFrom(component, previewMenuButton)) {
+            return true;
+        }
+        JPopupMenu popupMenu = (JPopupMenu) SwingUtilities.getAncestorOfClass(JPopupMenu.class, component);
+        if (popupMenu == null) {
+            return false;
+        }
+        Component invoker = popupMenu.getInvoker();
+        return invoker != null
+                && ((previewOptionsPanel != null && SwingUtilities.isDescendingFrom(invoker, previewOptionsPanel))
+                || SwingUtilities.isDescendingFrom(invoker, previewMenuButton));
     }
 
     private void stylePreviewOptionCheckBox(JCheckBox checkBox) {
@@ -3174,20 +3325,50 @@ public class PanelMundo extends JPanel {
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         label.setForeground(AppTheme.getMutedForeground());
         label.setFont(label.getFont().deriveFont(Font.BOLD, 12f));
-        label.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 0));
+        label.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
         return label;
+    }
+
+    private JPanel createPreviewOptionsSectionPanel(String title) {
+        JPanel section = new JPanel();
+        section.setOpaque(false);
+        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+        section.add(createPreviewOptionsSectionLabel(title));
+        section.add(Box.createVerticalStrut(4));
+        return section;
+    }
+
+    private JPanel wrapPreviewOptionsSection(JPanel content) {
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setOpaque(false);
+        wrapper.setBorder(BorderFactory.createEmptyBorder());
+        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
+        wrapper.add(content, BorderLayout.CENTER);
+        return wrapper;
+    }
+
+    private void configurarPerfilRenderCombo() {
+        perfilRenderCombo.setOpaque(false);
+        perfilRenderCombo.setFocusable(true);
+        perfilRenderCombo.setRoundRect(true);
+        perfilRenderCombo.setMaximumSize(new Dimension(180, 30));
+        perfilRenderCombo.setPreferredSize(new Dimension(180, 30));
     }
 
     private void configurarLimiteRenderCombo() {
         limiteRenderCombo.setOpaque(false);
-        limiteRenderCombo.setFocusable(false);
+        limiteRenderCombo.setFocusable(true);
         limiteRenderCombo.setRoundRect(true);
         limiteRenderCombo.setMaximumSize(new Dimension(180, 30));
         limiteRenderCombo.setPreferredSize(new Dimension(180, 30));
         limiteRenderCombo.addActionListener(e -> {
+            if (actualizandoOpcionesPreview) {
+                return;
+            }
             PreviewRenderLimitOption selected = (PreviewRenderLimitOption) limiteRenderCombo.getSelectedItem();
             if (selected != null) {
-                limiteMaximoRenderPreview = selected.maxPixels();
+                previewPreferences = previewPreferences.withRenderLimitPixels(selected.maxPixels());
+                guardarPreferenciasPreviewServidorActual();
             }
         });
         seleccionarLimiteRenderComboActual();
@@ -3196,7 +3377,7 @@ public class PanelMundo extends JPanel {
     private void seleccionarLimiteRenderComboActual() {
         for (int i = 0; i < limiteRenderCombo.getItemCount(); i++) {
             PreviewRenderLimitOption option = limiteRenderCombo.getItemAt(i);
-            if (option.maxPixels() == limiteMaximoRenderPreview) {
+            if (option.maxPixels() == previewPreferences.renderLimitPixels()) {
                 limiteRenderCombo.setSelectedIndex(i);
                 return;
             }
@@ -3208,14 +3389,18 @@ public class PanelMundo extends JPanel {
 
     private void configurarCentroRenderCombo() {
         centroRenderCombo.setOpaque(false);
-        centroRenderCombo.setFocusable(false);
+        centroRenderCombo.setFocusable(true);
         centroRenderCombo.setRoundRect(true);
         centroRenderCombo.setMaximumSize(new Dimension(180, 30));
         centroRenderCombo.setPreferredSize(new Dimension(180, 30));
         centroRenderCombo.addActionListener(e -> {
+            if (actualizandoOpcionesPreview) {
+                return;
+            }
             PreviewCenterOption selected = (PreviewCenterOption) centroRenderCombo.getSelectedItem();
             if (selected != null) {
-                centroRenderPreviewId = selected.id();
+                previewPreferences = previewPreferences.withRenderCenterId(selected.id());
+                guardarPreferenciasPreviewServidorActual();
             }
         });
     }
@@ -3242,7 +3427,7 @@ public class PanelMundo extends JPanel {
     private void seleccionarCentroRenderComboActual() {
         for (int i = 0; i < centroRenderCombo.getItemCount(); i++) {
             PreviewCenterOption option = centroRenderCombo.getItemAt(i);
-            if (Objects.equals(option.id(), centroRenderPreviewId)) {
+            if (Objects.equals(option.id(), previewPreferences.renderCenterId())) {
                 centroRenderCombo.setSelectedIndex(i);
                 return;
             }
@@ -3250,18 +3435,18 @@ public class PanelMundo extends JPanel {
         if (centroRenderCombo.getItemCount() > 0) {
             centroRenderCombo.setSelectedIndex(0);
             PreviewCenterOption selected = (PreviewCenterOption) centroRenderCombo.getSelectedItem();
-            centroRenderPreviewId = selected == null ? "spawn" : selected.id();
+            previewPreferences = previewPreferences.withRenderCenterId(selected == null ? "spawn" : selected.id());
         }
     }
 
     private void actualizarEstadoControlesRender() {
-        boolean habilitados = !usarTodoEnPreview;
+        boolean habilitados = !previewPreferences.useWholeMap();
         limiteRenderCombo.setEnabled(habilitados);
         centroRenderCombo.setEnabled(habilitados);
     }
 
     private MCARenderer.WorldPoint resolverCentroRender(World mundo, WorldDataReader.SpawnPoint spawnPoint, List<PreviewPlayerData> recentPlayers) {
-        if (centroRenderPreviewId == null || centroRenderPreviewId.isBlank() || "spawn".equals(centroRenderPreviewId)) {
+        if (previewPreferences.renderCenterId() == null || previewPreferences.renderCenterId().isBlank() || "spawn".equals(previewPreferences.renderCenterId())) {
             return spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z());
         }
 
@@ -3270,7 +3455,7 @@ public class PanelMundo extends JPanel {
                 if (player == null || player.username() == null || player.username().isBlank()) {
                     continue;
                 }
-                if (Objects.equals("player:" + player.username(), centroRenderPreviewId)) {
+                if (Objects.equals("player:" + player.username(), previewPreferences.renderCenterId())) {
                     return player.point();
                 }
             }
@@ -3279,23 +3464,70 @@ public class PanelMundo extends JPanel {
         return spawnPoint == null ? null : new MCARenderer.WorldPoint(spawnPoint.x(), spawnPoint.z());
     }
 
-    private JPanel createPreviewOptionRow(String label, JComponent component) {
-        JPanel row = new JPanel(new BorderLayout(8, 0));
+    private JPanel createPreviewOptionRow(String label, JComponent component, String helpText) {
+        JPanel row = new JPanel(new BorderLayout(6, 0));
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
         JLabel textLabel = new JLabel(label);
         textLabel.setForeground(AppTheme.getForeground());
-        textLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
+        textLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        textLabel.setVerticalAlignment(SwingConstants.CENTER);
+        textLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 4));
         JPanel fieldWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         fieldWrapper.setOpaque(false);
-        Dimension fieldSize = new Dimension(168, 30);
+        Dimension fieldSize = new Dimension(152, 28);
         component.setPreferredSize(fieldSize);
         component.setMinimumSize(fieldSize);
         component.setMaximumSize(fieldSize);
         fieldWrapper.add(component);
+        if (helpText != null && !helpText.isBlank()) {
+            component.setToolTipText(helpText);
+            textLabel.setToolTipText(helpText);
+        }
         row.add(textLabel, BorderLayout.WEST);
         row.add(fieldWrapper, BorderLayout.EAST);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, fieldSize.height));
+        return row;
+    }
+
+    private JPanel createPreviewStackedOptionRow(String label, JComponent component, String helpText) {
+        JPanel row = new JPanel();
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
+
+        JLabel textLabel = new JLabel(label);
+        textLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        textLabel.setForeground(AppTheme.getForeground());
+        textLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
+
+        Dimension fieldSize = new Dimension(152, 28);
+        component.setAlignmentX(Component.LEFT_ALIGNMENT);
+        component.setPreferredSize(fieldSize);
+        component.setMinimumSize(fieldSize);
+        component.setMaximumSize(fieldSize);
+
+        if (helpText != null && !helpText.isBlank()) {
+            component.setToolTipText(helpText);
+            textLabel.setToolTipText(helpText);
+        }
+
+        row.add(textLabel);
+        row.add(component);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, textLabel.getPreferredSize().height + fieldSize.height + 2));
+        return row;
+    }
+
+    private JPanel createPreviewCheckBoxRow(JCheckBox checkBox, String helpText) {
+        JPanel row = new JPanel(new BorderLayout());
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        if (helpText != null && !helpText.isBlank()) {
+            checkBox.setToolTipText(helpText);
+        }
+        row.add(checkBox, BorderLayout.CENTER);
         return row;
     }
 
