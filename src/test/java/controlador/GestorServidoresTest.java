@@ -45,6 +45,8 @@ class GestorServidoresTest {
         assertThat(persisted.getFirst().getPreviewUseWholeMap()).isFalse();
         assertThat(persisted.getFirst().getPreviewRenderLimitPixels()).isEqualTo(256);
         assertThat(persisted.getFirst().getPreviewRenderCenterId()).isEqualTo("spawn");
+        assertThat(persisted.getFirst().getEstadisticasCpuActiva()).isTrue();
+        assertThat(persisted.getFirst().getEstadisticasCpuHistorial()).isTrue();
     }
 
     @Test
@@ -76,6 +78,8 @@ class GestorServidoresTest {
         assertThat(persisted.getPreviewUseWholeMap()).isFalse();
         assertThat(persisted.getPreviewRenderLimitPixels()).isEqualTo(256);
         assertThat(persisted.getPreviewRenderCenterId()).isEqualTo("spawn");
+        assertThat(persisted.getEstadisticasCpuActiva()).isTrue();
+        assertThat(persisted.getEstadisticasCpuHistorial()).isTrue();
     }
 
     @Test

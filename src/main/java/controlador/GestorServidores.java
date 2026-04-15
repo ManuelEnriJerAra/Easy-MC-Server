@@ -225,6 +225,14 @@ public class GestorServidores {
             server.setEstadisticasResolucionHistoricaSegundos(60);
             cambios = true;
         }
+        if (server.getEstadisticasCpuActiva() == null) {
+            server.setEstadisticasCpuActiva(Boolean.TRUE);
+            cambios = true;
+        }
+        if (server.getEstadisticasCpuHistorial() == null) {
+            server.setEstadisticasCpuHistorial(Boolean.TRUE);
+            cambios = true;
+        }
         if (server.getEstadisticasRamActiva() == null) {
             server.setEstadisticasRamActiva(Boolean.TRUE);
             cambios = true;

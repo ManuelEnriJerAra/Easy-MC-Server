@@ -50,6 +50,8 @@ public class Server {
     private Boolean estadisticasPersistenciaActiva; // si el histórico se guarda en disco para este servidor
     private Integer estadisticasVentanaRecienteSegundos; // muestras recientes conservadas a resolución de 1 segundo
     private Integer estadisticasResolucionHistoricaSegundos; // bucket para compactar histórico antiguo
+    private Boolean estadisticasCpuActiva;
+    private Boolean estadisticasCpuHistorial;
     private Boolean estadisticasRamActiva;
     private Boolean estadisticasRamHistorial;
     private Boolean estadisticasDiscoActiva;
@@ -85,6 +87,8 @@ public class Server {
         this.estadisticasPersistenciaActiva = true;
         this.estadisticasVentanaRecienteSegundos = 30 * 24 * 60 * 60;
         this.estadisticasResolucionHistoricaSegundos = 60;
+        this.estadisticasCpuActiva = true;
+        this.estadisticasCpuHistorial = true;
         this.estadisticasRamActiva = true;
         this.estadisticasRamHistorial = true;
         this.estadisticasDiscoActiva = true;

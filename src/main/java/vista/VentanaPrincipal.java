@@ -97,9 +97,11 @@ public class VentanaPrincipal extends JFrame {
         panelIzquierdo.setBackground(bgApp);
 
         // PANEL DE GRÁFICAS DE RENDIMIENTO
-        rendimientoPanel = new JPanel(new GridLayout(1,3));
+        rendimientoPanel = new JPanel(new BorderLayout());
         rendimientoPanel.setOpaque(true);
         rendimientoPanel.setBackground(bgApp);
+        rendimientoPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
+        rendimientoPanel.add(new PanelIndicadoresRecursos(gestorServidores), BorderLayout.CENTER);
         panelIzquierdo.add(rendimientoPanel, BorderLayout.NORTH);
 
         // PANEL DE SERVIDORES (card con borde redondeado)

@@ -84,6 +84,7 @@ public class PanelEstadisticas extends JPanel {
     private static final DateTimeFormatter SAMPLE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final Map<String, StatsHistory> HISTORY_BY_SERVER = new ConcurrentHashMap<>();
+    private static final Map<String, CpuSampleState> CPU_SAMPLE_STATE_BY_SERVER = new ConcurrentHashMap<>();
     private static final Set<GestorServidores> REGISTERED_GESTORES = ConcurrentHashMap.newKeySet();
     private static final ObjectMapper HISTORY_MAPPER = new ObjectMapper();
     private static final ScheduledExecutorService BACKGROUND_SAMPLER = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -105,6 +106,7 @@ public class PanelEstadisticas extends JPanel {
     private final GestorServidores gestorServidores;
     private final Server server;
     private final StatsHistory statsHistory;
+    private final JLabel cpuActualValueLabel = new JLabel("-");
     private final JLabel ramActualValueLabel = new JLabel("-");
     private final JLabel discoActivoValueLabel = new JLabel("-");
     private final JLabel estadoValueLabel = new JLabel("Sin datos");
@@ -115,6 +117,8 @@ public class PanelEstadisticas extends JPanel {
     private final JCheckBox persistenciaCheckBox = new JCheckBox("Persistencia activa");
     private final FlatSlider ventanaRecienteSlider = new FlatSlider();
     private final FlatSlider resolucionHistoricaSlider = new FlatSlider();
+    private final JCheckBox cpuActivaCheckBox = new JCheckBox();
+    private final JCheckBox cpuPersistenciaCheckBox = new JCheckBox();
     private final JCheckBox ramActivaCheckBox = new JCheckBox();
     private final JCheckBox ramPersistenciaCheckBox = new JCheckBox();
     private final JCheckBox discoActivaCheckBox = new JCheckBox();
@@ -125,6 +129,7 @@ public class PanelEstadisticas extends JPanel {
     private final JButton guardarHistoricoButton = new FlatButton();
     private final JLabel ventanaRecienteValueLabel = new JLabel();
     private final JLabel resolucionHistoricaValueLabel = new JLabel();
+    private final UsageChart cpuChart = new UsageChart("CPU", UsageMode.PERCENT, "Esperando muestras de CPU...");
     private final UsageChart ramChart = new UsageChart("RAM", UsageMode.MEGABYTES, "Esperando muestras de RAM...");
     private final UsageChart diskChart = new UsageChart("Disco", UsageMode.PERCENT, "Esperando actividad de disco...");
     private final UsageChart playersChart = new UsageChart("Jugadores", UsageMode.COUNT, "Esperando actividad de jugadores...");
@@ -189,9 +194,13 @@ public class PanelEstadisticas extends JPanel {
             refrescarGraficasDesdeHistorial();
         });
         posicionHistoricoLabel.setForeground(AppTheme.getMutedForeground());
+        instalarNavegacionConRueda(cpuChart);
         instalarNavegacionConRueda(ramChart);
         instalarNavegacionConRueda(diskChart);
         instalarNavegacionConRueda(playersChart);
+        instalarNavegacionConRueda(chartsPanel);
+        instalarNavegacionConRueda(chartsScrollPane);
+        instalarNavegacionConRueda(chartsScrollPane.getViewport());
         instalarNavegacionConRueda(historialScrollBar);
         instalarNavegacionConRueda(posicionHistoricoLabel);
         chartsScrollPane.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -218,7 +227,7 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private JPanel crearContenido() {
-        JPanel content = new JPanel(new BorderLayout(0, 12));
+        JPanel content = new JPanel(new BorderLayout(0, 8));
         content.setOpaque(false);
 
         JPanel header = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
@@ -240,7 +249,7 @@ public class PanelEstadisticas extends JPanel {
         header.add(rangoPanel);
         content.add(header, BorderLayout.NORTH);
 
-        JPanel center = new JPanel(new BorderLayout(0, 12));
+        JPanel center = new JPanel(new BorderLayout(0, 8));
         center.setOpaque(false);
         center.add(crearResumen(), BorderLayout.NORTH);
 
@@ -255,6 +264,7 @@ public class PanelEstadisticas extends JPanel {
         chartsScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         chartsScrollPane.getVerticalScrollBar().setUnitIncrement(24);
         chartsScrollPane.setViewportView(chartsPanel);
+        configurarScrollEstadisticas();
 
         center.add(chartsScrollPane, BorderLayout.CENTER);
         center.add(crearNavegacionHistorico(), BorderLayout.SOUTH);
@@ -276,6 +286,9 @@ public class PanelEstadisticas extends JPanel {
     private void rebuildChartsPanel() {
         chartsPanel.removeAll();
         List<UsageChart> visibleCharts = new ArrayList<>();
+        if (isChartEnabledForUi(StatsChartOption.CPU)) {
+            visibleCharts.add(cpuChart);
+        }
         if (isChartEnabledForUi(StatsChartOption.RAM)) {
             visibleCharts.add(ramChart);
         }
@@ -290,7 +303,7 @@ public class PanelEstadisticas extends JPanel {
             chart.setAlignmentX(Component.LEFT_ALIGNMENT);
             chartsPanel.add(chart);
             if (i < visibleCharts.size() - 1) {
-                chartsPanel.add(Box.createVerticalStrut(12));
+                chartsPanel.add(Box.createVerticalStrut(8));
             }
         }
         updateChartHeights();
@@ -300,17 +313,18 @@ public class PanelEstadisticas extends JPanel {
 
     private void updateChartHeights() {
         List<UsageChart> visibleCharts = new ArrayList<>();
+        if (isChartEnabledForUi(StatsChartOption.CPU)) visibleCharts.add(cpuChart);
         if (isChartEnabledForUi(StatsChartOption.RAM)) visibleCharts.add(ramChart);
         if (isChartEnabledForUi(StatsChartOption.DISK)) visibleCharts.add(diskChart);
         if (isChartEnabledForUi(StatsChartOption.PLAYERS)) visibleCharts.add(playersChart);
         if (visibleCharts.isEmpty()) {
             return;
         }
-        int spacing = 12;
+        int spacing = 8;
         int viewportHeight = Math.max(0, chartsScrollPane.getViewport().getHeight());
-        int availableHeight = viewportHeight > 0 ? viewportHeight : (visibleCharts.size() * 220);
+        int availableHeight = viewportHeight > 0 ? viewportHeight : (visibleCharts.size() * 180);
         int calculatedHeight = (availableHeight - (Math.max(0, visibleCharts.size() - 1) * spacing)) / visibleCharts.size();
-        int chartHeight = Math.max(180, Math.min(260, calculatedHeight));
+        int chartHeight = Math.max(128, Math.min(210, calculatedHeight));
         for (UsageChart chart : visibleCharts) {
             chart.setPreferredChartHeight(chartHeight);
         }
@@ -339,6 +353,10 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private void manejarRuedaHistorico(MouseWheelEvent event) {
+        if (!event.isShiftDown()) {
+            desplazarScrollVertical(event);
+            return;
+        }
         if (!historialScrollBar.isEnabled()) {
             return;
         }
@@ -352,9 +370,45 @@ public class PanelEstadisticas extends JPanel {
         event.consume();
     }
 
+    private void desplazarScrollVertical(MouseWheelEvent event) {
+        if (chartsScrollPane == null) {
+            return;
+        }
+        JScrollBar verticalBar = chartsScrollPane.getVerticalScrollBar();
+        if (verticalBar == null || !verticalBar.isVisible() || !verticalBar.isEnabled()) {
+            return;
+        }
+        int scrollAmount = Math.max(1, event.getScrollAmount());
+        int step = verticalBar.getUnitIncrement() * scrollAmount;
+        int delta = event.getWheelRotation() * Math.max(1, step);
+        int nextValue = Math.max(verticalBar.getMinimum(),
+                Math.min(verticalBar.getMaximum() - verticalBar.getVisibleAmount(), verticalBar.getValue() + delta));
+        if (nextValue != verticalBar.getValue()) {
+            verticalBar.setValue(nextValue);
+        }
+        event.consume();
+    }
+
+    private void configurarScrollEstadisticas() {
+        JScrollBar verticalBar = chartsScrollPane.getVerticalScrollBar();
+        if (verticalBar != null) {
+            verticalBar.setBackground(AppTheme.getSurfaceBackground());
+            verticalBar.setForeground(AppTheme.getMainAccent());
+        }
+        historialScrollBar.setOpaque(true);
+        historialScrollBar.setBackground(AppTheme.tint(AppTheme.getSurfaceBackground(), AppTheme.getForeground(), 0.08f));
+        historialScrollBar.setForeground(AppTheme.getMainAccent());
+        historialScrollBar.setPreferredSize(new Dimension(0, 16));
+        historialScrollBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(AppTheme.getBorderColor(), 1, true),
+                BorderFactory.createEmptyBorder(2, 2, 2, 2)
+        ));
+    }
+
     private JPanel crearResumen() {
-        JPanel summary = new JPanel(new GridLayout(1, 3, 8, 0));
+        JPanel summary = new JPanel(new GridLayout(1, 4, 8, 0));
         summary.setOpaque(false);
+        summary.add(crearTarjetaResumen("CPU actual", cpuActualValueLabel));
         summary.add(crearTarjetaResumen("RAM actual", ramActualValueLabel));
         summary.add(crearTarjetaResumen("Disco activo", discoActivoValueLabel));
         summary.add(crearTarjetaResumen("Estado", estadoValueLabel));
@@ -502,9 +556,10 @@ public class PanelEstadisticas extends JPanel {
         gbc.gridx = 2;
         table.add(new JLabel("Persistencia"), gbc);
 
-        addGraficaConfigRow(table, 1, StatsChartOption.RAM, ramActivaCheckBox, ramPersistenciaCheckBox);
-        addGraficaConfigRow(table, 2, StatsChartOption.DISK, discoActivaCheckBox, discoPersistenciaCheckBox);
-        addGraficaConfigRow(table, 3, StatsChartOption.PLAYERS, jugadoresActivaCheckBox, jugadoresPersistenciaCheckBox);
+        addGraficaConfigRow(table, 1, StatsChartOption.CPU, cpuActivaCheckBox, cpuPersistenciaCheckBox);
+        addGraficaConfigRow(table, 2, StatsChartOption.RAM, ramActivaCheckBox, ramPersistenciaCheckBox);
+        addGraficaConfigRow(table, 3, StatsChartOption.DISK, discoActivaCheckBox, discoPersistenciaCheckBox);
+        addGraficaConfigRow(table, 4, StatsChartOption.PLAYERS, jugadoresActivaCheckBox, jugadoresPersistenciaCheckBox);
 
         panel.add(table);
         return panel;
@@ -574,9 +629,11 @@ public class PanelEstadisticas extends JPanel {
             updateHistoricoSaveButtonState();
         });
 
+        cpuActivaCheckBox.addActionListener(e -> actualizarGraficaVisiblePendiente(StatsChartOption.CPU, cpuActivaCheckBox.isSelected()));
         ramActivaCheckBox.addActionListener(e -> actualizarGraficaVisiblePendiente(StatsChartOption.RAM, ramActivaCheckBox.isSelected()));
         discoActivaCheckBox.addActionListener(e -> actualizarGraficaVisiblePendiente(StatsChartOption.DISK, discoActivaCheckBox.isSelected()));
         jugadoresActivaCheckBox.addActionListener(e -> actualizarGraficaVisiblePendiente(StatsChartOption.PLAYERS, jugadoresActivaCheckBox.isSelected()));
+        cpuPersistenciaCheckBox.addActionListener(e -> actualizarPersistenciaGraficaPendiente(StatsChartOption.CPU, cpuPersistenciaCheckBox.isSelected()));
         ramPersistenciaCheckBox.addActionListener(e -> actualizarPersistenciaGraficaPendiente(StatsChartOption.RAM, ramPersistenciaCheckBox.isSelected()));
         discoPersistenciaCheckBox.addActionListener(e -> actualizarPersistenciaGraficaPendiente(StatsChartOption.DISK, discoPersistenciaCheckBox.isSelected()));
         jugadoresPersistenciaCheckBox.addActionListener(e -> actualizarPersistenciaGraficaPendiente(StatsChartOption.PLAYERS, jugadoresPersistenciaCheckBox.isSelected()));
@@ -592,6 +649,7 @@ public class PanelEstadisticas extends JPanel {
         if (gestorServidores != null) {
             REGISTERED_GESTORES.add(gestorServidores);
         }
+        cpuChart.setMaxValue(100);
         int ramMaxMb = resolveMaxRamMb();
         int maxPlayers = resolveMaxPlayers();
         ramChart.setMaxValue(ramMaxMb);
@@ -600,6 +658,7 @@ public class PanelEstadisticas extends JPanel {
 
         if (server == null) {
             refrescarGraficasDesdeHistorial();
+            cpuActualValueLabel.setText("-");
             ramActualValueLabel.setText("-");
             discoActivoValueLabel.setText("-");
             estadoValueLabel.setText("Sin servidor");
@@ -609,12 +668,14 @@ public class PanelEstadisticas extends JPanel {
         Process proceso = server.getServerProcess();
         if (proceso == null || !proceso.isAlive()) {
             refrescarGraficasDesdeHistorial();
+            cpuActualValueLabel.setText(buildCpuText(statsHistory.lastCpuPercent(), false));
             ramActualValueLabel.setText(buildRamText(statsHistory.lastRamValue(), ramMaxMb, false));
             discoActivoValueLabel.setText(buildDiskText((int) Math.round(Math.max(0d, Math.min(100d, statsHistory.lastDiskPercent()))), statsHistory.lastDiskSample()));
             estadoValueLabel.setText("Apagado");
             return;
         }
         refrescarGraficasDesdeHistorial();
+        cpuActualValueLabel.setText(buildCpuText(statsHistory.lastCpuPercent(), true));
         ramActualValueLabel.setText(buildRamText(statsHistory.lastRamValue(), ramMaxMb, true));
         discoActivoValueLabel.setText(buildDiskText((int) Math.round(Math.max(0d, Math.min(100d, statsHistory.lastDiskPercent()))), statsHistory.lastDiskSample()));
         estadoValueLabel.setText("En ejecución");
@@ -639,8 +700,33 @@ public class PanelEstadisticas extends JPanel {
         return formatMb(usageMb) + " / " + formatMb(maxMb) + " (" + Math.round(percentage) + "%)";
     }
 
+    private String buildCpuText(double cpuPercent, boolean mostrarEtiquetaTiempoReal) {
+        int percent = (int) Math.round(Math.max(0d, Math.min(100d, cpuPercent)));
+        return mostrarEtiquetaTiempoReal ? percent + "% en uso" : percent + "%";
+    }
+
     private String buildDiskText(int diskPercent, DiskActivitySample diskSample) {
         return diskPercent + "%  L " + formatRate(diskSample.readBytesPerSec()) + "  E " + formatRate(diskSample.writeBytesPerSec());
+    }
+
+    static ServerResourceSnapshot getLiveResourceSnapshot(Server server) {
+        StatsHistory history = getOrCreateHistory(server);
+        long ramMaxMb = 1L;
+        if (server != null && server.getServerConfig() != null) {
+            ramMaxMb = Math.max(1L, server.getServerConfig().getRamMax());
+        }
+        boolean running = false;
+        if (server != null) {
+            Process process = server.getServerProcess();
+            running = process != null && process.isAlive();
+        }
+        return new ServerResourceSnapshot(
+                running,
+                history.lastCpuPercent(),
+                history.lastRamValue(),
+                ramMaxMb,
+                history.lastDiskPercent()
+        );
     }
 
     private int resolveMaxRamMb() {
@@ -720,11 +806,11 @@ public class PanelEstadisticas extends JPanel {
 
     private static long readServerRamUsageMb(Server server) {
         if (server == null) {
-            return 0L;
+            return -1L;
         }
         Process process = server.getServerProcess();
         if (process == null || !process.isAlive()) {
-            return 0L;
+            return -1L;
         }
 
         long pid = process.pid();
@@ -737,7 +823,7 @@ public class PanelEstadisticas extends JPanel {
         if (residentUsageMb >= 0L) {
             return residentUsageMb;
         }
-        return Math.max(0L, heapUsageMb);
+        return heapUsageMb >= 0L ? heapUsageMb : -1L;
     }
 
     private static DiskActivitySample readServerDiskActivity(Server server) {
@@ -752,12 +838,12 @@ public class PanelEstadisticas extends JPanel {
         long pid = process.pid();
         String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         if (osName.contains("win")) {
-            return readWindowsDiskActivity(pid);
+            return readWindowsProcessMetrics(pid).diskSample();
         }
         return new DiskActivitySample(0d, 0L, 0L);
     }
 
-    private static DiskActivitySample readWindowsDiskActivity(long pid) {
+    private static ProcessMetricsSample readWindowsProcessMetrics(long pid) {
         String script =
                 "$targetPid = " + pid + "; " +
                 "$proc = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | " +
@@ -771,12 +857,12 @@ public class PanelEstadisticas extends JPanel {
 
         String output = ejecutarComando(List.of("powershell", "-NoProfile", "-Command", script), 900);
         if (output == null || output.isBlank()) {
-            return new DiskActivitySample(0d, 0L, 0L);
+            return new ProcessMetricsSample(0d, new DiskActivitySample(0d, 0L, 0L));
         }
 
         String[] parts = output.trim().split(";");
         if (parts.length < 7) {
-            return new DiskActivitySample(0d, 0L, 0L);
+            return new ProcessMetricsSample(0d, new DiskActivitySample(0d, 0L, 0L));
         }
 
         long processReadBytes = parseLong(parts[0]);
@@ -796,8 +882,10 @@ public class PanelEstadisticas extends JPanel {
                 totalWritePercent,
                 totalPercent
         );
-
-        return new DiskActivitySample(percent, Math.max(0L, processReadBytes), Math.max(0L, processWriteBytes));
+        return new ProcessMetricsSample(
+                0d,
+                new DiskActivitySample(percent, Math.max(0L, processReadBytes), Math.max(0L, processWriteBytes))
+        );
     }
 
     private static double estimateProcessDiskPercent(long processReadBytes,
@@ -1088,6 +1176,7 @@ public class PanelEstadisticas extends JPanel {
             return true;
         }
         return switch (option) {
+            case CPU -> server.getEstadisticasCpuHistorial() == null || Boolean.TRUE.equals(server.getEstadisticasCpuHistorial());
             case RAM -> server.getEstadisticasRamHistorial() == null || Boolean.TRUE.equals(server.getEstadisticasRamHistorial());
             case DISK -> server.getEstadisticasDiscoHistorial() == null || Boolean.TRUE.equals(server.getEstadisticasDiscoHistorial());
             case PLAYERS -> server.getEstadisticasJugadoresHistorial() == null || Boolean.TRUE.equals(server.getEstadisticasJugadoresHistorial());
@@ -1102,6 +1191,7 @@ public class PanelEstadisticas extends JPanel {
             return option.defaultEnabled();
         }
         return switch (option) {
+            case CPU -> server.getEstadisticasCpuActiva() == null ? option.defaultEnabled() : Boolean.TRUE.equals(server.getEstadisticasCpuActiva());
             case RAM -> server.getEstadisticasRamActiva() == null ? option.defaultEnabled() : Boolean.TRUE.equals(server.getEstadisticasRamActiva());
             case DISK -> server.getEstadisticasDiscoActiva() == null ? option.defaultEnabled() : Boolean.TRUE.equals(server.getEstadisticasDiscoActiva());
             case PLAYERS -> server.getEstadisticasJugadoresActiva() == null ? option.defaultEnabled() : Boolean.TRUE.equals(server.getEstadisticasJugadoresActiva());
@@ -1145,12 +1235,15 @@ public class PanelEstadisticas extends JPanel {
         ventanaRecienteValueLabel.setText(formatRecentWindowValue(RECENT_WINDOW_OPTIONS[ventanaRecienteSlider.getValue()]));
         resolucionHistoricaSlider.setValue(indexForValue(HISTORICAL_RESOLUTION_OPTIONS, persistedStatsHistoricalResolutionSeconds));
         resolucionHistoricaValueLabel.setText(formatHistoricalResolutionValue(HISTORICAL_RESOLUTION_OPTIONS[resolucionHistoricaSlider.getValue()]));
+        cpuActivaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartEnabled.getOrDefault(StatsChartOption.CPU, StatsChartOption.CPU.defaultEnabled())));
         ramActivaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartEnabled.getOrDefault(StatsChartOption.RAM, StatsChartOption.RAM.defaultEnabled())));
         discoActivaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartEnabled.getOrDefault(StatsChartOption.DISK, StatsChartOption.DISK.defaultEnabled())));
         jugadoresActivaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartEnabled.getOrDefault(StatsChartOption.PLAYERS, StatsChartOption.PLAYERS.defaultEnabled())));
+        cpuPersistenciaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartPersistenceEnabled.getOrDefault(StatsChartOption.CPU, true)));
         ramPersistenciaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartPersistenceEnabled.getOrDefault(StatsChartOption.RAM, true)));
         discoPersistenciaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartPersistenceEnabled.getOrDefault(StatsChartOption.DISK, true)));
         jugadoresPersistenciaCheckBox.setSelected(Boolean.TRUE.equals(pendingChartPersistenceEnabled.getOrDefault(StatsChartOption.PLAYERS, true)));
+        syncChartPersistenceCheckboxState(StatsChartOption.CPU);
         syncChartPersistenceCheckboxState(StatsChartOption.RAM);
         syncChartPersistenceCheckboxState(StatsChartOption.DISK);
         syncChartPersistenceCheckboxState(StatsChartOption.PLAYERS);
@@ -1220,6 +1313,7 @@ public class PanelEstadisticas extends JPanel {
 
     private JCheckBox getChartPersistenceCheckBox(StatsChartOption option) {
         return switch (option) {
+            case CPU -> cpuPersistenciaCheckBox;
             case RAM -> ramPersistenciaCheckBox;
             case DISK -> discoPersistenciaCheckBox;
             case PLAYERS -> jugadoresPersistenciaCheckBox;
@@ -1285,9 +1379,11 @@ public class PanelEstadisticas extends JPanel {
         int bucketSeconds = getStatsHistoricalResolutionSeconds();
         actualizarNavegacionHistorico(selectedRange.seconds(), bucketSeconds);
         int offsetSeconds = getTimelineOffsetSeconds();
+        cpuChart.setSamples(statsHistory.snapshotForRangeCpu(selectedRange.seconds(), offsetSeconds, bucketSeconds));
         ramChart.setSamples(statsHistory.snapshotForRange(selectedRange.seconds(), offsetSeconds, bucketSeconds));
         diskChart.setSamples(statsHistory.snapshotForRangeDisk(selectedRange.seconds(), offsetSeconds, bucketSeconds));
         playersChart.setSamples(statsHistory.snapshotForRangePlayers(selectedRange.seconds(), offsetSeconds, bucketSeconds));
+        cpuChart.setRangeSeconds(selectedRange.seconds());
         ramChart.setRangeSeconds(selectedRange.seconds());
         diskChart.setRangeSeconds(selectedRange.seconds());
         playersChart.setRangeSeconds(selectedRange.seconds());
@@ -1366,6 +1462,8 @@ public class PanelEstadisticas extends JPanel {
             return;
         }
         targetServer.setEstadisticasRamActiva(Boolean.TRUE.equals(pendingChartEnabled.getOrDefault(StatsChartOption.RAM, StatsChartOption.RAM.defaultEnabled())));
+        targetServer.setEstadisticasCpuActiva(Boolean.TRUE.equals(pendingChartEnabled.getOrDefault(StatsChartOption.CPU, StatsChartOption.CPU.defaultEnabled())));
+        targetServer.setEstadisticasCpuHistorial(Boolean.TRUE.equals(pendingChartPersistenceEnabled.getOrDefault(StatsChartOption.CPU, true)));
         targetServer.setEstadisticasRamHistorial(Boolean.TRUE.equals(pendingChartPersistenceEnabled.getOrDefault(StatsChartOption.RAM, true)));
         targetServer.setEstadisticasDiscoActiva(Boolean.TRUE.equals(pendingChartEnabled.getOrDefault(StatsChartOption.DISK, StatsChartOption.DISK.defaultEnabled())));
         targetServer.setEstadisticasDiscoHistorial(Boolean.TRUE.equals(pendingChartPersistenceEnabled.getOrDefault(StatsChartOption.DISK, true)));
@@ -1393,6 +1491,7 @@ public class PanelEstadisticas extends JPanel {
         FlatComboBox<ExportLayoutOption> disposicionCombo = new FlatComboBox<>();
         disposicionCombo.setModel(new DefaultComboBoxModel<>(ExportLayoutOption.values()));
         disposicionCombo.setRoundRect(true);
+        JCheckBox incluirCpuCheckBox = new JCheckBox("CPU");
         JCheckBox incluirRamCheckBox = new JCheckBox("RAM");
         JCheckBox incluirDiscoCheckBox = new JCheckBox("Disco");
         JCheckBox gridCheckBox = new JCheckBox("Grid");
@@ -1409,6 +1508,7 @@ public class PanelEstadisticas extends JPanel {
         if (hastaCombo.getItemCount() > 0) {
             hastaCombo.setSelectedIndex(Math.max(0, hastaCombo.getItemCount() - 1));
         }
+        incluirCpuCheckBox.setSelected(true);
         incluirRamCheckBox.setSelected(true);
         incluirDiscoCheckBox.setSelected(true);
         gridCheckBox.setSelected(renderOptionsModel.showGrid);
@@ -1422,6 +1522,7 @@ public class PanelEstadisticas extends JPanel {
         hastaCombo.setFocusable(false);
         disposicionCombo.setFocusable(false);
         List<JCheckBox> exportCheckBoxes = List.of(
+                incluirCpuCheckBox,
                 incluirRamCheckBox,
                 incluirDiscoCheckBox,
                 gridCheckBox,
@@ -1447,11 +1548,13 @@ public class PanelEstadisticas extends JPanel {
         gridColorButton.setText("Grid");
         JButton textColorButton = new FlatButton();
         textColorButton.setText("Texto");
+        JButton cpuColorButton = new FlatButton();
+        cpuColorButton.setText("CPU");
         JButton ramColorButton = new FlatButton();
         ramColorButton.setText("RAM");
         JButton diskColorButton = new FlatButton();
         diskColorButton.setText("Disco");
-        List<JButton> colorButtons = List.of(backgroundColorButton, borderColorButton, gridColorButton, textColorButton, ramColorButton, diskColorButton);
+        List<JButton> colorButtons = List.of(backgroundColorButton, borderColorButton, gridColorButton, textColorButton, cpuColorButton, ramColorButton, diskColorButton);
         for (JButton button : colorButtons) {
             styleActionButton(button);
         }
@@ -1459,6 +1562,7 @@ public class PanelEstadisticas extends JPanel {
         configurarColorButton(borderColorButton, paletteModel.borderColor);
         configurarColorButton(gridColorButton, paletteModel.gridColor);
         configurarColorButton(textColorButton, paletteModel.textColor);
+        configurarColorButton(cpuColorButton, paletteModel.cpuAccentColor);
         configurarColorButton(ramColorButton, paletteModel.ramAccentColor);
         configurarColorButton(diskColorButton, paletteModel.diskAccentColor);
 
@@ -1470,7 +1574,7 @@ public class PanelEstadisticas extends JPanel {
             updatingExportUi[0] = true;
             try {
                 ExportFormatOption formato = (ExportFormatOption) formatoCombo.getSelectedItem();
-                actualizarEstadoControlesExportacion(formato, disposicionCombo, incluirRamCheckBox.isSelected(), incluirDiscoCheckBox.isSelected(), colorButtons,
+                actualizarEstadoControlesExportacion(formato, disposicionCombo, incluirCpuCheckBox.isSelected(), incluirRamCheckBox.isSelected(), incluirDiscoCheckBox.isSelected(), colorButtons,
                         List.of(gridCheckBox, leyendaCheckBox, rellenoCheckBox, bordeCheckBox, valorActualCheckBox, apagadosCheckBox));
                 ExportLayoutOption disposicion = (ExportLayoutOption) disposicionCombo.getSelectedItem();
                 actualizarPrevisualizacionExportacion(
@@ -1478,6 +1582,7 @@ public class PanelEstadisticas extends JPanel {
                         exportSnapshot,
                         resolveExportBoundary((ExportInstantOption) desdeCombo.getSelectedItem(), exportSnapshot, true),
                         resolveExportBoundary((ExportInstantOption) hastaCombo.getSelectedItem(), exportSnapshot, false),
+                        incluirCpuCheckBox.isSelected(),
                         incluirRamCheckBox.isSelected(),
                         incluirDiscoCheckBox.isSelected(),
                         disposicion,
@@ -1493,6 +1598,7 @@ public class PanelEstadisticas extends JPanel {
         desdeCombo.addActionListener(e -> refreshPreview.run());
         hastaCombo.addActionListener(e -> refreshPreview.run());
         disposicionCombo.addActionListener(e -> refreshPreview.run());
+        incluirCpuCheckBox.addActionListener(e -> refreshPreview.run());
         incluirRamCheckBox.addActionListener(e -> refreshPreview.run());
         incluirDiscoCheckBox.addActionListener(e -> refreshPreview.run());
         gridCheckBox.addActionListener(e -> {
@@ -1534,6 +1640,10 @@ public class PanelEstadisticas extends JPanel {
         }));
         textColorButton.addActionListener(e -> seleccionarColor(dialog, textColorButton, "Color del texto", color -> {
             paletteModel.textColor = color;
+            refreshPreview.run();
+        }));
+        cpuColorButton.addActionListener(e -> seleccionarColor(dialog, cpuColorButton, "Color de CPU", color -> {
+            paletteModel.cpuAccentColor = color;
             refreshPreview.run();
         }));
         ramColorButton.addActionListener(e -> seleccionarColor(dialog, ramColorButton, "Color de RAM", color -> {
@@ -1579,7 +1689,7 @@ public class PanelEstadisticas extends JPanel {
         configContent.add(Box.createVerticalStrut(8));
         configContent.add(crearFilaExportacion("Hasta", hastaCombo));
         configContent.add(Box.createVerticalStrut(8));
-        configContent.add(crearFilaChecksExportacion("Series", incluirRamCheckBox, incluirDiscoCheckBox));
+        configContent.add(crearFilaChecksExportacion("Series", incluirCpuCheckBox, incluirRamCheckBox, incluirDiscoCheckBox));
         configContent.add(Box.createVerticalStrut(8));
         configContent.add(crearFilaExportacion("Disposicion", disposicionCombo));
         configContent.add(Box.createVerticalStrut(14));
@@ -1602,12 +1712,13 @@ public class PanelEstadisticas extends JPanel {
         configContent.add(colorTitle);
         configContent.add(Box.createVerticalStrut(6));
 
-        JPanel coloresPanel = new JPanel(new GridLayout(2, 3, 8, 8));
+        JPanel coloresPanel = new JPanel(new GridLayout(3, 3, 8, 8));
         coloresPanel.setOpaque(false);
         coloresPanel.add(backgroundColorButton);
         coloresPanel.add(borderColorButton);
         coloresPanel.add(gridColorButton);
         coloresPanel.add(textColorButton);
+        coloresPanel.add(cpuColorButton);
         coloresPanel.add(ramColorButton);
         coloresPanel.add(diskColorButton);
         configContent.add(coloresPanel);
@@ -1622,7 +1733,7 @@ public class PanelEstadisticas extends JPanel {
         styleActionButton(cancelarButton);
         cancelarButton.addActionListener(e -> dialog.dispose());
         exportarButton.addActionListener(e -> {
-            if (!incluirRamCheckBox.isSelected() && !incluirDiscoCheckBox.isSelected()) {
+            if (!incluirCpuCheckBox.isSelected() && !incluirRamCheckBox.isSelected() && !incluirDiscoCheckBox.isSelected()) {
                 JOptionPane.showMessageDialog(dialog, "Selecciona al menos una gráfica para exportar.", "Exportar estadísticas", JOptionPane.WARNING_MESSAGE);
                 return;
             }
@@ -1633,6 +1744,7 @@ public class PanelEstadisticas extends JPanel {
                             exportSnapshot,
                             resolveExportBoundary((ExportInstantOption) desdeCombo.getSelectedItem(), exportSnapshot, true),
                             resolveExportBoundary((ExportInstantOption) hastaCombo.getSelectedItem(), exportSnapshot, false),
+                            incluirCpuCheckBox.isSelected(),
                             incluirRamCheckBox.isSelected(),
                             incluirDiscoCheckBox.isSelected(),
                             (ExportLayoutOption) disposicionCombo.getSelectedItem(),
@@ -1645,6 +1757,7 @@ public class PanelEstadisticas extends JPanel {
                             exportSnapshot,
                             resolveExportBoundary((ExportInstantOption) desdeCombo.getSelectedItem(), exportSnapshot, true),
                             resolveExportBoundary((ExportInstantOption) hastaCombo.getSelectedItem(), exportSnapshot, false),
+                            incluirCpuCheckBox.isSelected(),
                             incluirRamCheckBox.isSelected(),
                             incluirDiscoCheckBox.isSelected()
                     );
@@ -1740,6 +1853,7 @@ public class PanelEstadisticas extends JPanel {
                                                        ExportSnapshot exportSnapshot,
                                                        long desdeTimestampMillis,
                                                        long hastaTimestampMillis,
+                                                       boolean incluirCpu,
                                                        boolean incluirRam,
                                                        boolean incluirDisco,
                                                        ExportLayoutOption disposicion,
@@ -1748,7 +1862,7 @@ public class PanelEstadisticas extends JPanel {
         if (previewLabel == null) {
             return;
         }
-        if (!incluirRam && !incluirDisco) {
+        if (!incluirCpu && !incluirRam && !incluirDisco) {
             previewLabel.setIcon(null);
             previewLabel.setText("Selecciona al menos una grafica");
             previewLabel.setForeground(AppTheme.getMutedForeground());
@@ -1762,6 +1876,7 @@ public class PanelEstadisticas extends JPanel {
                 exportSnapshot,
                 desdeTimestampMillis,
                 hastaTimestampMillis,
+                incluirCpu,
                 incluirRam,
                 incluirDisco,
                 disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS,
@@ -1776,6 +1891,7 @@ public class PanelEstadisticas extends JPanel {
                                          ExportSnapshot exportSnapshot,
                                          long desdeTimestampMillis,
                                          long hastaTimestampMillis,
+                                         boolean incluirCpu,
                                          boolean incluirRam,
                                          boolean incluirDisco,
                                          ExportLayoutOption disposicion,
@@ -1803,6 +1919,7 @@ public class PanelEstadisticas extends JPanel {
                 exportSnapshot,
                 desdeTimestampMillis,
                 hastaTimestampMillis,
+                incluirCpu,
                 incluirRam,
                 incluirDisco,
                 disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS,
@@ -1821,6 +1938,7 @@ public class PanelEstadisticas extends JPanel {
                                          ExportSnapshot exportSnapshot,
                                          long desdeTimestampMillis,
                                          long hastaTimestampMillis,
+                                         boolean incluirCpu,
                                          boolean incluirRam,
                                          boolean incluirDisco) throws IOException {
         JFileChooser chooser = new JFileChooser();
@@ -1846,6 +1964,9 @@ public class PanelEstadisticas extends JPanel {
         try (BufferedWriter writer = Files.newBufferedWriter(destino, StandardCharsets.UTF_8)) {
             writer.write("metric,timestamp_iso,timestamp_millis,value,shutdown_marker");
             writer.newLine();
+            if (incluirCpu) {
+                escribirMuestrasCsv(writer, "cpu", exportData.cpuSamples());
+            }
             if (incluirRam) {
                 escribirMuestrasCsv(writer, "ram", exportData.ramSamples());
             }
@@ -1857,13 +1978,15 @@ public class PanelEstadisticas extends JPanel {
 
     private void actualizarEstadoControlesExportacion(ExportFormatOption formato,
                                                       JComboBox<ExportLayoutOption> disposicionCombo,
+                                                      boolean incluirCpu,
                                                       boolean incluirRam,
                                                       boolean incluirDisco,
                                                       List<JButton> colorButtons,
                                                       List<JCheckBox> styleCheckBoxes) {
         boolean pngSelected = formato == ExportFormatOption.PNG;
         ExportLayoutOption selected = disposicionCombo != null ? (ExportLayoutOption) disposicionCombo.getSelectedItem() : null;
-        boolean overlayAllowed = incluirRam && incluirDisco;
+        int selectedSeries = (incluirCpu ? 1 : 0) + (incluirRam ? 1 : 0) + (incluirDisco ? 1 : 0);
+        boolean overlayAllowed = selectedSeries >= 2;
         if (disposicionCombo != null) {
             List<ExportLayoutOption> expectedOptions = new ArrayList<>();
             expectedOptions.add(ExportLayoutOption.MISMA_IMAGEN_SEPARADAS);
@@ -1914,12 +2037,13 @@ public class PanelEstadisticas extends JPanel {
                                                  ExportSnapshot exportSnapshot,
                                                  long desdeTimestampMillis,
                                                  long hastaTimestampMillis,
+                                                 boolean incluirCpu,
                                                  boolean incluirRam,
                                                  boolean incluirDisco,
                                                  ExportLayoutOption disposicion,
                                                  ExportPalette palette,
                                                  ExportRenderOptions renderOptions) {
-        List<BufferedImage> images = crearImagenesExportacion(width, singleChartHeight, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirRam, incluirDisco, disposicion, palette, renderOptions);
+        List<BufferedImage> images = crearImagenesExportacion(width, singleChartHeight, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirCpu, incluirRam, incluirDisco, disposicion, palette, renderOptions);
         return combinarImagenesExportacion(images, width, palette);
     }
 
@@ -1928,13 +2052,15 @@ public class PanelEstadisticas extends JPanel {
                                                                  ExportSnapshot exportSnapshot,
                                                                  long desdeTimestampMillis,
                                                                  long hastaTimestampMillis,
+                                                                 boolean incluirCpu,
                                                                  boolean incluirRam,
                                                                  boolean incluirDisco,
                                                                  ExportLayoutOption disposicion,
                                                                  ExportPalette palette,
                                                                  ExportRenderOptions renderOptions) {
-        int imageWidth = Math.max(420, (disposicion == ExportLayoutOption.ARCHIVOS_SEPARADOS && incluirRam && incluirDisco) ? (width / 2) - 12 : width);
-        List<BufferedImage> images = crearImagenesExportacion(imageWidth, singleChartHeight, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirRam, incluirDisco, disposicion, palette, renderOptions);
+        int selectedSeries = (incluirCpu ? 1 : 0) + (incluirRam ? 1 : 0) + (incluirDisco ? 1 : 0);
+        int imageWidth = Math.max(420, (disposicion == ExportLayoutOption.ARCHIVOS_SEPARADOS && selectedSeries >= 2) ? (width / 2) - 12 : width);
+        List<BufferedImage> images = crearImagenesExportacion(imageWidth, singleChartHeight, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirCpu, incluirRam, incluirDisco, disposicion, palette, renderOptions);
         if (disposicion == ExportLayoutOption.ARCHIVOS_SEPARADOS && images.size() > 1) {
             return combinarImagenesHorizontales(images, palette);
         }
@@ -1946,6 +2072,7 @@ public class PanelEstadisticas extends JPanel {
                                                          ExportSnapshot exportSnapshot,
                                                          long desdeTimestampMillis,
                                                          long hastaTimestampMillis,
+                                                         boolean incluirCpu,
                                                          boolean incluirRam,
                                                          boolean incluirDisco,
                                                          ExportLayoutOption disposicion,
@@ -1954,9 +2081,13 @@ public class PanelEstadisticas extends JPanel {
         ExportData exportData = buildExportData(exportSnapshot, desdeTimestampMillis, hastaTimestampMillis);
         ExportLayoutOption effectiveLayout = disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS;
         List<BufferedImage> images = new ArrayList<>();
-        if (effectiveLayout == ExportLayoutOption.MISMA_IMAGEN_SUPERPUESTAS && incluirRam && incluirDisco) {
+        int selectedSeries = (incluirCpu ? 1 : 0) + (incluirRam ? 1 : 0) + (incluirDisco ? 1 : 0);
+        if (effectiveLayout == ExportLayoutOption.MISMA_IMAGEN_SUPERPUESTAS && selectedSeries >= 2) {
             images.add(renderOverlayExportChart(width, singleChartHeight, exportData, palette, renderOptions));
             return images;
+        }
+        if (incluirCpu) {
+            images.add(cpuChart.renderToImage(width, singleChartHeight, exportData.cpuSamples(), exportData.rangeSeconds(), palette, palette.cpuAccentColor(), renderOptions));
         }
         if (incluirRam) {
             images.add(ramChart.renderToImage(width, singleChartHeight, exportData.ramSamples(), exportData.rangeSeconds(), palette, palette.ramAccentColor(), renderOptions));
@@ -2049,6 +2180,7 @@ public class PanelEstadisticas extends JPanel {
                                                                 ExportSnapshot exportSnapshot,
                                                                 long desdeTimestampMillis,
                                                                 long hastaTimestampMillis,
+                                                                boolean incluirCpu,
                                                                 boolean incluirRam,
                                                                 boolean incluirDisco,
                                                                 ExportLayoutOption disposicion,
@@ -2056,21 +2188,32 @@ public class PanelEstadisticas extends JPanel {
                                                                 ExportRenderOptions renderOptions) {
         List<ExportImageTarget> exportTargets = new ArrayList<>();
         ExportLayoutOption effectiveLayout = disposicion != null ? disposicion : ExportLayoutOption.MISMA_IMAGEN_SEPARADAS;
-        if (effectiveLayout == ExportLayoutOption.ARCHIVOS_SEPARADOS && incluirRam && incluirDisco) {
+        int selectedSeries = (incluirCpu ? 1 : 0) + (incluirRam ? 1 : 0) + (incluirDisco ? 1 : 0);
+        if (effectiveLayout == ExportLayoutOption.ARCHIVOS_SEPARADOS && selectedSeries >= 2) {
             ExportData exportData = buildExportData(exportSnapshot, desdeTimestampMillis, hastaTimestampMillis);
+            if (incluirCpu) {
+                exportTargets.add(new ExportImageTarget(
+                        appendToFileName(destinoBase, "-cpu"),
+                        cpuChart.renderToImage(1400, 340, exportData.cpuSamples(), exportData.rangeSeconds(), palette, palette.cpuAccentColor(), renderOptions)
+                ));
+            }
+            if (incluirRam) {
             exportTargets.add(new ExportImageTarget(
                     appendToFileName(destinoBase, "-ram"),
                     ramChart.renderToImage(1400, 340, exportData.ramSamples(), exportData.rangeSeconds(), palette, palette.ramAccentColor(), renderOptions)
             ));
+            }
+            if (incluirDisco) {
             exportTargets.add(new ExportImageTarget(
                     appendToFileName(destinoBase, "-disco"),
                     diskChart.renderToImage(1400, 340, exportData.diskSamples(), exportData.rangeSeconds(), palette, palette.diskAccentColor(), renderOptions)
             ));
+            }
             return exportTargets;
         }
         exportTargets.add(new ExportImageTarget(
                 destinoBase,
-                crearImagenExportacion(1400, 340, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirRam, incluirDisco, effectiveLayout, palette, renderOptions)
+                crearImagenExportacion(1400, 340, exportSnapshot, desdeTimestampMillis, hastaTimestampMillis, incluirCpu, incluirRam, incluirDisco, effectiveLayout, palette, renderOptions)
         ));
         return exportTargets;
     }
@@ -2085,12 +2228,14 @@ public class PanelEstadisticas extends JPanel {
 
     private ExportPaletteModel createDefaultExportPaletteModel() {
         Color mainAccent = AppTheme.getMainAccent();
+        Color cpuAccent = AppTheme.tint(mainAccent, AppTheme.getSuccessColor(), 0.25f);
         Color diskAccent = AppTheme.tint(mainAccent, AppTheme.getWarningColor(), 0.45f);
         return new ExportPaletteModel(
                 AppTheme.getSurfaceBackground(),
                 AppTheme.getBorderColor(),
                 AppTheme.getSubtleBorderColor(),
                 AppTheme.getForeground(),
+                cpuAccent,
                 mainAccent,
                 diskAccent
         );
@@ -2109,9 +2254,15 @@ public class PanelEstadisticas extends JPanel {
 
     private ExportSnapshot createFrozenExportSnapshot() {
         int bucketSeconds = getStatsHistoricalResolutionSeconds();
+        List<ChartSample> cpuTimeline = statsHistory.snapshotTimelineCpu(bucketSeconds);
         List<ChartSample> ramTimeline = statsHistory.snapshotTimelineRam(bucketSeconds);
         List<ChartSample> diskTimeline = statsHistory.snapshotTimelineDisk(bucketSeconds);
         TreeMap<Long, Long> timestamps = new TreeMap<>();
+        for (ChartSample sample : cpuTimeline) {
+            if (sample != null) {
+                timestamps.put(sample.timestampMillis(), sample.timestampMillis());
+            }
+        }
         for (ChartSample sample : ramTimeline) {
             if (sample != null) {
                 timestamps.put(sample.timestampMillis(), sample.timestampMillis());
@@ -2126,9 +2277,11 @@ public class PanelEstadisticas extends JPanel {
         long minTimestamp = availableTimestamps.isEmpty() ? 0L : availableTimestamps.get(0);
         long maxTimestamp = availableTimestamps.isEmpty() ? 0L : availableTimestamps.get(availableTimestamps.size() - 1);
         return new ExportSnapshot(
+                cpuTimeline,
                 ramTimeline,
                 diskTimeline,
                 availableTimestamps,
+                100,
                 Math.max(1, resolveMaxRamMb()),
                 100,
                 minTimestamp,
@@ -2185,10 +2338,11 @@ public class PanelEstadisticas extends JPanel {
         if (safeEnd <= 0L && snapshot.maxTimestampMillis() > 0L) {
             safeEnd = snapshot.maxTimestampMillis();
         }
+        List<ChartSample> cpuSamples = filterSamplesByTimestamp(snapshot.cpuTimeline(), safeStart, safeEnd);
         List<ChartSample> ramSamples = filterSamplesByTimestamp(snapshot.ramTimeline(), safeStart, safeEnd);
         List<ChartSample> diskSamples = filterSamplesByTimestamp(snapshot.diskTimeline(), safeStart, safeEnd);
         int rangeSeconds = Math.max(1, (int) Math.max(1L, Math.round((safeEnd - safeStart) / 1000d)));
-        return new ExportData(ramSamples, diskSamples, rangeSeconds, snapshot.ramMaxValue(), snapshot.diskMaxValue());
+        return new ExportData(cpuSamples, ramSamples, diskSamples, rangeSeconds, snapshot.cpuMaxValue(), snapshot.ramMaxValue(), snapshot.diskMaxValue());
     }
 
     private List<ChartSample> filterSamplesByTimestamp(List<ChartSample> samples, long desdeTimestampMillis, long hastaTimestampMillis) {
@@ -2231,7 +2385,7 @@ public class PanelEstadisticas extends JPanel {
             int yBottom = y0 + chartHeight;
 
             g2.setColor(palette.textColor());
-            g2.drawString("RAM + Disco", x0, 16);
+            g2.drawString("CPU + RAM + Disco", x0, 16);
 
             if (renderOptions == null || renderOptions.showGrid()) {
                 g2.setColor(palette.gridColor());
@@ -2257,11 +2411,16 @@ public class PanelEstadisticas extends JPanel {
                 }
             }
 
+            drawOverlaySeries(g2, exportData.cpuSamples(), exportData.cpuMaxValue(), x0, yBottom, chartWidth, chartHeight, palette.cpuAccentColor(), palette.backgroundColor(), renderOptions);
             drawOverlaySeries(g2, exportData.ramSamples(), exportData.ramMaxValue(), x0, yBottom, chartWidth, chartHeight, palette.ramAccentColor(), palette.backgroundColor(), renderOptions);
             drawOverlaySeries(g2, exportData.diskSamples(), exportData.diskMaxValue(), x0, yBottom, chartWidth, chartHeight, palette.diskAccentColor(), palette.backgroundColor(), renderOptions);
 
             if (renderOptions == null || renderOptions.showLegend()) {
                 int legendY = 18;
+                g2.setColor(palette.cpuAccentColor());
+                g2.fillRect(width - 250, legendY - 8, 16, 8);
+                g2.setColor(palette.textColor());
+                g2.drawString("CPU", width - 228, legendY);
                 g2.setColor(palette.ramAccentColor());
                 g2.fillRect(width - 180, legendY - 8, 16, 8);
                 g2.setColor(palette.textColor());
@@ -2422,6 +2581,7 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private enum StatsChartOption {
+        CPU("CPU", true),
         RAM("RAM", true),
         DISK("Disco", true),
         PLAYERS("Número de jugadores", false);
@@ -2448,6 +2608,7 @@ public class PanelEstadisticas extends JPanel {
                                  Color borderColor,
                                  Color gridColor,
                                  Color textColor,
+                                 Color cpuAccentColor,
                                  Color ramAccentColor,
                                  Color diskAccentColor) {
     }
@@ -2460,16 +2621,20 @@ public class PanelEstadisticas extends JPanel {
                                        boolean showShutdownMarkers) {
     }
 
-    private record ExportData(List<ChartSample> ramSamples,
+    private record ExportData(List<ChartSample> cpuSamples,
+                              List<ChartSample> ramSamples,
                               List<ChartSample> diskSamples,
                               int rangeSeconds,
+                              long cpuMaxValue,
                               long ramMaxValue,
                               long diskMaxValue) {
     }
 
-    private record ExportSnapshot(List<ChartSample> ramTimeline,
+    private record ExportSnapshot(List<ChartSample> cpuTimeline,
+                                  List<ChartSample> ramTimeline,
                                   List<ChartSample> diskTimeline,
                                   List<Long> availableTimestamps,
+                                  long cpuMaxValue,
                                   long ramMaxValue,
                                   long diskMaxValue,
                                   long minTimestampMillis,
@@ -2481,6 +2646,7 @@ public class PanelEstadisticas extends JPanel {
         private Color borderColor;
         private Color gridColor;
         private Color textColor;
+        private Color cpuAccentColor;
         private Color ramAccentColor;
         private Color diskAccentColor;
 
@@ -2488,18 +2654,20 @@ public class PanelEstadisticas extends JPanel {
                                    Color borderColor,
                                    Color gridColor,
                                    Color textColor,
+                                   Color cpuAccentColor,
                                    Color ramAccentColor,
                                    Color diskAccentColor) {
             this.backgroundColor = backgroundColor;
             this.borderColor = borderColor;
             this.gridColor = gridColor;
             this.textColor = textColor;
+            this.cpuAccentColor = cpuAccentColor;
             this.ramAccentColor = ramAccentColor;
             this.diskAccentColor = diskAccentColor;
         }
 
         private ExportPalette toPalette() {
-            return new ExportPalette(backgroundColor, borderColor, gridColor, textColor, ramAccentColor, diskAccentColor);
+            return new ExportPalette(backgroundColor, borderColor, gridColor, textColor, cpuAccentColor, ramAccentColor, diskAccentColor);
         }
     }
 
@@ -2610,6 +2778,12 @@ public class PanelEstadisticas extends JPanel {
     private record DiskActivitySample(double percent, long readBytesPerSec, long writeBytesPerSec) {
     }
 
+    private record ProcessMetricsSample(double cpuPercent, DiskActivitySample diskSample) {
+        private ProcessMetricsSample {
+            diskSample = diskSample != null ? diskSample : new DiskActivitySample(0d, 0L, 0L);
+        }
+    }
+
     private record ChartSample(long value, long timestampMillis, Boolean shutdownMarker) {
         private ChartSample(long value, long timestampMillis) {
             this(value, timestampMillis, false);
@@ -2643,12 +2817,15 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private static final class PersistedStatsHistory {
+        public List<ChartSample> recentCpu = new ArrayList<>();
         public List<ChartSample> recentRam = new ArrayList<>();
         public List<ChartSample> recentDisk = new ArrayList<>();
         public List<ChartSample> recentPlayers = new ArrayList<>();
+        public List<AggregateSample> archiveCpu = new ArrayList<>();
         public List<AggregateSample> archiveRam = new ArrayList<>();
         public List<AggregateSample> archiveDisk = new ArrayList<>();
         public List<AggregateSample> archivePlayers = new ArrayList<>();
+        public double lastCpuPercent;
         public long lastRamValue;
         public double lastDiskPercent;
         public long lastDiskReadBytesPerSec;
@@ -2658,12 +2835,15 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private static final class StatsHistory {
+        private final Deque<ChartSample> cpuSamples = new ArrayDeque<>();
         private final Deque<ChartSample> ramSamples = new ArrayDeque<>();
         private final Deque<ChartSample> diskSamples = new ArrayDeque<>();
         private final Deque<ChartSample> playerSamples = new ArrayDeque<>();
+        private final TreeMap<Long, AggregateSample> cpuArchive = new TreeMap<>();
         private final TreeMap<Long, AggregateSample> ramArchive = new TreeMap<>();
         private final TreeMap<Long, AggregateSample> diskArchive = new TreeMap<>();
         private final TreeMap<Long, AggregateSample> playerArchive = new TreeMap<>();
+        private volatile double lastCpuPercent = 0d;
         private volatile long lastRamValue = 0L;
         private volatile DiskActivitySample lastDiskSample = new DiskActivitySample(0d, 0L, 0L);
         private volatile long lastPlayersValue = 0L;
@@ -2671,6 +2851,13 @@ public class PanelEstadisticas extends JPanel {
         private volatile boolean dirty = false;
         private final LinkedHashSet<String> connectedPlayers = new LinkedHashSet<>();
         private int processedRawLogCount = 0;
+
+        private synchronized void addCpuSample(long value, long timestampMillis, int recentWindowSeconds, int bucketSeconds) {
+            addSample(cpuSamples, value, timestampMillis);
+            lastCpuPercent = value;
+            compactOldSamples(cpuSamples, cpuArchive, recentWindowSeconds, bucketSeconds);
+            dirty = true;
+        }
 
         private synchronized void addRamSample(long value, long timestampMillis, int recentWindowSeconds, int bucketSeconds) {
             addSample(ramSamples, value, timestampMillis);
@@ -2692,6 +2879,10 @@ public class PanelEstadisticas extends JPanel {
             dirty = true;
         }
 
+        private synchronized List<ChartSample> snapshotForRangeCpu(int seconds, int offsetSeconds, int bucketSeconds) {
+            return buildSnapshot(cpuSamples, cpuArchive, seconds, offsetSeconds, bucketSeconds);
+        }
+
         private synchronized List<ChartSample> snapshotForRange(int seconds, int offsetSeconds, int bucketSeconds) {
             return buildSnapshot(ramSamples, ramArchive, seconds, offsetSeconds, bucketSeconds);
         }
@@ -2704,12 +2895,20 @@ public class PanelEstadisticas extends JPanel {
             return buildSnapshot(playerSamples, playerArchive, seconds, offsetSeconds, bucketSeconds);
         }
 
+        private synchronized List<ChartSample> snapshotTimelineCpu(int bucketSeconds) {
+            return new ArrayList<>(buildTimelineSamples(cpuSamples, cpuArchive, bucketSeconds));
+        }
+
         private synchronized List<ChartSample> snapshotTimelineRam(int bucketSeconds) {
             return new ArrayList<>(buildTimelineSamples(ramSamples, ramArchive, bucketSeconds));
         }
 
         private synchronized List<ChartSample> snapshotTimelineDisk(int bucketSeconds) {
             return new ArrayList<>(buildTimelineSamples(diskSamples, diskArchive, bucketSeconds));
+        }
+
+        private synchronized List<ChartSample> snapshotTimelinePlayers(int bucketSeconds) {
+            return new ArrayList<>(buildTimelineSamples(playerSamples, playerArchive, bucketSeconds));
         }
 
         private void addSample(Deque<ChartSample> samples, long value, long timestampMillis) {
@@ -2733,12 +2932,15 @@ public class PanelEstadisticas extends JPanel {
         }
 
         private synchronized void addShutdownSamples(long timestampMillis, int recentWindowSeconds, int bucketSeconds) {
+            addSample(cpuSamples, 0L, timestampMillis, true);
             addSample(ramSamples, 0L, timestampMillis, true);
             addSample(diskSamples, 0L, timestampMillis, true);
             addSample(playerSamples, 0L, timestampMillis, true);
+            compactOldSamples(cpuSamples, cpuArchive, recentWindowSeconds, bucketSeconds);
             compactOldSamples(ramSamples, ramArchive, recentWindowSeconds, bucketSeconds);
             compactOldSamples(diskSamples, diskArchive, recentWindowSeconds, bucketSeconds);
             compactOldSamples(playerSamples, playerArchive, recentWindowSeconds, bucketSeconds);
+            lastCpuPercent = 0d;
             lastRamValue = 0L;
             lastDiskSample = new DiskActivitySample(0d, 0L, 0L);
             lastPlayersValue = 0L;
@@ -2746,6 +2948,10 @@ public class PanelEstadisticas extends JPanel {
             processedRawLogCount = 0;
             active = false;
             dirty = true;
+        }
+
+        private double lastCpuPercent() {
+            return lastCpuPercent;
         }
 
         private long lastRamValue() {
@@ -2870,19 +3076,23 @@ public class PanelEstadisticas extends JPanel {
         }
 
         private synchronized int getMaxOffsetSeconds(int rangeSeconds, int bucketSeconds) {
-            int totalSamples = Math.max(buildTimelineSamples(ramSamples, ramArchive, bucketSeconds).size(),
-                    Math.max(buildTimelineSamples(diskSamples, diskArchive, bucketSeconds).size(),
-                            buildTimelineSamples(playerSamples, playerArchive, bucketSeconds).size()));
+            int totalSamples = Math.max(snapshotTimelineCpu(bucketSeconds).size(),
+                    Math.max(snapshotTimelineRam(bucketSeconds).size(),
+                            Math.max(snapshotTimelineDisk(bucketSeconds).size(),
+                                    snapshotTimelinePlayers(bucketSeconds).size())));
             return Math.max(0, totalSamples - Math.max(1, rangeSeconds));
         }
 
         private synchronized long getWindowEndTimestamp(int offsetSeconds, int bucketSeconds) {
-            List<ChartSample> timeline = buildTimelineSamples(ramSamples, ramArchive, bucketSeconds);
-            if (buildTimelineSamples(diskSamples, diskArchive, bucketSeconds).size() > timeline.size()) {
-                timeline = buildTimelineSamples(diskSamples, diskArchive, bucketSeconds);
+            List<ChartSample> timeline = snapshotTimelineRam(bucketSeconds);
+            if (snapshotTimelineCpu(bucketSeconds).size() > timeline.size()) {
+                timeline = snapshotTimelineCpu(bucketSeconds);
             }
-            if (buildTimelineSamples(playerSamples, playerArchive, bucketSeconds).size() > timeline.size()) {
-                timeline = buildTimelineSamples(playerSamples, playerArchive, bucketSeconds);
+            if (snapshotTimelineDisk(bucketSeconds).size() > timeline.size()) {
+                timeline = snapshotTimelineDisk(bucketSeconds);
+            }
+            if (snapshotTimelinePlayers(bucketSeconds).size() > timeline.size()) {
+                timeline = snapshotTimelinePlayers(bucketSeconds);
             }
             if (timeline.isEmpty()) {
                 return 0L;
@@ -2893,12 +3103,15 @@ public class PanelEstadisticas extends JPanel {
 
         private synchronized PersistedStatsHistory toPersistedModel() {
             PersistedStatsHistory model = new PersistedStatsHistory();
+            model.recentCpu = new ArrayList<>(cpuSamples);
             model.recentRam = new ArrayList<>(ramSamples);
             model.recentDisk = new ArrayList<>(diskSamples);
             model.recentPlayers = new ArrayList<>(playerSamples);
+            model.archiveCpu = new ArrayList<>(cpuArchive.values());
             model.archiveRam = new ArrayList<>(ramArchive.values());
             model.archiveDisk = new ArrayList<>(diskArchive.values());
             model.archivePlayers = new ArrayList<>(playerArchive.values());
+            model.lastCpuPercent = lastCpuPercent;
             model.lastRamValue = lastRamValue;
             model.lastDiskPercent = lastDiskSample.percent();
             model.lastDiskReadBytesPerSec = lastDiskSample.readBytesPerSec();
@@ -2913,6 +3126,9 @@ public class PanelEstadisticas extends JPanel {
             if (model == null) {
                 return history;
             }
+            if (model.recentCpu != null) {
+                history.cpuSamples.addAll(model.recentCpu);
+            }
             if (model.recentRam != null) {
                 history.ramSamples.addAll(model.recentRam);
             }
@@ -2921,6 +3137,13 @@ public class PanelEstadisticas extends JPanel {
             }
             if (model.recentPlayers != null) {
                 history.playerSamples.addAll(model.recentPlayers);
+            }
+            if (model.archiveCpu != null) {
+                for (AggregateSample sample : model.archiveCpu) {
+                    if (sample != null) {
+                        history.cpuArchive.put(sample.bucketStartMillis, sample);
+                    }
+                }
             }
             if (model.archiveRam != null) {
                 for (AggregateSample sample : model.archiveRam) {
@@ -2943,6 +3166,7 @@ public class PanelEstadisticas extends JPanel {
                     }
                 }
             }
+            history.lastCpuPercent = model.lastCpuPercent;
             history.lastRamValue = model.lastRamValue;
             history.lastDiskSample = new DiskActivitySample(
                     model.lastDiskPercent,
@@ -2956,12 +3180,15 @@ public class PanelEstadisticas extends JPanel {
         }
 
         private synchronized void clear() {
+            cpuSamples.clear();
             ramSamples.clear();
             diskSamples.clear();
             playerSamples.clear();
+            cpuArchive.clear();
             ramArchive.clear();
             diskArchive.clear();
             playerArchive.clear();
+            lastCpuPercent = 0d;
             lastRamValue = 0L;
             lastDiskSample = new DiskActivitySample(0d, 0L, 0L);
             lastPlayersValue = 0L;
@@ -2976,6 +3203,11 @@ public class PanelEstadisticas extends JPanel {
                 return;
             }
             switch (option) {
+                case CPU -> {
+                    cpuSamples.clear();
+                    cpuArchive.clear();
+                    lastCpuPercent = 0d;
+                }
                 case RAM -> {
                     ramSamples.clear();
                     ramArchive.clear();
@@ -3002,12 +3234,15 @@ public class PanelEstadisticas extends JPanel {
             if (other == null) {
                 return;
             }
+            cpuSamples.addAll(other.cpuSamples);
             ramSamples.addAll(other.ramSamples);
             diskSamples.addAll(other.diskSamples);
             playerSamples.addAll(other.playerSamples);
+            cpuArchive.putAll(other.cpuArchive);
             ramArchive.putAll(other.ramArchive);
             diskArchive.putAll(other.diskArchive);
             playerArchive.putAll(other.playerArchive);
+            lastCpuPercent = other.lastCpuPercent;
             lastRamValue = other.lastRamValue;
             lastDiskSample = other.lastDiskSample;
             lastPlayersValue = other.lastPlayersValue;
@@ -3134,6 +3369,7 @@ public class PanelEstadisticas extends JPanel {
                 int recentWindowSeconds = getStatsRecentWindowSeconds(currentServer);
                 int bucketSeconds = getStatsHistoricalResolutionSeconds(currentServer);
                 if (process == null || !process.isAlive()) {
+                    removeCpuSampleState(currentServer, process);
                     if (history.isActive()) {
                         history.addShutdownSamples(System.currentTimeMillis(), recentWindowSeconds, bucketSeconds);
                     } else {
@@ -3144,17 +3380,79 @@ public class PanelEstadisticas extends JPanel {
 
                 history.markActive();
                 int ramMaxMb = Math.max(1, currentServer.getServerConfig() != null ? currentServer.getServerConfig().getRamMax() : 1);
-                long ramUsage = normalizeStaticUsage(readServerRamUsageMb(currentServer), ramMaxMb);
-                DiskActivitySample diskSample = readServerDiskActivity(currentServer);
+                long rawRamUsage = readServerRamUsageMb(currentServer);
+                long ramUsage = rawRamUsage >= 0L
+                        ? normalizeStaticUsage(rawRamUsage, ramMaxMb)
+                        : normalizeStaticUsage(history.lastRamValue(), ramMaxMb);
+                ProcessMetricsSample processMetrics = readServerProcessMetrics(currentServer);
+                double cpuPercentValue = Math.max(0d, Math.min(100d, readServerCpuUsagePercent(currentServer, history)));
+                int cpuPercent = (int) Math.round(cpuPercentValue);
+                DiskActivitySample diskSample = processMetrics.diskSample();
                 int diskPercent = (int) Math.round(Math.max(0d, Math.min(100d, diskSample.percent())));
                 long playersCount = history.syncAndGetCurrentPlayers(currentServer);
                 long timestamp = System.currentTimeMillis();
 
+                history.addCpuSample(cpuPercent, timestamp, recentWindowSeconds, bucketSeconds);
                 history.addRamSample(ramUsage, timestamp, recentWindowSeconds, bucketSeconds);
                 history.addDiskSample(diskPercent, timestamp, recentWindowSeconds, bucketSeconds);
                 history.addPlayerSample(playersCount, timestamp, recentWindowSeconds, bucketSeconds);
                 history.setLastDiskSample(diskSample);
             }
+        }
+    }
+
+    private static ProcessMetricsSample readServerProcessMetrics(Server server) {
+        if (server == null) {
+            return new ProcessMetricsSample(0d, new DiskActivitySample(0d, 0L, 0L));
+        }
+        Process process = server.getServerProcess();
+        if (process == null || !process.isAlive()) {
+            return new ProcessMetricsSample(0d, new DiskActivitySample(0d, 0L, 0L));
+        }
+        String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        if (osName.contains("win")) {
+            return readWindowsProcessMetrics(process.pid());
+        }
+        return new ProcessMetricsSample(0d, new DiskActivitySample(0d, 0L, 0L));
+    }
+
+    private static double readServerCpuUsagePercent(Server server, StatsHistory history) {
+        if (server == null) {
+            return 0d;
+        }
+        Process process = server.getServerProcess();
+        if (process == null || !process.isAlive()) {
+            return 0d;
+        }
+
+        String stateKey = server.getId() != null && !server.getId().isBlank()
+                ? server.getId()
+                : "pid-" + process.pid();
+        long wallClockNanos = System.nanoTime();
+
+        try {
+            java.time.Duration totalCpuDuration = process.toHandle().info().totalCpuDuration().orElse(null);
+            if (totalCpuDuration == null) {
+                return history != null ? history.lastCpuPercent() : 0d;
+            }
+
+            long processCpuNanos = Math.max(0L, totalCpuDuration.toNanos());
+            CpuSampleState previous = CPU_SAMPLE_STATE_BY_SERVER.put(stateKey, new CpuSampleState(processCpuNanos, wallClockNanos));
+            if (previous == null) {
+                return history != null ? history.lastCpuPercent() : 0d;
+            }
+
+            long cpuDelta = processCpuNanos - previous.processCpuNanos();
+            long wallDelta = wallClockNanos - previous.wallClockNanos();
+            if (cpuDelta < 0L || wallDelta <= 0L) {
+                return history != null ? history.lastCpuPercent() : 0d;
+            }
+
+            int logicalProcessors = Math.max(1, Runtime.getRuntime().availableProcessors());
+            double cpuPercent = (cpuDelta * 100d) / (wallDelta * logicalProcessors);
+            return Math.max(0d, Math.min(100d, cpuPercent));
+        } catch (Exception ignored) {
+            return history != null ? history.lastCpuPercent() : 0d;
         }
     }
 
@@ -3175,12 +3473,25 @@ public class PanelEstadisticas extends JPanel {
         return null;
     }
 
+    private static void removeCpuSampleState(Server server, Process process) {
+        if (server != null && server.getId() != null && !server.getId().isBlank()) {
+            CPU_SAMPLE_STATE_BY_SERVER.remove(server.getId());
+            return;
+        }
+        if (process != null) {
+            CPU_SAMPLE_STATE_BY_SERVER.remove("pid-" + process.pid());
+        }
+    }
+
     private static long normalizeStaticUsage(long usageMb, long maxMb) {
         long normalizedMb = Math.max(0L, usageMb);
         if (maxMb > 0L) {
             normalizedMb = Math.min(normalizedMb, maxMb);
         }
         return normalizedMb;
+    }
+
+    private record CpuSampleState(long processCpuNanos, long wallClockNanos) {
     }
 
     private final class UsageChart extends JComponent {
@@ -3199,9 +3510,9 @@ public class PanelEstadisticas extends JPanel {
             this.mode = mode;
             this.emptyMessage = emptyMessage;
             setOpaque(false);
-            setPreferredSize(new Dimension(0, 260));
-            setMinimumSize(new Dimension(0, 220));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 260));
+            setPreferredSize(new Dimension(0, 210));
+            setMinimumSize(new Dimension(0, 128));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
             ToolTipManager.sharedInstance().registerComponent(this);
             MouseAdapter hoverListener = new MouseAdapter() {
                 @Override
@@ -3233,10 +3544,10 @@ public class PanelEstadisticas extends JPanel {
         }
 
         private void setPreferredChartHeight(int preferredHeight) {
-            int normalizedHeight = Math.max(160, preferredHeight);
+            int normalizedHeight = Math.max(128, preferredHeight);
             setPreferredSize(new Dimension(0, normalizedHeight));
-            setMinimumSize(new Dimension(0, 160));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 260));
+            setMinimumSize(new Dimension(0, 128));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
             revalidate();
             repaint();
         }
@@ -3292,6 +3603,7 @@ public class PanelEstadisticas extends JPanel {
                                 AppTheme.getBorderColor(),
                                 AppTheme.getSubtleBorderColor(),
                                 AppTheme.getForeground(),
+                                AppTheme.tint(AppTheme.getMainAccent(), AppTheme.getSuccessColor(), 0.25f),
                                 AppTheme.getMainAccent(),
                                 AppTheme.getMainAccent()
                         ),

@@ -254,6 +254,11 @@ public final class AppTheme {
         return new FlatLineBorder(insets, color, thickness, getArc());
     }
 
+    public static FlatLineBorder createRoundedBorder(Insets insets, Color color, float thickness, int arc) {
+        int resolvedArc = arc > 0 ? arc : getArc();
+        return new FlatLineBorder(insets, color, thickness, resolvedArc);
+    }
+
     public static FlatLineBorder createAccentBorder(Insets insets, float thickness) {
         return createRoundedBorder(insets, getMainAccent(), thickness);
     }
