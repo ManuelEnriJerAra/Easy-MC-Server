@@ -1,11 +1,21 @@
 package vista;
 
-import com.formdev.flatlaf.ui.FlatLineBorder;
-import controlador.Main;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.Insets;
 
-import javax.swing.*;
+import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.UIManager;
 import javax.swing.border.Border;
-import java.awt.*;
+
+import com.formdev.flatlaf.ui.FlatLineBorder;
+
+import controlador.Main;
 
 public final class AppTheme {
     private static final Color FALLBACK_BACKGROUND = Color.LIGHT_GRAY;
@@ -16,7 +26,7 @@ public final class AppTheme {
     private static final Color FALLBACK_LINK = new Color(20, 90, 180);
     private static final Color FALLBACK_DIALOG_BORDER = Color.LIGHT_GRAY;
     private static final Color FALLBACK_SUBTLE_BORDER = new Color(0, 0, 0, 30);
-    private static final Color DEFAULT_CONSOLE_BACKGROUND = Color.decode("#1D2036");
+    private static final Color LIGHT_THEME_CONSOLE_BACKGROUND = Color.decode("#1D2036");
     private static final Color DEFAULT_CONSOLE_FOREGROUND = Color.WHITE;
     private static final Color DEFAULT_CONSOLE_CHAT = Color.CYAN;
     private static final Color DEFAULT_CONSOLE_ERROR = Color.RED;
@@ -88,7 +98,7 @@ public final class AppTheme {
     }
 
     public static Color getConsoleBackground() {
-        return DEFAULT_CONSOLE_BACKGROUND;
+        return getPanelBackground().darker().darker();
     }
 
     public static Color getConsoleForeground() {

@@ -10,21 +10,38 @@
 
 package vista;
 
-import controlador.GestorServidores;
-import modelo.Server;
-import com.formdev.flatlaf.extras.components.FlatButton;
-import com.formdev.flatlaf.extras.FlatSVGIcon;
-
-import javax.swing.*;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.HierarchyEvent;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 
+import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JPanel;
+import javax.swing.JRootPane;
+import javax.swing.RepaintManager;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+
+import com.formdev.flatlaf.extras.FlatSVGIcon;
+import com.formdev.flatlaf.extras.components.FlatButton;
+
+import controlador.GestorServidores;
+import modelo.Server;
+
 public class PanelControlServidor extends JPanel {
-    private static final int DEFAULT_SIDE_PX = 96;
+    private static final int DEFAULT_SIDE_PX_X = 146;
+    private static final int DEFAULT_SIDE_PX_Y = 96;
     private static final int RIGHT_PADDING_PX = 10;
     private final PropertyChangeListener listenerEstadoServidor;
     private JPanel panelBotones;
@@ -66,9 +83,13 @@ public class PanelControlServidor extends JPanel {
         btnForzarCierreServidor.setBackground(AppTheme.getDestructiveColor());
         btnForzarCierreServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        configurarBotonAccion(btnIniciarServidor, "/play.svg");
-        configurarBotonAccion(btnPararServidor, "/pause.svg");
-        configurarBotonAccion(btnReiniciarServidor, "/reset.svg");
+        FlatSVGIcon iconPlay = new FlatSVGIcon("easymcicons/play.svg", 32, 32);
+        FlatSVGIcon iconPause = new FlatSVGIcon("easymcicons/stop.svg", 32, 32);
+        FlatSVGIcon iconReset = new FlatSVGIcon("easymcicons/reset.svg", 32, 32);
+
+        configurarBotonAccion(btnIniciarServidor, iconPlay);
+        configurarBotonAccion(btnPararServidor, iconPause);
+        configurarBotonAccion(btnReiniciarServidor, iconReset);
 
         panelBotonesIniciado = new JPanel(new GridBagLayout());
         panelBotonesIniciado.setOpaque(false);
@@ -85,30 +106,22 @@ public class PanelControlServidor extends JPanel {
         gbc.weighty = 1.0;
         panelBotonesIniciado.add(btnReiniciarServidor, gbc);
 
-        btnIniciarServidor.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                try {
-                    gestorServidores.iniciarServidor(server);
-                } catch (IOException ex) {
-                    throw new RuntimeException(ex);
-                }
+        btnIniciarServidor.addActionListener((ActionEvent e) -> {
+            try {
+                gestorServidores.iniciarServidor(server);
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
             }
         });
-        btnPararServidor.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                gestorServidores.safePararServidor(server);
-            }
+        btnPararServidor.addActionListener((ActionEvent e) -> {
+            gestorServidores.safePararServidor(server);
         });
-        btnReiniciarServidor.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                server.setRestartPending(true);
-                gestorServidores.safePararServidor(server);
-            }
+        btnReiniciarServidor.addActionListener((ActionEvent e) -> {
+            server.setRestartPending(true);
+            gestorServidores.safePararServidor(server);
         });
-        btnForzarCierreServidor.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                gestorServidores.forzarPararServidor(server);
-            }
+        btnForzarCierreServidor.addActionListener((ActionEvent e) -> {
+            gestorServidores.forzarPararServidor(server);
         });
 
         this.listenerEstadoServidor = evt -> {
@@ -214,21 +227,17 @@ public class PanelControlServidor extends JPanel {
         return text.substring(0, lo) + ell;
     }
 
-    @Override
-    public Dimension getPreferredSize(){
-        Dimension base = super.getPreferredSize();
-        int h = getHeight();
-        int side = h > 0 ? h : (base == null ? 0 : base.height);
-        if(side <= 0) side = DEFAULT_SIDE_PX;
-        return new Dimension(side + RIGHT_PADDING_PX, side);
-    }
+@Override
+public Dimension getPreferredSize() {
+    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, DEFAULT_SIDE_PX_Y);
+}
 
-    @Override
-    public Dimension getMinimumSize(){
-        return new Dimension(DEFAULT_SIDE_PX + RIGHT_PADDING_PX, DEFAULT_SIDE_PX);
-    }
+@Override
+public Dimension getMinimumSize() {
+    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, DEFAULT_SIDE_PX_Y);
+}
 
-    private void configurarBotonAccion(AbstractButton button, String svgPath) {
+    private void configurarBotonAccion(AbstractButton button, FlatSVGIcon flatIcon) {
         if (button == null) {
             return;
         }
@@ -237,15 +246,12 @@ public class PanelControlServidor extends JPanel {
         button.setHorizontalTextPosition(SwingConstants.RIGHT);
         button.setVerticalTextPosition(SwingConstants.CENTER);
         button.setIconTextGap(8);
-        button.setFont(button.getFont().deriveFont(Font.BOLD, button.getFont().getSize2D()));
+        button.setFont(button.getFont().deriveFont(Font.BOLD, button.getFont().getSize2D() + 5f));
         button.setFocusPainted(false);
         button.setBorderPainted(false);
         button.setOpaque(true);
-        if (svgPath != null && getClass().getResource(svgPath) != null) {
-            FlatSVGIcon icon = new FlatSVGIcon(svgPath, 16, 16);
-            icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> Color.WHITE));
-            button.setIcon(icon);
-        }
+        button.setIcon(flatIcon);
+        flatIcon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> Color.WHITE));
     }
 
 }

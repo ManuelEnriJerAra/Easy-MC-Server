@@ -14,9 +14,12 @@ package vista;
 import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import controlador.Main;
+
 import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatSplitPane;
+
 import modelo.Server;
+
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.intellijthemes.FlatAllIJThemes;
 import com.formdev.flatlaf.ui.FlatLineBorder;
@@ -24,6 +27,7 @@ import com.formdev.flatlaf.ui.FlatLineBorder;
 import javax.swing.*;
 import javax.swing.border.Border;
 import javax.swing.plaf.UIResource;
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -41,6 +45,8 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.Consumer;
+
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 public class VentanaPrincipal extends JFrame {
     private static final String PROP_MANAGED_ROUNDED_BORDER = "easy-mc-server.managedRoundedBorder";
@@ -465,12 +471,19 @@ public class VentanaPrincipal extends JFrame {
         botones.setOpaque(false);
         botones.setLayout(new BoxLayout(botones, BoxLayout.Y_AXIS));
 
-        JButton home = crearNavButton("\uD83C\uDFE0", "Home", PaginaDerecha.HOME);
-        JButton mundo = crearNavButton("\uD83C\uDF0D", "Mundos", PaginaDerecha.MUNDO);
-        JButton config = crearNavButton("\u2699", "Configuración del servidor", PaginaDerecha.CONFIG);
-        JButton stats = crearNavButton("\uD83D\uDCC8", "Estadísticas", PaginaDerecha.STATS);
-        JButton temas = crearActionButton("\uD83D\uDD8C", "Temas", this::abrirSelectorTema);
-        JButton info = crearNavButton("\u2139", "Información", PaginaDerecha.INFO);
+        FlatSVGIcon iconHome = new FlatSVGIcon("easymcicons/home.svg", 32, 32);
+        FlatSVGIcon iconMundo = new FlatSVGIcon("easymcicons/earth.svg", 32, 32);
+        FlatSVGIcon iconConfig = new FlatSVGIcon("easymcicons/settings.svg", 32, 32);
+        FlatSVGIcon iconStats = new FlatSVGIcon("easymcicons/chart.svg", 32, 32);
+        FlatSVGIcon iconTemas = new FlatSVGIcon("easymcicons/pallete.svg", 32, 32);
+        FlatSVGIcon iconInfo = new FlatSVGIcon("easymcicons/info.svg", 32, 32);
+
+        JButton home = crearSVGButton(iconHome, "Home", PaginaDerecha.HOME);
+        JButton mundo = crearSVGButton(iconMundo, "Mundos", PaginaDerecha.MUNDO);
+        JButton config = crearSVGButton(iconConfig, "Configuración del servidor", PaginaDerecha.CONFIG);
+        JButton stats = crearSVGButton(iconStats, "Estadísticas", PaginaDerecha.STATS);
+        JButton temas = crearActionButton(iconTemas, "Temas", this::abrirSelectorTema);
+        JButton info = crearSVGButton(iconInfo, "Información", PaginaDerecha.INFO);
 
         botones.add(home);
         botones.add(Box.createVerticalStrut(8));
@@ -531,9 +544,9 @@ public class VentanaPrincipal extends JFrame {
         return barra;
     }
 
-    private JButton crearNavButton(String emoji, String tooltip, PaginaDerecha pagina){
+    private JButton crearSVGButton(FlatSVGIcon icon, String tooltip, PaginaDerecha pagina){
         FlatButton b = new FlatButton();
-        b.setText(emoji);
+        b.setIcon(icon);
         b.setFocusPainted(false);
         b.setAlignmentX(Component.LEFT_ALIGNMENT); // fijar a la izquierda
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
@@ -546,6 +559,7 @@ public class VentanaPrincipal extends JFrame {
         b.setBorder(new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc())); // mantiene tamaño estable y permite mostrar borde en hover
         b.putClientProperty("JButton.buttonType", "roundRect"); // mantener esquinas redondeadas con FlatLaf
         b.addActionListener(e -> navegarAPaginaDerecha(pagina));
+        icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> AppTheme.getForeground())); // adaptar color del icono al tema
         navButtons.put(pagina, b);
         return b;
     }
@@ -554,9 +568,9 @@ public class VentanaPrincipal extends JFrame {
         return new PanelEstadisticas(gestorServidores, server);
     }
 
-    private JButton crearActionButton(String emoji, String tooltip, Runnable action){
+    private JButton crearActionButton(FlatSVGIcon icon, String tooltip, Runnable action){
         FlatButton b = new FlatButton();
-        b.setText(emoji);
+        b.setIcon(icon);
         b.setFocusPainted(false);
         b.setAlignmentX(Component.LEFT_ALIGNMENT); // fijar a la izquierda
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
@@ -571,6 +585,7 @@ public class VentanaPrincipal extends JFrame {
         b.addActionListener(e -> {
             if(action != null) action.run();
         });
+        icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> AppTheme.getForeground())); // adaptar color del icono al tema
         return b;
     }
 
