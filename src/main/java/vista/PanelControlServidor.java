@@ -13,6 +13,7 @@ package vista;
 import controlador.GestorServidores;
 import modelo.Server;
 import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 import javax.swing.*;
 import java.awt.*;
@@ -45,18 +46,18 @@ public class PanelControlServidor extends JPanel {
         panelBotones = new JPanel(new BorderLayout());
         panelBotones.setOpaque(false);
         btnIniciarServidor = new FlatButton();
-        btnIniciarServidor.setText("Iniciar Servidor");
-        btnIniciarServidor.putClientProperty("fullText", "Iniciar Servidor");
+        btnIniciarServidor.setText("Iniciar");
+        btnIniciarServidor.putClientProperty("fullText", "Iniciar");
         btnIniciarServidor.setBackground(colorVerde);
         btnIniciarServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btnPararServidor = new FlatButton();
-        btnPararServidor.setText("Parar Servidor");
-        btnPararServidor.putClientProperty("fullText", "Parar Servidor");
+        btnPararServidor.setText("Parar");
+        btnPararServidor.putClientProperty("fullText", "Parar");
         btnPararServidor.setBackground(colorRojo);
         btnPararServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btnReiniciarServidor = new FlatButton();
-        btnReiniciarServidor.setText("Reiniciar Servidor");
-        btnReiniciarServidor.putClientProperty("fullText", "Reiniciar Servidor");
+        btnReiniciarServidor.setText("Reiniciar");
+        btnReiniciarServidor.putClientProperty("fullText", "Reiniciar");
         btnReiniciarServidor.setBackground(colorAmarillo);
         btnReiniciarServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btnForzarCierreServidor = new FlatButton();
@@ -64,6 +65,10 @@ public class PanelControlServidor extends JPanel {
         btnForzarCierreServidor.setOutline(true);
         btnForzarCierreServidor.setBackground(AppTheme.getDestructiveColor());
         btnForzarCierreServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        configurarBotonAccion(btnIniciarServidor, "/play.svg");
+        configurarBotonAccion(btnPararServidor, "/pause.svg");
+        configurarBotonAccion(btnReiniciarServidor, "/reset.svg");
 
         panelBotonesIniciado = new JPanel(new GridBagLayout());
         panelBotonesIniciado.setOpaque(false);
@@ -221,6 +226,26 @@ public class PanelControlServidor extends JPanel {
     @Override
     public Dimension getMinimumSize(){
         return new Dimension(DEFAULT_SIDE_PX + RIGHT_PADDING_PX, DEFAULT_SIDE_PX);
+    }
+
+    private void configurarBotonAccion(AbstractButton button, String svgPath) {
+        if (button == null) {
+            return;
+        }
+        button.setForeground(Color.WHITE);
+        button.setHorizontalAlignment(SwingConstants.CENTER);
+        button.setHorizontalTextPosition(SwingConstants.RIGHT);
+        button.setVerticalTextPosition(SwingConstants.CENTER);
+        button.setIconTextGap(8);
+        button.setFont(button.getFont().deriveFont(Font.BOLD, button.getFont().getSize2D()));
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setOpaque(true);
+        if (svgPath != null && getClass().getResource(svgPath) != null) {
+            FlatSVGIcon icon = new FlatSVGIcon(svgPath, 16, 16);
+            icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> Color.WHITE));
+            button.setIcon(icon);
+        }
     }
 
 }
