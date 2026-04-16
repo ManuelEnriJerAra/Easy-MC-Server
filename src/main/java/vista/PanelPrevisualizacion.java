@@ -48,7 +48,12 @@ public class PanelPrevisualizacion extends JPanel {
         AppTheme.applyHandCursor(iconoRedondo);
         iconoRedondo.setToolTipText("Cambiar icono del servidor");
         iconoRedondo.setHoverOverlayEnabled(true);
-        iconoRedondo.setHoverText("EDIT");
+        iconoRedondo.setHoverIcon(SvgIconFactory.create(
+                "easymcicons/gallery-edit.svg",
+                80,
+                80,
+                AppTheme::getImageHoverTextColor
+        ));
         iconoRedondo.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {

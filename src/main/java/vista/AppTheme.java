@@ -98,7 +98,7 @@ public final class AppTheme {
     }
 
     public static Color getConsoleBackground() {
-        return getPanelBackground().darker().darker();
+        return isLightTheme() ? LIGHT_THEME_CONSOLE_BACKGROUND : getPanelBackground().darker().darker();
     }
 
     public static Color getConsoleForeground() {
@@ -147,6 +147,12 @@ public final class AppTheme {
 
     public static Color getImageHoverTextColor() {
         return withAlpha(Color.WHITE, 230);
+    }
+
+    public static boolean isLightTheme() {
+        Color panel = getPanelBackground();
+        float luminance = (0.299f * panel.getRed() + 0.587f * panel.getGreen() + 0.114f * panel.getBlue()) / 255f;
+        return luminance >= 0.5f;
     }
 
     public static Color getCropBackground() {

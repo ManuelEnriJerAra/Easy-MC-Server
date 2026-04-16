@@ -25,8 +25,6 @@ public class PanelConsola extends JPanel {
     private static final Pattern LEFT = Pattern.compile("([^\\s]+) left the game");
     private static final Pattern HORA = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
 
-    private final Color colorConsola = AppTheme.getConsoleBackground();
-
     // Colores por tipo
     private static final Color COLOR_INFO = AppTheme.getConsoleInfoForeground();
     private static final Color COLOR_CHAT = AppTheme.getConsoleChatForeground();
@@ -62,7 +60,7 @@ public class PanelConsola extends JPanel {
         refreshThemeRefs();
 
         // Inicialización de estilo
-        consolaPane.setBackground(colorConsola);
+        consolaPane.setBackground(AppTheme.getConsoleBackground());
         consolaPane.setFont(new Font("Monospaced", Font.PLAIN, 12));
         consolaPane.setOpaque(true);
         inicializarEstilo();
@@ -74,7 +72,7 @@ public class PanelConsola extends JPanel {
         scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
         scroll.setWheelScrollingEnabled(true);
         scroll.getViewport().setOpaque(true);
-        scroll.getViewport().setBackground(colorConsola);
+        scroll.getViewport().setBackground(AppTheme.getConsoleBackground());
 
         vistaSimpleCheckbox.setText("Vista Simple");
         vistaSimpleCheckbox.setSelected(true);
@@ -84,7 +82,7 @@ public class PanelConsola extends JPanel {
         vistaSimpleCheckbox.setHorizontalTextPosition(SwingConstants.LEFT);
         vistaSimpleCheckbox.setForeground(AppTheme.getConsoleForeground());
 
-        scrollWrap = new RoundedBackgroundPanel(colorConsola, arc);
+        scrollWrap = new RoundedBackgroundPanel(AppTheme.getConsoleBackground(), arc);
         scrollWrap.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         scrollWrap.add(scroll, BorderLayout.CENTER);
 
@@ -127,7 +125,7 @@ public class PanelConsola extends JPanel {
         this.add(layeredConsole, BorderLayout.CENTER);
 
         JPanel panelComandos = new JPanel(new BorderLayout(8, 0));
-        panelComandos.setBackground(colorConsola);
+        panelComandos.setBackground(AppTheme.getConsoleBackground());
         panelComandos.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         JLabel pico = new JLabel(">");
         pico.setForeground(AppTheme.getConsoleForeground());
@@ -151,7 +149,7 @@ public class PanelConsola extends JPanel {
                 comandoPane.setText("");
             }
         });
-        comandoWrap = new RoundedBackgroundPanel(colorConsola, arc);
+        comandoWrap = new RoundedBackgroundPanel(AppTheme.getConsoleBackground(), arc);
         comandoWrap.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         comandoWrap.add(panelComandos, BorderLayout.CENTER);
 
@@ -169,6 +167,16 @@ public class PanelConsola extends JPanel {
 
     private void refreshThemeRefs(){
         arc = AppTheme.getArc();
+        Color consoleBackground = AppTheme.getConsoleBackground();
+        if (consolaPane != null) {
+            consolaPane.setBackground(consoleBackground);
+        }
+        if (scrollWrap != null) {
+            scrollWrap.setBackground(consoleBackground);
+        }
+        if (comandoWrap != null) {
+            comandoWrap.setBackground(consoleBackground);
+        }
     }
 
     private void inicializarEstilo() {

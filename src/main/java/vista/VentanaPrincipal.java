@@ -48,6 +48,7 @@ import java.util.function.Consumer;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 
+
 public class VentanaPrincipal extends JFrame {
     private static final String PROP_MANAGED_ROUNDED_BORDER = "easy-mc-server.managedRoundedBorder";
     private static final String PROP_ROUNDED_BORDER_ENABLED = "easy-mc-server.roundedBorderEnabled";
@@ -74,7 +75,7 @@ public class VentanaPrincipal extends JFrame {
     private JSplitPane splitHome;
     private PanelConfigServidor panelConfigServidor;
 
-    private enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, INFO }
+    enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, INFO }
     private record TemaInfo(String name, String className){}
 
     private PaginaDerecha paginaDerechaActual = PaginaDerecha.HOME;
@@ -318,7 +319,7 @@ public class VentanaPrincipal extends JFrame {
         panelDerecho.add(panelDerechoCards, BorderLayout.CENTER);
 
         // Barra vertical de navegación (va a la IZQUIERDA de la ventana, fuera del split)
-        panelBarraVertical = crearBarraVertical();
+        panelBarraVertical = construirBarraVertical();
 
         // SPLIT PANE
 
@@ -385,6 +386,53 @@ public class VentanaPrincipal extends JFrame {
         if(servidorASeleccionar != null){
             SwingUtilities.invokeLater(() -> seleccionarServidor(servidorASeleccionar));
         }
+    }
+
+    private void renderizarPanelDerecho(Server server) {
+        if (server == null || panelDerechoCards == null) {
+            return;
+        }
+
+        panelDerechoCards.removeAll();
+        VentanaPrincipalRightContentBuilder.Result content = new VentanaPrincipalRightContentBuilder()
+                .build(server, gestorServidores, this.getWidth());
+        splitHome = content.splitHome();
+        jugadoresCard = content.jugadoresCard();
+        consolaCard = content.consolaCard();
+        setBordeRedondoGestionado(consolaCard, false);
+        configurarSplitPane(splitHome, 8);
+
+        PanelConsola panelConsola = content.panelConsola();
+        panelConsola.actualizarConsola();
+
+        if(serverMostrado != null && consoleListenerActual != null){
+            serverMostrado.removeConsoleListener(consoleListenerActual);
+        }
+
+        consoleListenerActual = panelConsola::escribirLinea;
+        server.addConsoleListener(consoleListenerActual);
+        serverMostrado = server;
+
+        panelConfigServidor = content.panelConfigServidor();
+
+        panelDerechoCards.add(content.homePanel(), PaginaDerecha.HOME.name());
+        panelDerechoCards.add(content.mundoPanel(), PaginaDerecha.MUNDO.name());
+        panelDerechoCards.add(content.configPanel(), PaginaDerecha.CONFIG.name());
+        panelDerechoCards.add(content.statsPanel(), PaginaDerecha.STATS.name());
+        panelDerechoCards.add(content.infoPanel(), PaginaDerecha.INFO.name());
+
+        PaginaDerecha paginaAMostrar = paginaDerechaActual != null ? paginaDerechaActual : PaginaDerecha.HOME;
+        setPaginaDerecha(paginaAMostrar);
+        panelDerechoCards.revalidate();
+        panelDerechoCards.repaint();
+    }
+
+    private JPanel construirBarraVertical() {
+        VentanaPrincipalNavigationBuilder.Result navigation = new VentanaPrincipalNavigationBuilder()
+                .build(this::navegarAPaginaDerecha, this::abrirSelectorTema, button -> setPaginaDerecha(paginaDerechaActual));
+        navButtons.clear();
+        navButtons.putAll(navigation.navButtons());
+        return navigation.panel();
     }
 
     private void mostrarPanelDerecho(Server server, GestorServidores gestorServidores){
@@ -773,7 +821,8 @@ public class VentanaPrincipal extends JFrame {
 
         if (servidoresCard != null) {
             servidoresCard.setBackground(panelBg);
-            servidoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
+            servidoresCard.refreshTheme();
+            servidoresCard.setBorder(BorderFactory.createEmptyBorder());
         }
         if (servidoresPanel != null) {
             servidoresPanel.setBackground(panelBg);
@@ -791,7 +840,8 @@ public class VentanaPrincipal extends JFrame {
         }
         if (jugadoresCard != null) {
             jugadoresCard.setBackground(panelBg);
-            jugadoresCard.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), borderColor, 1f));
+            jugadoresCard.refreshTheme();
+            jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
         }
         if (consolaCard != null) {
             aplicarBordeRedondoGestionado(consolaCard, new Insets(8, 8, 8, 8), borderColor, 1f, arc);
@@ -810,7 +860,7 @@ public class VentanaPrincipal extends JFrame {
         // el borde rectangular desaparece.
         if (serverMostrado != null && this.gestorServidores != null && panelDerechoCards != null) {
             PaginaDerecha paginaActual = paginaDerechaActual;
-            mostrarPanelDerecho(serverMostrado, this.gestorServidores);
+            renderizarPanelDerecho(serverMostrado);
             setPaginaDerecha(paginaActual);
         }
     }
@@ -947,7 +997,7 @@ public class VentanaPrincipal extends JFrame {
             if(borrarServerButton != null) borrarServerButton.setEnabled(true);
             boolean panelDesincronizado = !esMismoServidor(serverMostrado, server);
             if(panelDerecho != null && panelDesincronizado) {
-                mostrarPanelDerecho(server, gestorServidores);
+                renderizarPanelDerecho(server);
             }
         }
 
@@ -984,7 +1034,7 @@ public class VentanaPrincipal extends JFrame {
         if(abrirCarpetaServerButton != null) abrirCarpetaServerButton.setEnabled(true);
         if(borrarServerButton != null) borrarServerButton.setEnabled(true);
         if(panelDerecho != null) {
-            mostrarPanelDerecho(server, gestorServidores);
+            renderizarPanelDerecho(server);
         }
         return true;
     }

@@ -13,6 +13,7 @@ public class ImagenRedondaLabel extends JComponent {
     private final int radio;
     private boolean hoverOverlayEnabled = false;
     private String hoverText = null;
+    private Icon hoverIcon = null;
     private boolean hovered = false;
 
     private BufferedImage cachedRounded;
@@ -60,6 +61,11 @@ public class ImagenRedondaLabel extends JComponent {
 
     public void setHoverText(String text){
         this.hoverText = text;
+        repaint();
+    }
+
+    public void setHoverIcon(Icon icon) {
+        this.hoverIcon = icon;
         repaint();
     }
 
@@ -126,7 +132,11 @@ public class ImagenRedondaLabel extends JComponent {
             g2.setColor(AppTheme.getImageHoverOverlayColor());
             g2.fillRoundRect(0, 0, w, h, radio * 2, radio * 2);
 
-            if(hoverText != null && !hoverText.isBlank()){
+            if(hoverIcon != null){
+                int x = (w - hoverIcon.getIconWidth()) / 2;
+                int y = (h - hoverIcon.getIconHeight()) / 2;
+                hoverIcon.paintIcon(this, g2, Math.max(0, x), Math.max(0, y));
+            } else if(hoverText != null && !hoverText.isBlank()){
                 g2.setColor(AppTheme.getImageHoverTextColor());
                 Font base = getFont();
                 if(base == null) base = UIManager.getFont("Label.font");

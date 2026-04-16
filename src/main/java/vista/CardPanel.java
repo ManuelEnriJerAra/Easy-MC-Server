@@ -158,12 +158,19 @@ public class CardPanel extends JPanel {
         refreshCardStyle();
     }
 
+    public void refreshTheme() {
+        refreshCardStyle();
+        revalidate();
+        repaint();
+    }
+
     private void refreshCardStyle() {
         if (cardSurface == null) {
             return;
         }
         cardSurface.setBackground(AppTheme.getPanelBackground());
         cardSurface.setArc(AppTheme.getArc());
+        AppTheme.applyCardTitleStyle(titleLabel);
         refreshBorder();
     }
 

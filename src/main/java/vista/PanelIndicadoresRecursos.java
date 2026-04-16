@@ -56,7 +56,7 @@ public class PanelIndicadoresRecursos extends JPanel {
 
         private MetricIndicatorCard(String title) {
             setOpaque(true);
-            setBackground(AppTheme.getSurfaceBackground());
+            setBackground(AppTheme.getPanelBackground());
             setLayout(new BorderLayout(0, 6));
             setBorder(AppTheme.createRoundedBorder(CARD_INSETS, AppTheme.getBorderColor(), 1f, INDICATOR_ARC));
 
@@ -86,7 +86,7 @@ public class PanelIndicadoresRecursos extends JPanel {
             progressBar.setValue(safePercent);
             Color accent = running ? ResourcePalette.colorForPercent(percent) : AppTheme.getMainAccent();
             progressBar.setColors(
-                    AppTheme.tint(AppTheme.getSurfaceBackground(), AppTheme.getForeground(), 0.10f),
+                    AppTheme.tint(AppTheme.getPanelBackground(), AppTheme.getForeground(), 0.10f),
                     accent
             );
             repaint();
@@ -95,7 +95,7 @@ public class PanelIndicadoresRecursos extends JPanel {
         @Override
         public void updateUI() {
             super.updateUI();
-            setBackground(AppTheme.getSurfaceBackground());
+            setBackground(AppTheme.getPanelBackground());
             setBorder(AppTheme.createRoundedBorder(CARD_INSETS, AppTheme.getBorderColor(), 1f, INDICATOR_ARC));
             if (metricLabel != null) {
                 metricLabel.setForeground(AppTheme.getMutedForeground());
@@ -105,7 +105,7 @@ public class PanelIndicadoresRecursos extends JPanel {
             }
             if (progressBar != null) {
                 progressBar.setColors(
-                        AppTheme.tint(AppTheme.getSurfaceBackground(), AppTheme.getForeground(), 0.10f),
+                        AppTheme.tint(AppTheme.getPanelBackground(), AppTheme.getForeground(), 0.10f),
                         AppTheme.getMainAccent()
                 );
             }
@@ -114,7 +114,7 @@ public class PanelIndicadoresRecursos extends JPanel {
 
     private static final class FillBar extends JComponent {
         private int value;
-        private Color trackColor = AppTheme.tint(AppTheme.getSurfaceBackground(), AppTheme.getForeground(), 0.10f);
+        private Color trackColor = AppTheme.tint(AppTheme.getPanelBackground(), AppTheme.getForeground(), 0.10f);
         private Color fillColor = AppTheme.getMainAccent();
 
         private void setValue(int value) {
@@ -123,7 +123,7 @@ public class PanelIndicadoresRecursos extends JPanel {
         }
 
         private void setColors(Color trackColor, Color fillColor) {
-            this.trackColor = trackColor != null ? trackColor : AppTheme.getSurfaceBackground();
+            this.trackColor = trackColor != null ? trackColor : AppTheme.getPanelBackground();
             this.fillColor = fillColor != null ? fillColor : AppTheme.getMainAccent();
             repaint();
         }

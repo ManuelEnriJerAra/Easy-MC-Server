@@ -229,12 +229,17 @@ public class PanelControlServidor extends JPanel {
 
 @Override
 public Dimension getPreferredSize() {
-    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, DEFAULT_SIDE_PX_Y);
+    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, 0);
 }
 
 @Override
 public Dimension getMinimumSize() {
-    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, DEFAULT_SIDE_PX_Y);
+    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, 0);
+}
+
+@Override
+public Dimension getMaximumSize() {
+    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, Integer.MAX_VALUE);
 }
 
     private void configurarBotonAccion(AbstractButton button, FlatSVGIcon flatIcon) {
