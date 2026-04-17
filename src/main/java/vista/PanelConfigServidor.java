@@ -170,7 +170,7 @@ public class PanelConfigServidor extends JPanel {
         for(Object k : props.keySet()){
             if(k != null){
                 String key = String.valueOf(k);
-                if(!isManagedInWorldsPanel(key)){
+                if(!isManagedOutsideServerConfigPanel(key)){
                     keys.add(key);
                 }
             }
@@ -1059,12 +1059,12 @@ public class PanelConfigServidor extends JPanel {
         };
     }
 
-    private boolean isManagedInWorldsPanel(String key){
+    private boolean isManagedOutsideServerConfigPanel(String key){
         if(key == null) return false;
         return switch(key.toLowerCase(Locale.ROOT)){
             case "level-name", "level-seed", "level-type", "generator-settings", "generate-structures",
                  "allow-nether", "spawn-protection", "max-world-size", "initial-enabled-packs",
-                 "initial-disabled-packs", "region-file-compression" -> true;
+                 "initial-disabled-packs", "region-file-compression", "motd" -> true;
             default -> false;
         };
     }
