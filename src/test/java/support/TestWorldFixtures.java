@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -56,12 +57,27 @@ public final class TestWorldFixtures {
     }
 
     public static Path createValidServerJar(Path serverDir, String jarName) throws IOException {
+        return createValidServerJar(serverDir, jarName, "{\"id\":\"test\"}");
+    }
+
+    public static Path createValidServerJar(Path serverDir, String jarName, String versionJson, String... extraEntries) throws IOException {
         Files.createDirectories(serverDir);
         Path jarPath = serverDir.resolve(jarName);
         try (JarOutputStream jarOut = new JarOutputStream(Files.newOutputStream(jarPath))) {
             jarOut.putNextEntry(new JarEntry("version.json"));
-            jarOut.write("{\"id\":\"test\"}".getBytes());
+            jarOut.write((versionJson == null ? "{\"id\":\"test\"}" : versionJson).getBytes(StandardCharsets.UTF_8));
             jarOut.closeEntry();
+            if (extraEntries != null) {
+                for (String entryName : extraEntries) {
+                    if (entryName == null || entryName.isBlank()) {
+                        continue;
+                    }
+                    JarEntry entry = new JarEntry(entryName);
+                    jarOut.putNextEntry(entry);
+                    jarOut.write(new byte[0]);
+                    jarOut.closeEntry();
+                }
+            }
         }
         return jarPath;
     }

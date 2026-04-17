@@ -20,7 +20,15 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
 
     @Override
     public ServerPlatformProfile detect(Path serverDir) {
-        if (!existsDirectory(serverDir, "mods") || !existsDirectory(serverDir, "libraries")) {
+        Path executableJar = resolveJarSilently(serverDir);
+        boolean hasForgeDirectories = existsDirectory(serverDir, "mods")
+                && (existsDirectory(serverDir, "libraries")
+                || exists(serverDir, "unix_args.txt")
+                || exists(serverDir, "win_args.txt")
+                || exists(serverDir, "run.sh")
+                || exists(serverDir, "run.bat"));
+        boolean hasForgeJarMarkers = MinecraftServerJarInspector.looksLikeForgeServerJar(executableJar);
+        if (!hasForgeDirectories && !hasForgeJarMarkers) {
             return null;
         }
         ServerValidationResult validation = validate(serverDir);
@@ -35,5 +43,15 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
     @Override
     public Set<ServerCapability> getCapabilities() {
         return ServerPlatform.FORGE.defaultCapabilities();
+    }
+
+    private Path resolveJarSilently(Path serverDir) {
+        try {
+            return resolveExecutableJar(serverDir);
+        } catch (RuntimeException ex) {
+            return null;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 }

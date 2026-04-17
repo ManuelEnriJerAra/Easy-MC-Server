@@ -50,6 +50,7 @@ final class ServerJarLocator {
             case FORGE, NEOFORGE -> {
                 if (name.contains("forge")) score += 50;
                 if (name.contains("neoforge")) score += 50;
+                if (MinecraftServerJarInspector.looksLikeForgeServerJar(jar)) score += 80;
             }
             case PAPER, SPIGOT, BUKKIT, PURPUR, PUFFERFISH -> {
                 if (name.contains("paper")) score += 50;
@@ -57,6 +58,7 @@ final class ServerJarLocator {
                 if (name.contains("bukkit")) score += 40;
                 if (name.contains("purpur")) score += 40;
                 if (name.contains("pufferfish")) score += 40;
+                if (MinecraftServerJarInspector.looksLikePaperServerJar(jar)) score += 80;
             }
             case FABRIC -> {
                 if (name.contains("fabric")) score += 50;
@@ -76,6 +78,12 @@ final class ServerJarLocator {
 
         if (MinecraftServerJarInspector.looksLikeMinecraftServerJar(jar)) {
             score += 25;
+        }
+        if (MinecraftServerJarInspector.looksLikeForgeServerJar(jar)) {
+            score += 20;
+        }
+        if (MinecraftServerJarInspector.looksLikePaperServerJar(jar)) {
+            score += 20;
         }
         return score;
     }

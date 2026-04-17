@@ -24,7 +24,12 @@ class ServerPlatformAdaptersTest {
     @Test
     void detect_debeResolverForgeConCapacidadesYRutaDeMods() throws Exception {
         Path forgeDir = tempDir.resolve("forge-server");
-        TestWorldFixtures.createValidServerJar(forgeDir, "forge-1.20.1.jar");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "runtime.jar",
+                "{\"id\":\"1.20.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
         Files.createDirectories(forgeDir.resolve("mods"));
         Files.createDirectories(forgeDir.resolve("libraries"));
 
@@ -40,8 +45,12 @@ class ServerPlatformAdaptersTest {
     @Test
     void detect_debeResolverPaperConPluginsYComandoDeArranque() throws Exception {
         Path paperDir = tempDir.resolve("paper-server");
-        TestWorldFixtures.createValidServerJar(paperDir, "paper-1.21.1.jar");
-        Files.writeString(paperDir.resolve("paper.yml"), "verbose: false");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "server-launch.jar",
+                "{\"id\":\"1.21.1\"}",
+                "io/papermc/paper/PaperBootstrap.class"
+        );
         Files.createDirectories(paperDir.resolve("plugins"));
 
         ServerPlatformProfile profile = ServerPlatformAdapters.detect(paperDir);
@@ -87,6 +96,24 @@ class ServerPlatformAdaptersTest {
         ServerPlatformProfile profile = adapter.detect(installDir);
         assertThat(profile).isNotNull();
         assertThat(profile.platform()).isEqualTo(ServerPlatform.VANILLA);
+    }
+
+    @Test
+    void detect_debeResolverPaperAunqueElNombreDelJarNoAyude() throws Exception {
+        Path paperDir = tempDir.resolve("paper-heuristics");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "bootstrap.jar",
+                "{\"id\":\"1.21.4\"}",
+                "io/papermc/paper/PaperBootstrap.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(paperDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.21.4");
     }
 
     private static final class FakeMojangApi extends MojangAPI {

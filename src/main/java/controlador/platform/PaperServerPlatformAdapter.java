@@ -20,7 +20,13 @@ public final class PaperServerPlatformAdapter extends AbstractServerPlatformAdap
 
     @Override
     public ServerPlatformProfile detect(Path serverDir) {
-        if (!exists(serverDir, "paper.yml")) {
+        Path executableJar = resolveJarSilently(serverDir);
+        boolean hasPaperFiles = exists(serverDir, "paper.yml")
+                || exists(serverDir, "paper-global.yml")
+                || exists(serverDir, "paper-world-defaults.yml")
+                || existsDirectory(serverDir, "plugins");
+        boolean hasPaperJarMarkers = MinecraftServerJarInspector.looksLikePaperServerJar(executableJar);
+        if (!hasPaperFiles && !hasPaperJarMarkers) {
             return null;
         }
         ServerValidationResult validation = validate(serverDir);
@@ -35,5 +41,15 @@ public final class PaperServerPlatformAdapter extends AbstractServerPlatformAdap
     @Override
     public Set<ServerCapability> getCapabilities() {
         return ServerPlatform.PAPER.defaultCapabilities();
+    }
+
+    private Path resolveJarSilently(Path serverDir) {
+        try {
+            return resolveExecutableJar(serverDir);
+        } catch (RuntimeException ex) {
+            return null;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 }
