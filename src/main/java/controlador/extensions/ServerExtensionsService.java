@@ -46,6 +46,7 @@ public final class ServerExtensionsService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String TOML_STRING_PATTERN = "(?m)^\\s*%s\\s*=\\s*['\"](.*?)['\"]\\s*$";
     private static final String YAML_STRING_PATTERN = "(?m)^\\s*%s\\s*:\\s*(.+?)\\s*$";
+    private static final Pattern MINECRAFT_VERSION_HINT_PATTERN = Pattern.compile("(?i)(?<!\\d)(1\\.(?:1[0-9]|20|21)(?:\\.\\d+)?)(?!\\d)");
 
     public List<Path> getManagedExtensionDirectories(Server server) {
         ServerPlatformProfile profile = resolveProfile(server);
@@ -142,6 +143,11 @@ public final class ServerExtensionsService {
             throw new IOException("Solo se admiten archivos .jar.");
         }
 
+        ExtensionCompatibilityReport compatibility = validateCompatibility(server, sourceJar);
+        if (compatibility.incompatible()) {
+            throw new IOException(compatibility.summary());
+        }
+
         List<Path> extensionDirectories = getManagedExtensionDirectories(server);
         if (extensionDirectories.isEmpty()) {
             throw new IOException("La plataforma del servidor no admite extensiones gestionadas por Easy-MC-Server.");
@@ -186,6 +192,134 @@ public final class ServerExtensionsService {
         return installed;
     }
 
+    public ExtensionCompatibilityReport validateCompatibility(Server server, Path extensionJar) throws IOException {
+        if (server == null) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.INCOMPATIBLE,
+                    "No se ha indicado el servidor de destino.",
+                    List.of("No existe contexto del servidor para validar la extension.")
+            );
+        }
+        if (extensionJar == null || !Files.isRegularFile(extensionJar)) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.INCOMPATIBLE,
+                    "No se ha indicado un .jar de extension valido.",
+                    List.of("El archivo de la extension no existe o no es accesible.")
+            );
+        }
+
+        ServerPlatformProfile profile = resolveProfile(server);
+        ServerPlatform platform = resolvePlatform(server, profile);
+        ServerEcosystemType ecosystemType = resolveEcosystemType(server, profile);
+        ServerExtension extension = readExtensionMetadata(
+                extensionJar,
+                extensionJar.getFileName().toString(),
+                null,
+                platform,
+                ecosystemType,
+                ExtensionInstallState.UNKNOWN,
+                ExtensionSourceType.LOCAL_FILE,
+                System.currentTimeMillis()
+        );
+        return validateCompatibility(server, extension);
+    }
+
+    public ExtensionCompatibilityReport validateCompatibility(Server server, ServerExtension extension) {
+        if (server == null) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.INCOMPATIBLE,
+                    "No se ha indicado el servidor de destino.",
+                    List.of("No existe contexto del servidor para validar la extension.")
+            );
+        }
+        if (extension == null) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.INCOMPATIBLE,
+                    "No se ha podido leer la extension.",
+                    List.of("No se han detectado metadatos suficientes para validar la extension.")
+            );
+        }
+
+        List<String> incompatibilities = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+
+        ServerPlatform serverPlatform = resolvePlatform(server, resolveProfile(server));
+        ServerEcosystemType serverEcosystem = resolveEcosystemType(server, resolveProfile(server));
+        ServerExtensionType extensionType = extension.getExtensionType() == null
+                ? ServerExtensionType.UNKNOWN
+                : extension.getExtensionType();
+        ServerPlatform extensionPlatform = extension.getPlatform() == null
+                ? ServerPlatform.UNKNOWN
+                : extension.getPlatform();
+
+        if (serverEcosystem == ServerEcosystemType.MODS && extensionType == ServerExtensionType.PLUGIN) {
+            incompatibilities.add("El servidor usa Mods y la extension se ha detectado como Plugin.");
+        } else if (serverEcosystem == ServerEcosystemType.PLUGINS && extensionType == ServerExtensionType.MOD) {
+            incompatibilities.add("El servidor usa Plugins y la extension se ha detectado como Mod.");
+        } else if (extensionType == ServerExtensionType.UNKNOWN) {
+            warnings.add("No se ha podido determinar si la extension es un mod o un plugin.");
+        }
+
+        if (extensionPlatform != ServerPlatform.UNKNOWN && serverPlatform != ServerPlatform.UNKNOWN && extensionPlatform != serverPlatform) {
+            incompatibilities.add("La extension se ha detectado para " + extensionPlatform.getLegacyTypeName()
+                    + " y el servidor actual es " + serverPlatform.getLegacyTypeName() + ".");
+        } else if (extensionPlatform == ServerPlatform.UNKNOWN) {
+            warnings.add("La plataforma objetivo de la extension no se ha podido determinar.");
+        }
+
+        String serverVersion = server.getVersion();
+        String minecraftConstraint = extension.getLocalMetadata() == null ? null : extension.getLocalMetadata().getMinecraftVersionConstraint();
+        if (serverVersion == null || serverVersion.isBlank()) {
+            warnings.add("No se conoce la version de Minecraft del servidor.");
+        } else if (minecraftConstraint == null || minecraftConstraint.isBlank()) {
+            warnings.add("La extension no declara una regla de compatibilidad para la version de Minecraft.");
+        } else if (!matchesMinecraftConstraint(serverVersion, minecraftConstraint)) {
+            incompatibilities.add("La extension declara compatibilidad con '" + minecraftConstraint
+                    + "' y el servidor usa Minecraft " + serverVersion + ".");
+        }
+
+        if (!incompatibilities.isEmpty()) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.INCOMPATIBLE,
+                    incompatibilities.getFirst(),
+                    incompatibilities
+            );
+        }
+        if (!warnings.isEmpty()) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.WARNING,
+                    warnings.getFirst(),
+                    warnings
+            );
+        }
+        return new ExtensionCompatibilityReport(
+                ExtensionCompatibilityStatus.COMPATIBLE,
+                "Compatible con el servidor actual.",
+                List.of()
+        );
+    }
+
+    public boolean removeExtension(Server server, ServerExtension extension) throws IOException {
+        if (server == null || extension == null) {
+            return false;
+        }
+
+        Path serverDir = resolveServerDir(server);
+        if (serverDir == null || !Files.isDirectory(serverDir)) {
+            return false;
+        }
+
+        Path extensionPath = resolveExtensionPath(serverDir, server, extension);
+        if (extensionPath == null || !Files.isRegularFile(extensionPath)) {
+            server.setExtensions(detectInstalledExtensions(server));
+            return false;
+        }
+
+        Files.deleteIfExists(extensionPath);
+        server.setExtensions(detectInstalledExtensions(server));
+        return true;
+    }
+
     private ServerExtension mergeInstalledMetadata(ServerExtension detected, ServerExtension installed) {
         if (detected == null) {
             return installed;
@@ -204,6 +338,36 @@ public final class ServerExtensionsService {
         String leftPath = left == null || left.getLocalMetadata() == null ? null : normalizeRelativePath(left.getLocalMetadata().getRelativePath());
         String rightPath = right == null || right.getLocalMetadata() == null ? null : normalizeRelativePath(right.getLocalMetadata().getRelativePath());
         return leftPath != null && leftPath.equals(rightPath);
+    }
+
+    private Path resolveExtensionPath(Path serverDir, Server server, ServerExtension extension) {
+        if (serverDir == null || extension == null) {
+            return null;
+        }
+
+        ExtensionLocalMetadata metadata = extension.getLocalMetadata();
+        if (metadata != null && metadata.getRelativePath() != null && !metadata.getRelativePath().isBlank()) {
+            Path candidate = serverDir.resolve(metadata.getRelativePath().replace('/', java.io.File.separatorChar));
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+
+        String fileName = extension.getFileName();
+        if (fileName == null || fileName.isBlank()) {
+            return null;
+        }
+
+        for (Path directory : getManagedExtensionDirectories(server)) {
+            if (directory == null) {
+                continue;
+            }
+            Path candidate = directory.resolve(fileName);
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private ServerExtension readExtensionMetadata(Path jarPath,
@@ -257,6 +421,10 @@ public final class ServerExtensionsService {
         metadata.setFileName(jarPath.getFileName().toString());
         metadata.setFileSizeBytes(Files.size(jarPath));
         metadata.setSha256(calculateSha256(jarPath));
+        metadata.setMinecraftVersionConstraint(firstNonBlank(
+                descriptor.minecraftVersionConstraint(),
+                inferMinecraftVersionHint(jarPath.getFileName().toString(), descriptor.version(), descriptor.displayName(), descriptor.description())
+        ));
         if (metadata.getDiscoveredAtEpochMillis() == null) {
             metadata.setDiscoveredAtEpochMillis(now);
         }
@@ -279,7 +447,8 @@ public final class ServerExtensionsService {
                         firstNonBlank(readTomlValue(modsToml, "description"), readManifestValue(jarFile.getManifest(), "Implementation-Description")),
                         firstNonBlank(readTomlValue(modsToml, "authors"), readManifestValue(jarFile.getManifest(), "Implementation-Vendor")),
                         ServerExtensionType.MOD,
-                        serverPlatform == ServerPlatform.UNKNOWN ? ServerPlatform.FORGE : serverPlatform
+                        serverPlatform == ServerPlatform.UNKNOWN ? ServerPlatform.FORGE : serverPlatform,
+                        readModsTomlMinecraftConstraint(modsToml)
                 );
             }
             if (jarFile.getJarEntry("fabric.mod.json") != null) {
@@ -290,7 +459,8 @@ public final class ServerExtensionsService {
                         text(node, "description"),
                         text(node, "authors", 0),
                         ServerExtensionType.MOD,
-                        ServerPlatform.FABRIC
+                        ServerPlatform.FABRIC,
+                        readNestedMinecraftConstraint(node, "depends")
                 );
             }
             if (jarFile.getJarEntry("quilt.mod.json") != null) {
@@ -303,7 +473,8 @@ public final class ServerExtensionsService {
                         text(metadata, "description"),
                         text(metadata, "contributors", 0),
                         ServerExtensionType.MOD,
-                        ServerPlatform.QUILT
+                        ServerPlatform.QUILT,
+                        readNestedMinecraftConstraint(quiltLoader, "depends")
                 );
             }
             if (jarFile.getJarEntry("plugin.yml") != null || jarFile.getJarEntry("paper-plugin.yml") != null) {
@@ -317,7 +488,8 @@ public final class ServerExtensionsService {
                         ServerExtensionType.PLUGIN,
                         serverPlatform == ServerPlatform.UNKNOWN
                                 ? (descriptorPath.equals("paper-plugin.yml") ? ServerPlatform.PAPER : ServerPlatform.UNKNOWN)
-                                : serverPlatform
+                                : serverPlatform,
+                        readYamlValue(pluginYaml, "api-version")
                 );
             }
             if (jarFile.getJarEntry("mcmod.info") != null) {
@@ -329,7 +501,8 @@ public final class ServerExtensionsService {
                         text(first, "description"),
                         text(first, "authorList", 0),
                         ServerExtensionType.MOD,
-                        serverPlatform == ServerPlatform.UNKNOWN ? ServerPlatform.FORGE : serverPlatform
+                        serverPlatform == ServerPlatform.UNKNOWN ? ServerPlatform.FORGE : serverPlatform,
+                        text(first, "mcversion")
                 );
             }
 
@@ -342,7 +515,8 @@ public final class ServerExtensionsService {
                     ecosystemType == ServerEcosystemType.PLUGINS ? ServerExtensionType.PLUGIN
                             : ecosystemType == ServerEcosystemType.MODS ? ServerExtensionType.MOD
                             : ServerExtensionType.UNKNOWN,
-                    serverPlatform
+                    serverPlatform,
+                    null
             );
         }
     }
@@ -367,6 +541,23 @@ public final class ServerExtensionsService {
 
     private String readTomlValue(String toml, String key) {
         return matchPattern(toml, TOML_STRING_PATTERN.formatted(Pattern.quote(key)));
+    }
+
+    private String readModsTomlMinecraftConstraint(String toml) {
+        if (toml == null || toml.isBlank()) {
+            return null;
+        }
+        Pattern dependencyBlock = Pattern.compile("(?s)\\[\\[dependencies\\.[^]]+]](.*?)(?=\\n\\s*\\[\\[|\\z)");
+        Matcher matcher = dependencyBlock.matcher(toml);
+        while (matcher.find()) {
+            String block = matcher.group(1);
+            String modId = readTomlValue(block, "modId");
+            if (!"minecraft".equalsIgnoreCase(modId)) {
+                continue;
+            }
+            return firstNonBlank(readTomlValue(block, "versionRange"), readTomlValue(block, "version"));
+        }
+        return null;
     }
 
     private String readYamlValue(String yaml, String key) {
@@ -431,6 +622,200 @@ public final class ServerExtensionsService {
             return text == null || text.isBlank() ? null : text.trim();
         }
         return text(node, fieldName);
+    }
+
+    private String readNestedMinecraftConstraint(JsonNode node, String fieldName) {
+        if (node == null || fieldName == null || fieldName.isBlank()) {
+            return null;
+        }
+        JsonNode dependencies = node.path(fieldName);
+        if (dependencies.isMissingNode() || dependencies.isNull()) {
+            return null;
+        }
+        JsonNode minecraft = dependencies.path("minecraft");
+        if (minecraft.isMissingNode() || minecraft.isNull()) {
+            return null;
+        }
+        if (minecraft.isArray() && !minecraft.isEmpty()) {
+            JsonNode first = minecraft.get(0);
+            return first == null ? null : first.asText(null);
+        }
+        if (minecraft.isObject()) {
+            return firstNonBlank(text(minecraft, "version"), text(minecraft, "versions", 0));
+        }
+        return minecraft.asText(null);
+    }
+
+    private boolean matchesMinecraftConstraint(String serverVersion, String constraint) {
+        if (serverVersion == null || serverVersion.isBlank() || constraint == null || constraint.isBlank()) {
+            return true;
+        }
+        String normalizedConstraint = constraint.trim();
+        if (normalizedConstraint.contains("||")) {
+            for (String option : normalizedConstraint.split("\\|\\|")) {
+                if (matchesMinecraftConstraint(serverVersion, option)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (normalizedConstraint.contains(",")) {
+            boolean allSatisfied = true;
+            for (String part : normalizedConstraint.split(",")) {
+                String trimmed = part.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                if (looksLikeRangePart(trimmed)) {
+                    allSatisfied &= matchesSingleConstraint(serverVersion, trimmed);
+                }
+            }
+            if (allSatisfied && normalizedConstraint.chars().noneMatch(ch -> ch == '[' || ch == '(')) {
+                return true;
+            }
+        }
+        if ((normalizedConstraint.startsWith("[") || normalizedConstraint.startsWith("("))
+                && (normalizedConstraint.endsWith("]") || normalizedConstraint.endsWith(")"))) {
+            return matchesMavenRange(serverVersion, normalizedConstraint);
+        }
+        return matchesSingleConstraint(serverVersion, normalizedConstraint);
+    }
+
+    private boolean looksLikeRangePart(String value) {
+        return value.startsWith(">") || value.startsWith("<") || value.startsWith("=") || value.startsWith("~") || value.startsWith("^");
+    }
+
+    private boolean matchesSingleConstraint(String serverVersion, String constraint) {
+        String value = constraint == null ? "" : constraint.trim();
+        if (value.isEmpty() || "*".equals(value)) {
+            return true;
+        }
+        if (value.startsWith(">=")) {
+            return compareVersions(serverVersion, value.substring(2).trim()) >= 0;
+        }
+        if (value.startsWith("<=")) {
+            return compareVersions(serverVersion, value.substring(2).trim()) <= 0;
+        }
+        if (value.startsWith(">")) {
+            return compareVersions(serverVersion, value.substring(1).trim()) > 0;
+        }
+        if (value.startsWith("<")) {
+            return compareVersions(serverVersion, value.substring(1).trim()) < 0;
+        }
+        if (value.startsWith("=")) {
+            return compareVersions(serverVersion, value.substring(1).trim()) == 0;
+        }
+        if (value.startsWith("~")) {
+            String base = value.substring(1).trim();
+            return serverVersion.startsWith(base);
+        }
+        if (value.startsWith("^")) {
+            String base = value.substring(1).trim();
+            String[] serverParts = splitVersion(serverVersion);
+            String[] baseParts = splitVersion(base);
+            return serverParts.length > 0 && baseParts.length > 0
+                    && serverParts[0].equals(baseParts[0])
+                    && compareVersions(serverVersion, base) >= 0;
+        }
+        return compareVersions(serverVersion, value) == 0
+                || serverVersion.startsWith(value + ".")
+                || value.startsWith(serverVersion + ".");
+    }
+
+    private boolean matchesMavenRange(String serverVersion, String range) {
+        String trimmed = range.trim();
+        boolean includeLower = trimmed.startsWith("[");
+        boolean includeUpper = trimmed.endsWith("]");
+        String body = trimmed.substring(1, trimmed.length() - 1);
+        if (!body.contains(",")) {
+            String exact = body.trim();
+            if (exact.isEmpty()) {
+                return true;
+            }
+            if (!includeLower || !includeUpper) {
+                return false;
+            }
+            return compareVersions(serverVersion, exact) == 0;
+        }
+        String[] parts = body.split(",", -1);
+        String lower = parts.length > 0 ? parts[0].trim() : "";
+        String upper = parts.length > 1 ? parts[1].trim() : "";
+        if (!lower.isEmpty()) {
+            int compare = compareVersions(serverVersion, lower);
+            if (compare < 0 || (!includeLower && compare == 0)) {
+                return false;
+            }
+        }
+        if (!upper.isEmpty()) {
+            int compare = compareVersions(serverVersion, upper);
+            if (compare > 0 || (!includeUpper && compare == 0)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private int compareVersions(String left, String right) {
+        String[] a = splitVersion(left);
+        String[] b = splitVersion(right);
+        int length = Math.max(a.length, b.length);
+        for (int i = 0; i < length; i++) {
+            int partA = i < a.length ? parseVersionPart(a[i]) : 0;
+            int partB = i < b.length ? parseVersionPart(b[i]) : 0;
+            int compare = Integer.compare(partA, partB);
+            if (compare != 0) {
+                return compare;
+            }
+        }
+        return 0;
+    }
+
+    private String[] splitVersion(String version) {
+        String normalized = version == null ? "" : version.trim();
+        if (normalized.isEmpty()) {
+            return new String[0];
+        }
+        return normalized.split("[^A-Za-z0-9]+");
+    }
+
+    private int parseVersionPart(String part) {
+        if (part == null || part.isBlank()) {
+            return 0;
+        }
+        String digits = part.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
+    private String inferMinecraftVersionHint(String... texts) {
+        String found = null;
+        if (texts == null) {
+            return null;
+        }
+        for (String text : texts) {
+            if (text == null || text.isBlank()) {
+                continue;
+            }
+            Matcher matcher = MINECRAFT_VERSION_HINT_PATTERN.matcher(text);
+            while (matcher.find()) {
+                String candidate = matcher.group(1);
+                if (candidate == null || candidate.isBlank()) {
+                    continue;
+                }
+                if (found == null) {
+                    found = candidate;
+                } else if (!found.equals(candidate)) {
+                    return null;
+                }
+            }
+        }
+        return found;
     }
 
     private String calculateSha256(Path file) throws IOException {
@@ -532,7 +917,8 @@ public final class ServerExtensionsService {
             String description,
             String author,
             ServerExtensionType extensionType,
-            ServerPlatform platform
+            ServerPlatform platform,
+            String minecraftVersionConstraint
     ) {
     }
 }

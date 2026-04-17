@@ -12,6 +12,7 @@ public class ExtensionLocalMetadata {
     private String fileName;
     private Long fileSizeBytes;
     private String sha256;
+    private String minecraftVersionConstraint;
     private Long discoveredAtEpochMillis;
     private Long lastUpdatedAtEpochMillis;
     private Boolean enabled;

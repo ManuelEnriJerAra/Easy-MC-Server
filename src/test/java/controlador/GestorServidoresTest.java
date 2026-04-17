@@ -1,5 +1,7 @@
 package controlador;
 
+import controlador.extensions.ExtensionCompatibilityReport;
+import controlador.extensions.ExtensionCompatibilityStatus;
 import modelo.Server;
 import modelo.extensions.ExtensionInstallState;
 import modelo.extensions.ExtensionSourceType;
@@ -297,6 +299,252 @@ class GestorServidoresTest {
                 new tools.jackson.core.type.TypeReference<>() {});
         assertThat(reloaded.getFirst().getExtensions()).hasSize(1);
         assertThat(reloaded.getFirst().getExtensions().getFirst().getPlatform()).isEqualTo(ServerPlatform.PAPER);
+    }
+
+    @Test
+    void eliminarExtensionLocal_debeBorrarElJarYActualizarMetadata() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path forgeDir = tempDir.resolve("forge-remove-extension");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "server.jar",
+                "{\"id\":\"1.20.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+
+        Server server = new Server();
+        server.setDisplayName("Forge Remove");
+        server.setServerDir(forgeDir.toString());
+        server.setPlatform(ServerPlatform.FORGE);
+        gestor.guardarServidor(server);
+
+        Path sourceJar = tempDir.resolve("remove-mod.jar");
+        TestWorldFixtures.createJar(
+                sourceJar,
+                Map.of(
+                        "META-INF/mods.toml",
+                        """
+                        modLoader="javafml"
+                        loaderVersion="[47,)"
+                        license="MIT"
+                        [[mods]]
+                        modId="removeexample"
+                        version="1.0.0"
+                        displayName="Remove Example"
+                        authors="Easy MC"
+                        description="Forge test mod"
+                        """
+                )
+        );
+
+        ServerExtension installed = gestor.instalarExtensionManual(server, sourceJar);
+
+        boolean removed = gestor.eliminarExtensionLocal(server, installed);
+
+        assertThat(removed).isTrue();
+        assertThat(Files.exists(forgeDir.resolve("mods").resolve("remove-mod.jar"))).isFalse();
+        assertThat(server.getExtensions()).isEmpty();
+    }
+
+    @Test
+    void validarCompatibilidadExtension_debeMarcarPluginComoIncompatibleEnServidorForge() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path forgeDir = tempDir.resolve("forge-compat");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "server.jar",
+                "{\"id\":\"1.20.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+
+        Server server = new Server();
+        server.setServerDir(forgeDir.toString());
+        server.setPlatform(ServerPlatform.FORGE);
+        server.setVersion("1.20.1");
+
+        Path pluginJar = tempDir.resolve("incompatible-plugin.jar");
+        TestWorldFixtures.createJar(
+                pluginJar,
+                Map.of(
+                        "plugin.yml",
+                        """
+                        name: PluginOnly
+                        version: 1.0.0
+                        author: Easy MC
+                        api-version: 1.20
+                        description: Plugin test
+                        """
+                )
+        );
+
+        ExtensionCompatibilityReport report = gestor.validarCompatibilidadExtension(server, pluginJar);
+
+        assertThat(report.status()).isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
+        assertThat(report.summary()).contains("Plugin");
+    }
+
+    @Test
+    void instalarExtensionManual_debeRechazarVersionDeMinecraftIncompatible() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path paperDir = tempDir.resolve("paper-version-compat");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "server.jar",
+                "{\"id\":\"1.20.1\"}",
+                "io/papermc/paper/PaperBootstrap.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Files.createDirectories(paperDir.resolve("plugins"));
+
+        Server server = new Server();
+        server.setServerDir(paperDir.toString());
+        server.setPlatform(ServerPlatform.PAPER);
+        server.setVersion("1.20.1");
+        gestor.guardarServidor(server);
+
+        Path pluginJar = tempDir.resolve("future-plugin.jar");
+        TestWorldFixtures.createJar(
+                pluginJar,
+                Map.of(
+                        "paper-plugin.yml",
+                        """
+                        name: FuturePlugin
+                        version: 1.0.0
+                        author: Easy MC
+                        api-version: 1.21
+                        description: Needs a newer server
+                        """
+                )
+        );
+
+        ExtensionCompatibilityReport report = gestor.validarCompatibilidadExtension(server, pluginJar);
+
+        assertThat(report.status()).isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> gestor.instalarExtensionManual(server, pluginJar))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("1.21");
+    }
+
+    @Test
+    void instalarExtensionManual_debeRechazarModsConVersionInferidaIncompatible() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path forgeDir = tempDir.resolve("forge-version-hint");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "server.jar",
+                "{\"id\":\"1.21.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+
+        Server server = new Server();
+        server.setServerDir(forgeDir.toString());
+        server.setPlatform(ServerPlatform.FORGE);
+        server.setVersion("1.21.1");
+        gestor.guardarServidor(server);
+
+        Path modJar = tempDir.resolve("examplemod-1.17.1-2.0.0.jar");
+        TestWorldFixtures.createJar(
+                modJar,
+                Map.of(
+                        "META-INF/mods.toml",
+                        """
+                        modLoader="javafml"
+                        loaderVersion="[37,)"
+                        license="MIT"
+                        [[mods]]
+                        modId="examplemod"
+                        version="1.17.1-2.0.0"
+                        displayName="Example Mod"
+                        authors="Easy MC"
+                        description="Legacy 1.17.1 build"
+                        """
+                )
+        );
+
+        ExtensionCompatibilityReport report = gestor.validarCompatibilidadExtension(server, modJar);
+
+        assertThat(report.status()).isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
+        assertThat(report.summary()).contains("1.17.1");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> gestor.instalarExtensionManual(server, modJar))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("1.17.1");
+    }
+
+    @Test
+    void instalarExtensionManual_debeRechazarCasoRealFallingTree117EnServidor121() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path forgeDir = tempDir.resolve("forge-falling-tree");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "server.jar",
+                "{\"id\":\"1.21.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+
+        Server server = new Server();
+        server.setServerDir(forgeDir.toString());
+        server.setPlatform(ServerPlatform.FORGE);
+        server.setVersion("1.21.1");
+        gestor.guardarServidor(server);
+
+        Path modJar = tempDir.resolve("FallingTree-1.17.1-2.14.6.jar");
+        TestWorldFixtures.createJar(
+                modJar,
+                Map.of(
+                        "META-INF/mods.toml",
+                        """
+                        modLoader = "javafml"
+                        loaderVersion = "[37,)"
+                        authors = "RakSrinaNa"
+                        license = "GPL-3.0"
+
+                        [[mods]]
+                        modId = "fallingtree"
+                        version = "2.14.6"
+                        displayName = "FallingTree"
+                        description = '''Change the way you cut trees.'''
+
+                        [[dependencies.fallingtree]]
+                        modId = "forge"
+                        mandatory = true
+                        versionRange = "[37.0.0,)"
+                        ordering = "NONE"
+                        side = "BOTH"
+                        [[dependencies.fallingtree]]
+                        modId = "minecraft"
+                        mandatory = true
+                        versionRange = "[1.17.1]"
+                        ordering = "NONE"
+                        side = "BOTH"
+                        """,
+                        "fabric.mod.json",
+                        """
+                        {
+                          "schemaVersion": 1,
+                          "id": "fallingtree",
+                          "version": "2.14.6",
+                          "name": "FallingTree",
+                          "description": "Change the way you cut trees."
+                        }
+                        """
+                )
+        );
+
+        ExtensionCompatibilityReport report = gestor.validarCompatibilidadExtension(server, modJar);
+
+        assertThat(report.status()).isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
+        assertThat(report.summary()).contains("1.17.1");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> gestor.instalarExtensionManual(server, modJar))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("1.17.1");
     }
 
     @Test
