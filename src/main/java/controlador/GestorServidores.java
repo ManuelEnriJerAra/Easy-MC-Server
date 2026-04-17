@@ -10,6 +10,7 @@
 
 package controlador;
 
+import controlador.extensions.ServerExtensionsService;
 import modelo.Server;
 import modelo.ServerConfig;
 import controlador.platform.ServerInstallationRequest;
@@ -21,6 +22,7 @@ import controlador.platform.ServerValidationResult;
 import com.formdev.flatlaf.extras.components.FlatProgressBar;
 import lombok.Getter;
 import lombok.Setter;
+import modelo.extensions.ServerExtension;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -110,6 +112,7 @@ public class GestorServidores {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final File jsonFile;
+    private final ServerExtensionsService serverExtensionsService = new ServerExtensionsService();
 
     private String avisoServidoresNoCargados;
 
@@ -133,7 +136,8 @@ public class GestorServidores {
         boolean cambiosOrden = normalizarMetadatosOrden(true);
         validarYLimpiarServidoresPersistidos();
         boolean cambiosMundos = sincronizarMundosServidoresCargados();
-        if (cambiosOrden || cambiosMundos) {
+        boolean cambiosExtensiones = sincronizarExtensionesServidoresCargados();
+        if (cambiosOrden || cambiosMundos || cambiosExtensiones) {
             guardarServidores();
         }
     }
@@ -149,6 +153,22 @@ public class GestorServidores {
                     cambios = true;
                 }
             } catch (RuntimeException ignored) {
+            }
+        }
+        return cambios;
+    }
+
+    private boolean sincronizarExtensionesServidoresCargados() {
+        if (listaServidores == null || listaServidores.isEmpty()) return false;
+
+        boolean cambios = false;
+        for (Server server : listaServidores) {
+            if (server == null) continue;
+            try {
+                if (sincronizarExtensionesServidor(server)) {
+                    cambios = true;
+                }
+            } catch (IOException | RuntimeException ignored) {
             }
         }
         return cambios;
@@ -322,6 +342,19 @@ public class GestorServidores {
         return cambios;
     }
 
+    private boolean sincronizarExtensionesServidor(Server server) throws IOException {
+        if (server == null) {
+            return false;
+        }
+        List<ServerExtension> actuales = server.getExtensions() == null ? List.of() : List.copyOf(server.getExtensions());
+        List<ServerExtension> detectadas = serverExtensionsService.detectInstalledExtensions(server);
+        if (actuales.equals(detectadas)) {
+            return false;
+        }
+        server.setExtensions(new ArrayList<>(detectadas));
+        return true;
+    }
+
     private void copiarMetadatosOrdenSiFaltan(Server origen, Server destino) {
         if (origen == null || destino == null) return;
         if (destino.getOrdenLista() == null) {
@@ -412,6 +445,39 @@ public class GestorServidores {
         }
 
         return profile != null && profile.platform() == modelo.extensions.ServerPlatform.VANILLA;
+    }
+
+    public boolean admiteGestionDeExtensiones(Server server) {
+        return serverExtensionsService.supportsManagedExtensions(server);
+    }
+
+    public List<Path> obtenerDirectoriosExtensiones(Server server) {
+        return serverExtensionsService.getManagedExtensionDirectories(server);
+    }
+
+    public List<ServerExtension> detectarExtensionesInstaladas(Server server) throws IOException {
+        if (server == null) {
+            return List.of();
+        }
+        return serverExtensionsService.detectInstalledExtensions(server);
+    }
+
+    public List<ServerExtension> sincronizarExtensionesInstaladas(Server server) throws IOException {
+        if (server == null) {
+            return List.of();
+        }
+        sincronizarExtensionesServidor(server);
+        guardarServidor(server);
+        return server.getExtensions() == null ? List.of() : List.copyOf(server.getExtensions());
+    }
+
+    public ServerExtension instalarExtensionManual(Server server, Path extensionJar) throws IOException {
+        if (server == null) {
+            throw new IOException("No se ha indicado el servidor.");
+        }
+        ServerExtension installed = serverExtensionsService.installManualJar(server, extensionJar);
+        guardarServidor(server);
+        return installed;
     }
 
     private void aplicarPerfilPlataforma(Server server, ServerPlatformProfile profile) {
@@ -906,6 +972,10 @@ public class GestorServidores {
             server.setPlatform(option.platform());
         }
         server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), false));
+        try {
+            sincronizarExtensionesServidor(server);
+        } catch (IOException ignored) {
+        }
         guardarServidor(server);
         GestorMundos.sincronizarMundosServidor(server);
         return server;
@@ -957,6 +1027,7 @@ public class GestorServidores {
                 server.setLoaderVersion(option.platformVersion());
             }
 
+            sincronizarExtensionesServidor(server);
             guardarServidor(server);
             return server;
         } catch (IOException e) {
@@ -1146,6 +1217,11 @@ public class GestorServidores {
 
         guardarServidor(server);
         GestorMundos.sincronizarMundosServidor(server);
+        try {
+            sincronizarExtensionesServidor(server);
+            guardarServidor(server);
+        } catch (IOException ignored) {
+        }
         return server;
     }
 

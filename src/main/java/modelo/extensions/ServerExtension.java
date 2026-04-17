@@ -15,12 +15,16 @@ public class ServerExtension {
     private String version;
     private String description;
     private String fileName;
+    private ServerExtensionType extensionType;
+    private ServerPlatform platform;
     private ExtensionSource source;
     private ExtensionInstallState installState;
     private ExtensionLocalMetadata localMetadata;
 
     public ServerExtension() {
         this.id = UUID.randomUUID().toString();
+        this.extensionType = ServerExtensionType.UNKNOWN;
+        this.platform = ServerPlatform.UNKNOWN;
         this.source = new ExtensionSource();
         this.installState = ExtensionInstallState.UNKNOWN;
         this.localMetadata = new ExtensionLocalMetadata();

@@ -1,8 +1,12 @@
 package controlador;
 
 import modelo.Server;
+import modelo.extensions.ExtensionInstallState;
+import modelo.extensions.ExtensionSourceType;
 import modelo.extensions.ServerCapability;
 import modelo.extensions.ServerEcosystemType;
+import modelo.extensions.ServerExtension;
+import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
 import controlador.platform.ServerCreationOption;
@@ -23,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -186,6 +191,112 @@ class GestorServidoresTest {
         assertThat(imported.getLoader()).isEqualTo(ServerLoader.PAPER);
         assertThat(imported.getEcosystemType()).isEqualTo(ServerEcosystemType.PLUGINS);
         assertThat(imported.getCapabilities()).contains(ServerCapability.PLUGIN_EXTENSIONS);
+    }
+
+    @Test
+    void instalarExtensionManual_debeCopiarJarAModsYRegistrarMetadataLocal() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path forgeDir = tempDir.resolve("forge-with-mods");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "server.jar",
+                "{\"id\":\"1.20.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+
+        Server server = new Server();
+        server.setDisplayName("Forge Server");
+        server.setServerDir(forgeDir.toString());
+        server.setPlatform(ServerPlatform.FORGE);
+        gestor.guardarServidor(server);
+
+        Path sourceJar = tempDir.resolve("example-mod.jar");
+        TestWorldFixtures.createJar(
+                sourceJar,
+                Map.of(
+                        "META-INF/mods.toml",
+                        """
+                        modLoader="javafml"
+                        loaderVersion="[47,)"
+                        license="MIT"
+                        [[mods]]
+                        modId="examplemod"
+                        version="1.0.0"
+                        displayName="Example Mod"
+                        authors="Easy MC"
+                        description="Forge test mod"
+                        """,
+                        "META-INF/MANIFEST.MF",
+                        """
+                        Manifest-Version: 1.0
+                        """
+                )
+        );
+
+        ServerExtension installed = gestor.instalarExtensionManual(server, sourceJar);
+
+        assertThat(Files.exists(forgeDir.resolve("mods").resolve("example-mod.jar"))).isTrue();
+        assertThat(installed.getDisplayName()).isEqualTo("Example Mod");
+        assertThat(installed.getExtensionType()).isEqualTo(ServerExtensionType.MOD);
+        assertThat(installed.getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(installed.getInstallState()).isEqualTo(ExtensionInstallState.INSTALLED);
+        assertThat(installed.getSource().getType()).isEqualTo(ExtensionSourceType.MANUAL);
+        assertThat(installed.getLocalMetadata().getRelativePath()).isEqualTo("mods/example-mod.jar");
+        assertThat(server.getExtensions()).hasSize(1);
+        assertThat(server.getExtensions().getFirst().getLocalMetadata().getSha256()).isNotBlank();
+    }
+
+    @Test
+    void sincronizarExtensionesInstaladas_debeDetectarPluginsLocalesYPersistirMetadata() throws Exception {
+        Path jsonPath = tempDir.resolve("ServerList.json");
+        Path paperDir = tempDir.resolve("paper-with-plugins");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "server.jar",
+                "{\"id\":\"1.21.1\"}",
+                "io/papermc/paper/PaperBootstrap.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Files.createDirectories(paperDir.resolve("plugins"));
+        TestWorldFixtures.createJar(
+                paperDir.resolve("plugins").resolve("welcome-plugin.jar"),
+                Map.of(
+                        "plugin.yml",
+                        """
+                        name: WelcomePlugin
+                        version: 2.5.1
+                        author: Easy MC
+                        description: Sends welcome messages
+                        """
+                )
+        );
+
+        Server server = new Server();
+        server.setDisplayName("Paper");
+        server.setServerDir(paperDir.toString());
+        server.setPlatform(ServerPlatform.PAPER);
+
+        new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(jsonPath.toFile(), List.of(server));
+
+        GestorServidores gestor = new GestorServidores(jsonPath.toFile());
+        Server loaded = gestor.getListaServidores().getFirst();
+
+        assertThat(loaded.getExtensions()).hasSize(1);
+        ServerExtension detected = loaded.getExtensions().getFirst();
+        assertThat(detected.getDisplayName()).isEqualTo("WelcomePlugin");
+        assertThat(detected.getVersion()).isEqualTo("2.5.1");
+        assertThat(detected.getExtensionType()).isEqualTo(ServerExtensionType.PLUGIN);
+        assertThat(detected.getPlatform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(detected.getInstallState()).isEqualTo(ExtensionInstallState.DISCOVERED);
+        assertThat(detected.getSource().getType()).isEqualTo(ExtensionSourceType.LOCAL_FILE);
+        assertThat(detected.getLocalMetadata().getRelativePath()).isEqualTo("plugins/welcome-plugin.jar");
+
+        List<Server> reloaded = new ObjectMapper().readValue(jsonPath.toFile(),
+                new tools.jackson.core.type.TypeReference<>() {});
+        assertThat(reloaded.getFirst().getExtensions()).hasSize(1);
+        assertThat(reloaded.getFirst().getExtensions().getFirst().getPlatform()).isEqualTo(ServerPlatform.PAPER);
     }
 
     @Test

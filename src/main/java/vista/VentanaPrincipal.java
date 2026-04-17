@@ -76,7 +76,7 @@ public class VentanaPrincipal extends JFrame {
     private JSplitPane splitHome;
     private PanelConfigServidor panelConfigServidor;
 
-    enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, INFO }
+    enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, EXTENSIONES, INFO }
     private record TemaInfo(String name, String className){}
 
     private PaginaDerecha paginaDerechaActual = PaginaDerecha.HOME;
@@ -435,6 +435,7 @@ public class VentanaPrincipal extends JFrame {
         panelDerechoCards.add(content.homePanel(), PaginaDerecha.HOME.name());
         panelDerechoCards.add(content.mundoPanel(), PaginaDerecha.MUNDO.name());
         panelDerechoCards.add(content.configPanel(), PaginaDerecha.CONFIG.name());
+        panelDerechoCards.add(content.extensionesPanel(), PaginaDerecha.EXTENSIONES.name());
         panelDerechoCards.add(content.statsPanel(), PaginaDerecha.STATS.name());
         panelDerechoCards.add(content.infoPanel(), PaginaDerecha.INFO.name());
 
