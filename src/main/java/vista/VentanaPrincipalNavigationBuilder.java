@@ -39,6 +39,7 @@ final class VentanaPrincipalNavigationBuilder {
         JButton mundo = crearNavButton("easymcicons/earth.svg", "Mundos", VentanaPrincipal.PaginaDerecha.MUNDO, pageNavigator, navButtons);
         JButton config = crearNavButton("easymcicons/settings.svg", "Configuración del servidor", VentanaPrincipal.PaginaDerecha.CONFIG, pageNavigator, navButtons);
         JButton stats = crearNavButton("easymcicons/chart.svg", "Estadísticas", VentanaPrincipal.PaginaDerecha.STATS, pageNavigator, navButtons);
+        JButton extensiones = crearNavButton("easymcicons/box.svg", "Extensiones", VentanaPrincipal.PaginaDerecha.EXTENSIONES, pageNavigator, navButtons);
         JButton temas = crearActionButton("easymcicons/pallete-unselected.svg", "Temas", openThemeSelector);
         JButton info = crearNavButton("easymcicons/info.svg", "Información", VentanaPrincipal.PaginaDerecha.INFO, pageNavigator, navButtons);
 
@@ -49,6 +50,8 @@ final class VentanaPrincipalNavigationBuilder {
         botones.add(config);
         botones.add(Box.createVerticalStrut(8));
         botones.add(stats);
+        botones.add(Box.createVerticalStrut(8));
+        botones.add(extensiones);
         botones.add(Box.createVerticalGlue());
         botones.add(temas);
         botones.add(Box.createVerticalStrut(6));
@@ -74,6 +77,7 @@ final class VentanaPrincipalNavigationBuilder {
         mundo.addMouseListener(navHover);
         config.addMouseListener(navHover);
         stats.addMouseListener(navHover);
+        extensiones.addMouseListener(navHover);
         info.addMouseListener(navHover);
 
         temas.addMouseListener(new MouseAdapter() {

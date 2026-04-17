@@ -12,6 +12,7 @@ final class VentanaPrincipalRightContentBuilder {
             JPanel homePanel,
             JPanel mundoPanel,
             JPanel configPanel,
+            JPanel extensionesPanel,
             JPanel statsPanel,
             JPanel infoPanel,
             JSplitPane splitHome,
@@ -65,6 +66,7 @@ final class VentanaPrincipalRightContentBuilder {
 
         PanelConfigServidor panelConfigServidor = new PanelConfigServidor(gestorServidores);
         JPanel mundo = new PanelMundo(gestorServidores, panelConfigServidor::reload);
+        JPanel extensiones = new PanelExtensiones(gestorServidores, server);
         JPanel stats = new PanelEstadisticas(gestorServidores, server);
         JPanel info = new JPanel(new BorderLayout());
         info.setOpaque(false);
@@ -73,6 +75,7 @@ final class VentanaPrincipalRightContentBuilder {
                 home,
                 mundo,
                 panelConfigServidor,
+                extensiones,
                 stats,
                 info,
                 splitHome,

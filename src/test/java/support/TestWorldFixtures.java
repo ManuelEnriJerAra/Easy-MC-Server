@@ -14,6 +14,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Properties;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -80,6 +81,35 @@ public final class TestWorldFixtures {
             }
         }
         return jarPath;
+    }
+
+    public static Path createJar(Path targetJar, Map<String, String> textEntries, String... emptyEntries) throws IOException {
+        if (targetJar.getParent() != null) {
+            Files.createDirectories(targetJar.getParent());
+        }
+        try (JarOutputStream jarOut = new JarOutputStream(Files.newOutputStream(targetJar))) {
+            if (textEntries != null) {
+                for (Map.Entry<String, String> entry : textEntries.entrySet()) {
+                    if (entry == null || entry.getKey() == null || entry.getKey().isBlank()) {
+                        continue;
+                    }
+                    jarOut.putNextEntry(new JarEntry(entry.getKey()));
+                    jarOut.write((entry.getValue() == null ? "" : entry.getValue()).getBytes(StandardCharsets.UTF_8));
+                    jarOut.closeEntry();
+                }
+            }
+            if (emptyEntries != null) {
+                for (String entryName : emptyEntries) {
+                    if (entryName == null || entryName.isBlank()) {
+                        continue;
+                    }
+                    jarOut.putNextEntry(new JarEntry(entryName));
+                    jarOut.write(new byte[0]);
+                    jarOut.closeEntry();
+                }
+            }
+        }
+        return targetJar;
     }
 
     public static Path createSimpleRegion(Path regionDir, int regionX, int regionZ, int blockY, String blockName) throws IOException {

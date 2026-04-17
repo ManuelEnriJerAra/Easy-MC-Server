@@ -35,6 +35,7 @@ import lombok.Getter;
 import modelo.extensions.ServerCapability;
 import modelo.extensions.ServerEcosystemType;
 import modelo.extensions.ServerExtension;
+import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
 
@@ -265,6 +266,14 @@ public class Server {
             }
             if (extension.getSource() == null) {
                 extension.setSource(new modelo.extensions.ExtensionSource());
+                cambios = true;
+            }
+            if (extension.getExtensionType() == null) {
+                extension.setExtensionType(ServerExtensionType.UNKNOWN);
+                cambios = true;
+            }
+            if (extension.getPlatform() == null) {
+                extension.setPlatform(ServerPlatform.UNKNOWN);
                 cambios = true;
             }
             if (extension.getInstallState() == null) {
