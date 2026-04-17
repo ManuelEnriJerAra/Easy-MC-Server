@@ -124,16 +124,10 @@ public class PanelJugadores extends JPanel {
         barraInferior.setBackground(AppTheme.getPanelBackground());
         barraInferior.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
 
-        JButton btnRecargar = new FlatButton();
-        btnRecargar.setText("Recargar");
-        estilizarBotonBarra(btnRecargar);
-        btnRecargar.addActionListener(e -> recargarContadores());
-
         barraInferior.add(btnWhitelist);
         barraInferior.add(btnOps);
         barraInferior.add(btnBaneados);
         barraInferior.add(btnBaneadosIp);
-        barraInferior.add(btnRecargar);
 
         this.add(barraInferior, BorderLayout.SOUTH);
 
@@ -174,6 +168,15 @@ public class PanelJugadores extends JPanel {
                 gestorServidores.removePropertyChangeListener("estadoServidor", listenerEstadoServidor);
             }
         });
+    }
+
+    public void refrescarPanel() {
+        recargarContadores();
+        if (server != null) {
+            recomputarDesdeLogs(server.getRawLogLines());
+        } else {
+            setJugadores(Set.of());
+        }
     }
 
     @Override

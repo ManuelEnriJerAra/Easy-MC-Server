@@ -9,6 +9,7 @@ public class CardPanel extends JPanel {
     private float borderThickness;
     private final RoundedBackgroundPanel cardSurface;
     private final JLabel titleLabel;
+    private final JPanel headerActionsPanel;
     private final JPanel actionsPanel;
     private final JPanel contentPanel;
     private final JPanel headerPanel;
@@ -61,6 +62,29 @@ public class CardPanel extends JPanel {
         titleLabel = new JLabel();
         AppTheme.applyCardTitleStyle(titleLabel);
         headerPanel.add(titleLabel, BorderLayout.WEST);
+
+        headerActionsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)) {
+            @Override
+            public Component add(Component comp) {
+                Component added = super.add(comp);
+                updateHeaderVisibility();
+                return added;
+            }
+
+            @Override
+            public void remove(Component comp) {
+                super.remove(comp);
+                updateHeaderVisibility();
+            }
+
+            @Override
+            public void removeAll() {
+                super.removeAll();
+                updateHeaderVisibility();
+            }
+        };
+        headerActionsPanel.setOpaque(false);
+        headerPanel.add(headerActionsPanel, BorderLayout.EAST);
         cardSurface.add(headerPanel, BorderLayout.NORTH);
 
         contentPanel = new JPanel(layout != null ? layout : new BorderLayout());
@@ -99,6 +123,7 @@ public class CardPanel extends JPanel {
         cardSurface.add(footerPanel, BorderLayout.SOUTH);
 
         setTitle(title);
+        updateHeaderVisibility();
         updateFooterVisibility();
         refreshCardStyle();
     }
@@ -106,9 +131,7 @@ public class CardPanel extends JPanel {
     public void setTitle(String title) {
         String resolved = title == null ? "" : title;
         titleLabel.setText(resolved);
-        boolean visible = !resolved.isBlank();
-        headerPanel.setVisible(visible);
-        contentWrap.setBorder(BorderFactory.createEmptyBorder(visible ? 6 : 0, 0, 0, 0));
+        updateHeaderVisibility();
     }
 
     public JLabel getTitleLabel() {
@@ -117,6 +140,10 @@ public class CardPanel extends JPanel {
 
     public JPanel getActionsPanel() {
         return actionsPanel;
+    }
+
+    public JPanel getHeaderActionsPanel() {
+        return headerActionsPanel;
     }
 
     public JPanel getContentPanel() {
@@ -183,6 +210,15 @@ public class CardPanel extends JPanel {
         float resolvedThickness = borderThickness > 0f ? borderThickness : 1f;
         cardSurface.setBorder(AppTheme.createRoundedBorder(resolvedInsets, resolvedBorder, resolvedThickness));
         footerPanel.setBorder(BorderFactory.createEmptyBorder(actionsPanel.getComponentCount() > 0 ? 8 : 0, 0, 0, 0));
+    }
+
+    private void updateHeaderVisibility() {
+        boolean visible = (titleLabel != null && titleLabel.getText() != null && !titleLabel.getText().isBlank())
+                || (headerActionsPanel != null && headerActionsPanel.getComponentCount() > 0);
+        headerPanel.setVisible(visible);
+        contentWrap.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        headerPanel.revalidate();
+        headerPanel.repaint();
     }
 
     private void updateFooterVisibility() {

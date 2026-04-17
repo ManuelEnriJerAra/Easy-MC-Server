@@ -188,7 +188,7 @@ public class PanelMundo extends JPanel {
         INSTANCIAS_ACTIVAS.add(this);
 
 
-        refrescarButton.setText("Refrescar");
+        refrescarButton.setToolTipText("Refrescar");
         usarEsteMundoButton.setText("Usar este mundo");
         importarButton.setText("Importar mundo");
         exportarButton.setText("Exportar mundo");
@@ -196,7 +196,7 @@ public class PanelMundo extends JPanel {
         generarPreviewButton.setText("Generar preview");
         guardarConfiguracionMundoButton.setText("Guardar ajustes del mundo");
         previewMenuButton.setText("\u2630");
-        styleActionButton(refrescarButton);
+        AppTheme.applyRefreshIconButtonStyle(refrescarButton);
         styleActionButton(importarButton);
         styleActionButton(exportarButton);
         styleActionButton(generarButton);
@@ -306,7 +306,14 @@ public class PanelMundo extends JPanel {
         JPanel izquierdaWrap = new JPanel(new BorderLayout());
         izquierdaWrap.setOpaque(false);
 
-        JLabel titulo = crearTituloTarjeta("Mundo");
+        JLabel titulo = new JLabel("Mundo");
+        AppTheme.applyCardTitleStyle(titulo);
+
+        JPanel cabeceraIzquierda = new JPanel(new BorderLayout(8, 0));
+        cabeceraIzquierda.setOpaque(false);
+        cabeceraIzquierda.setAlignmentX(Component.LEFT_ALIGNMENT);
+        cabeceraIzquierda.add(titulo, BorderLayout.WEST);
+        cabeceraIzquierda.add(refrescarButton, BorderLayout.EAST);
 
         JPanel selectorPanel = new JPanel(new BorderLayout(8, 0));
         selectorPanel.setOpaque(false);
@@ -342,7 +349,6 @@ public class PanelMundo extends JPanel {
         JPanel accionesPanel = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 2));
         accionesPanel.setOpaque(false);
         accionesPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        accionesPanel.add(refrescarButton);
         accionesPanel.add(generarButton);
         accionesPanel.add(importarButton);
         accionesPanel.add(exportarButton);
@@ -350,7 +356,7 @@ public class PanelMundo extends JPanel {
         JPanel contenidoIzquierdo = new JPanel();
         contenidoIzquierdo.setOpaque(false);
         contenidoIzquierdo.setLayout(new BoxLayout(contenidoIzquierdo, BoxLayout.Y_AXIS));
-        contenidoIzquierdo.add(titulo);
+        contenidoIzquierdo.add(cabeceraIzquierda);
         contenidoIzquierdo.add(Box.createVerticalStrut(6));
         contenidoIzquierdo.add(selectorPanel);
         contenidoIzquierdo.add(Box.createVerticalStrut(6));
@@ -397,11 +403,6 @@ public class PanelMundo extends JPanel {
         return BoxCategory.createInfoRow(titulo, valorLabel);
     }
 
-    private JLabel crearTituloTarjeta(String texto) {
-        JLabel titulo = new JLabel(texto);
-        AppTheme.applyCardTitleStyle(titulo);
-        return titulo;
-    }
 
     private JPanel crearFilaInferior() {
         JPanel panel = new JPanel(new GridBagLayout());

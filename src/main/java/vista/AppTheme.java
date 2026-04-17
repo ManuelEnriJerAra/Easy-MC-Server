@@ -5,11 +5,15 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.SwingConstants;
+import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.border.Border;
 
@@ -18,6 +22,12 @@ import com.formdev.flatlaf.ui.FlatLineBorder;
 import controlador.Main;
 
 public final class AppTheme {
+    private static final int REFRESH_ROTATION_TIMER_MS = 16;
+    private static final double REFRESH_ROTATION_STEP_RADIANS = -Math.toRadians(6);
+    private static final String PROP_REFRESH_TIMER = "easy-mc-server.refreshTimer";
+    private static final String PROP_REFRESH_ICON = "easy-mc-server.refreshIcon";
+    private static final String PROP_REFRESH_HOVER = "easy-mc-server.refreshHover";
+    private static final String PROP_REFRESH_INSTALLED = "easy-mc-server.refreshInstalled";
     private static final Color FALLBACK_BACKGROUND = Color.LIGHT_GRAY;
     private static final Color FALLBACK_ACCENT = new Color(0, 120, 215);
     private static final Color FALLBACK_BORDER = new Color(0, 0, 0, 60);
@@ -199,6 +209,85 @@ public final class AppTheme {
         button.setForeground(getForeground());
     }
 
+    public static void applyHeaderIconButtonStyle(AbstractButton button) {
+        if (button == null) return;
+        button.setText(null);
+        button.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
+        button.setBorderPainted(false);
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setOpaque(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setHorizontalAlignment(SwingConstants.CENTER);
+        button.setVerticalAlignment(SwingConstants.CENTER);
+        button.setIconTextGap(0);
+    }
+
+    public static void applyRefreshIconButtonStyle(AbstractButton button) {
+        if (button == null) return;
+        applyHeaderIconButtonStyle(button);
+
+        SvgIconFactory.RotatingIcon rotatingIcon = SvgIconFactory.createRotating(
+                "easymcicons/refresh.svg",
+                18,
+                18,
+                AppTheme::getForeground
+        );
+        button.putClientProperty(PROP_REFRESH_ICON, rotatingIcon);
+        button.setIcon(rotatingIcon);
+
+        Timer existingTimer = (Timer) button.getClientProperty(PROP_REFRESH_TIMER);
+        if (existingTimer != null) {
+            existingTimer.stop();
+        }
+
+        Timer timer = new Timer(REFRESH_ROTATION_TIMER_MS, e -> {
+            SvgIconFactory.RotatingIcon icon = (SvgIconFactory.RotatingIcon) button.getClientProperty(PROP_REFRESH_ICON);
+            if (icon == null) {
+                ((Timer) e.getSource()).stop();
+                return;
+            }
+
+            boolean hovered = Boolean.TRUE.equals(button.getClientProperty(PROP_REFRESH_HOVER));
+            if (!hovered) {
+                icon.setAngleRadians(0d);
+                storeIconAngle(button, 0d);
+                button.repaint();
+                ((Timer) e.getSource()).stop();
+                return;
+            }
+
+            double currentAngle = iconAngle(button) + REFRESH_ROTATION_STEP_RADIANS;
+            icon.setAngleRadians(currentAngle);
+            storeIconAngle(button, currentAngle);
+            button.repaint();
+        });
+        button.putClientProperty(PROP_REFRESH_TIMER, timer);
+
+        if (!Boolean.TRUE.equals(button.getClientProperty(PROP_REFRESH_INSTALLED))) {
+            button.putClientProperty(PROP_REFRESH_INSTALLED, Boolean.TRUE);
+            button.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    button.putClientProperty(PROP_REFRESH_HOVER, Boolean.TRUE);
+                    Timer hoverTimer = (Timer) button.getClientProperty(PROP_REFRESH_TIMER);
+                    if (hoverTimer != null && !hoverTimer.isRunning()) {
+                        hoverTimer.start();
+                    }
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    button.putClientProperty(PROP_REFRESH_HOVER, Boolean.FALSE);
+                    Timer hoverTimer = (Timer) button.getClientProperty(PROP_REFRESH_TIMER);
+                    if (hoverTimer != null && !hoverTimer.isRunning()) {
+                        hoverTimer.start();
+                    }
+                }
+            });
+        }
+    }
+
     public static void applyAccentButtonStyle(AbstractButton button) {
         if (button == null) return;
         applyActionButtonStyle(button);
@@ -277,5 +366,14 @@ public final class AppTheme {
 
     public static FlatLineBorder createAccentBorder(Insets insets, float thickness) {
         return createRoundedBorder(insets, getMainAccent(), thickness);
+    }
+
+    private static double iconAngle(AbstractButton button) {
+        Object value = button.getClientProperty("easy-mc-server.refreshAngle");
+        return value instanceof Number number ? number.doubleValue() : 0d;
+    }
+
+    private static void storeIconAngle(AbstractButton button, double angle) {
+        button.putClientProperty("easy-mc-server.refreshAngle", angle);
     }
 }

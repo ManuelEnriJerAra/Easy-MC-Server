@@ -4,6 +4,7 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import java.util.function.Supplier;
 
 public final class SvgIconFactory {
@@ -32,6 +33,10 @@ public final class SvgIconFactory {
         return icon;
     }
 
+    public static RotatingIcon createRotating(String resourcePath, int width, int height, Supplier<Color> colorSupplier) {
+        return new RotatingIcon(create(resourcePath, width, height, colorSupplier));
+    }
+
     public static void apply(AbstractButton button, String resourcePath, int width, int height, Supplier<Color> colorSupplier) {
         if (button == null) {
             return;
@@ -56,6 +61,46 @@ public final class SvgIconFactory {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, opacity));
             delegate.paintIcon(c, g2, x, y);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return delegate != null ? delegate.getIconWidth() : 0;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return delegate != null ? delegate.getIconHeight() : 0;
+        }
+    }
+
+    public static final class RotatingIcon implements Icon {
+        private final Icon delegate;
+        private double angleRadians;
+
+        private RotatingIcon(Icon delegate) {
+            this.delegate = delegate;
+        }
+
+        public void setAngleRadians(double angleRadians) {
+            this.angleRadians = angleRadians;
+        }
+
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            if (delegate == null) {
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            int width = getIconWidth();
+            int height = getIconHeight();
+            double centerX = x + (width / 2.0d);
+            double centerY = y + (height / 2.0d);
+            AffineTransform oldTransform = g2.getTransform();
+            g2.rotate(angleRadians, centerX, centerY);
+            delegate.paintIcon(c, g2, x, y);
+            g2.setTransform(oldTransform);
             g2.dispose();
         }
 

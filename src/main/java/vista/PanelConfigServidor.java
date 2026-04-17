@@ -94,11 +94,12 @@ public class PanelConfigServidor extends JPanel {
 
         JButton recargar = new FlatButton();
         recargar.setText(tr("panel.config.reload", "Recargar"));
-        styleActionButton(recargar);
+        AppTheme.applyRefreshIconButtonStyle(recargar);
+        recargar.setToolTipText(tr("panel.config.reload", "Recargar"));
         saveButton = new FlatButton();
         saveButton.setText(tr("panel.config.save", "Guardar"));
         applyDefaultSaveButtonStyle();
-        section.getActionsPanel().add(recargar);
+        section.getHeaderActionsPanel().add(recargar);
         section.getActionsPanel().add(saveButton);
 
         formPanel = new JPanel();
@@ -392,6 +393,7 @@ public class PanelConfigServidor extends JPanel {
         if(button == null) return;
         AppTheme.applyActionButtonStyle(button);
     }
+
 
     private void attachDirtyTracking(JCheckBox checkBox){
         checkBox.addActionListener(e -> updateSaveButtonState());

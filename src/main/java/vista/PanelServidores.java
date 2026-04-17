@@ -145,6 +145,10 @@ public class PanelServidores extends FlatScrollPane {
         }
     }
 
+    public void refrescarListado() {
+        SwingUtilities.invokeLater(() -> recargarPanel(gestorServidores.getListaServidores(), gestorServidores));
+    }
+
     GestorServidores gestorServidores;
 
     // Constructor de PanelServidores

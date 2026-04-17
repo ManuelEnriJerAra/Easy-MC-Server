@@ -68,6 +68,7 @@ public class VentanaPrincipal extends JFrame {
     private JButton borrarServerButton;
     private JButton nuevoServerButton;
     private JButton importarServerButton;
+    private JButton refrescarListaServidoresButton;
     private JPanel botonesServidoresPanel;
     private final PanelServidores listaServidoresPanel;
     private boolean cambiandoANoServerDialog = false;
@@ -116,6 +117,11 @@ public class VentanaPrincipal extends JFrame {
         servidoresCard.setBorder(BorderFactory.createEmptyBorder());
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
+        refrescarListaServidoresButton = new FlatButton();
+        refrescarListaServidoresButton.setToolTipText("Refrescar");
+        AppTheme.applyRefreshIconButtonStyle(refrescarListaServidoresButton);
+        servidoresCard.getHeaderActionsPanel().add(refrescarListaServidoresButton);
+
         servidoresPanel = new JPanel(new BorderLayout());
         servidoresPanel.setOpaque(true); // rellena el fondo bajo el listado para evitar "ghosting"
         servidoresPanel.setBackground(panelBg);
@@ -124,6 +130,7 @@ public class VentanaPrincipal extends JFrame {
         // PANEL DE LISTADO DE SERVIDORES
         listaServidoresPanel = getPanelServidores(gestorServidores);
         servidoresPanel.add(listaServidoresPanel, BorderLayout.CENTER);
+        refrescarListaServidoresButton.addActionListener(e -> listaServidoresPanel.refrescarListado());
 
         // PANEL DE BOTONES DE SERVIDORES
         botonesServidoresPanel = new JPanel(new GridLayout(1,4));
@@ -827,6 +834,10 @@ public class VentanaPrincipal extends JFrame {
         }
         if (botonesServidoresPanel != null) {
             botonesServidoresPanel.setBackground(panelBg);
+        }
+        if (refrescarListaServidoresButton != null) {
+            refrescarListaServidoresButton.setBackground(panelBg);
+            refrescarListaServidoresButton.repaint();
         }
         if (nuevoServerButton != null) nuevoServerButton.setBackground(bgApp);
         if (importarServerButton != null) importarServerButton.setBackground(bgApp);
