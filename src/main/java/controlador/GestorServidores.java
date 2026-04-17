@@ -37,14 +37,16 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
-import java.util.jar.JarFile;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
@@ -59,6 +61,23 @@ import static java.lang.Math.min;
 @Setter
 
 public class GestorServidores {
+    private static final List<String> ARCHIVOS_CONFIG_PRESERVABLES = List.of(
+            "server.properties",
+            "eula.txt",
+            "server-icon.png",
+            "whitelist.json",
+            "whitelist.txt",
+            "ops.json",
+            "ops.txt",
+            "banned-ips.json",
+            "banned-ips.txt",
+            "banned-players.json",
+            "banned-players.txt",
+            "permissions.json",
+            "usercache.json"
+    );
+    private static final DateTimeFormatter BACKUP_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+
     // ===== ATRIBUTOS =====
     private static final MojangAPI MOJANG_API = new MojangAPI();
 
@@ -388,6 +407,30 @@ public class GestorServidores {
         return ServerPlatformAdapters.detect(serverDir);
     }
 
+    public boolean puedeConvertirseAPlataformaCompatible(Server server) {
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            return false;
+        }
+
+        Path serverDir;
+        try {
+            serverDir = Path.of(server.getServerDir());
+        } catch (RuntimeException ex) {
+            return false;
+        }
+
+        if (!Files.isDirectory(serverDir)) {
+            return false;
+        }
+
+        ServerPlatformProfile profile = inspeccionarServidor(serverDir);
+        if (profile != null) {
+            aplicarPerfilPlataforma(server, profile);
+        }
+
+        return profile != null && profile.platform() == modelo.extensions.ServerPlatform.VANILLA;
+    }
+
     private void aplicarPerfilPlataforma(Server server, ServerPlatformProfile profile) {
         if (server == null || profile == null) return;
         server.setPlatform(profile.platform());
@@ -585,6 +628,75 @@ public class GestorServidores {
         return crearServidorAutomatizado(adapter, selectedOption, targetFolder.toPath());
     }
 
+    public Server convertirServidorAPlataformaCompatible(Server server) {
+        if (server == null) return null;
+        if (server.getServerProcess() != null && server.getServerProcess().isAlive()) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "Deten el servidor antes de iniciar una conversion de plataforma.",
+                    "Convertir servidor",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return null;
+        }
+
+        ServerPlatformProfile sourceProfile = inspeccionarServidor(Path.of(server.getServerDir()));
+        if (sourceProfile == null || sourceProfile.platform() != modelo.extensions.ServerPlatform.VANILLA) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "En esta primera fase solo se admite la conversion de servidores Vanilla a Forge.",
+                    "Convertir servidor",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return null;
+        }
+
+        ServerPlatformAdapter forgeAdapter = ServerPlatformAdapters.forPlatform(modelo.extensions.ServerPlatform.FORGE);
+        List<ServerCreationOption> forgeOptions = cargarOpcionesConversionForge(server, forgeAdapter);
+        if (forgeOptions.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se ha encontrado una version de Forge compatible con Minecraft " + server.getVersion() + ".",
+                    "Convertir servidor",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return null;
+        }
+
+        ServerCreationOption selectedOption = seleccionarOpcionConversion(
+                "Selecciona una version de Forge",
+                forgeOptions
+        );
+        if (selectedOption == null) return null;
+
+        int confirm = JOptionPane.showConfirmDialog(
+                null,
+                """
+                Se va a convertir el servidor seleccionado de Vanilla a Forge.
+
+                Riesgos:
+                - Algunos mods pueden requerir pasos manuales despues.
+                - La instalacion puede anadir o reemplazar archivos de arranque.
+                - Aunque se intentara preservar configuracion y mundos, conviene revisar el resultado.
+
+                Easy-MC-Server creara un backup completo antes de continuar.
+                """,
+                "Convertir servidor",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        if (confirm != JOptionPane.OK_OPTION) {
+            return null;
+        }
+
+        return convertirServidorExistente(
+                server,
+                forgeAdapter,
+                selectedOption,
+                (url, destination) -> MOJANG_API.descargar(url, destination, null)
+        );
+    }
+
     // esta función descarga de una url a un destino dándole un nombre y mostrando una barra de carga
     private boolean descargarConBarra(String url, File destino, String titulo){
         final JDialog dialog = new JDialog((Frame) null, titulo, true);
@@ -711,7 +823,24 @@ public class GestorServidores {
         }
     }
 
+    private List<ServerCreationOption> cargarOpcionesConversionForge(Server server, ServerPlatformAdapter adapter) {
+        List<ServerCreationOption> options = cargarOpcionesCreacion(adapter);
+        if (server == null || server.getVersion() == null || server.getVersion().isBlank()) {
+            return options;
+        }
+        return options.stream()
+                .filter(option -> Objects.equals(option.minecraftVersion(), server.getVersion()))
+                .toList();
+    }
+
     private ServerCreationOption seleccionarOpcionCreacion(ServerPlatformAdapter adapter, List<ServerCreationOption> options) {
+        return seleccionarOpcionConversion(
+                "Selecciona una versión de " + adapter.getCreationDisplayName(),
+                options
+        );
+    }
+
+    private ServerCreationOption seleccionarOpcionConversion(String title, List<ServerCreationOption> options) {
         JComboBox<ServerCreationOption> versionBox = new JComboBox<>(options.toArray(ServerCreationOption[]::new));
         versionBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
             JLabel label = new JLabel(value == null ? "" : value.displayName());
@@ -729,7 +858,7 @@ public class GestorServidores {
         int option = JOptionPane.showConfirmDialog(
                 null,
                 versionBox,
-                "Selecciona una versión de " + adapter.getCreationDisplayName(),
+                title,
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE
         );
@@ -799,7 +928,139 @@ public class GestorServidores {
         return server;
     }
 
+    Server convertirServidorExistente(Server server,
+                                      ServerPlatformAdapter targetAdapter,
+                                      ServerCreationOption option,
+                                      controlador.platform.FileDownloader downloader) {
+        if (server == null || targetAdapter == null || option == null) return null;
+        if (server.getServerDir() == null || server.getServerDir().isBlank()) return null;
+        if (server.getServerProcess() != null && server.getServerProcess().isAlive()) return null;
+
+        Path serverDir = Path.of(server.getServerDir());
+        if (!Files.isDirectory(serverDir)) return null;
+
+        try {
+            Path backupDir = crearBackupConversion(serverDir, option.platform());
+            Properties preservedProperties = cargarPropertiesSilenciosamente(serverDir.resolve("server.properties"));
+
+            ejecutarTareaConDialogo(
+                    "Convirtiendo servidor",
+                    "Instalando " + option.displayName() + " sobre el servidor actual...",
+                    () -> {
+                        targetAdapter.install(new Server(), new ServerInstallationRequest(
+                                serverDir,
+                                option.minecraftVersion(),
+                                option.platformVersion(),
+                                true,
+                                resolverIconoPorDefecto(),
+                                MOJANG_API,
+                                downloader
+                        ));
+                        return null;
+                    }
+            );
+
+            restaurarDatosTrasConversion(backupDir, serverDir, preservedProperties);
+            GestorMundos.sincronizarMundosServidor(server);
+
+            ServerPlatformProfile targetProfile = inspeccionarServidor(serverDir);
+            if (targetProfile != null) {
+                aplicarPerfilPlataforma(server, targetProfile);
+            } else {
+                server.setPlatform(option.platform());
+                server.setVersion(option.minecraftVersion());
+            }
+            if (server.getLoaderVersion() == null || server.getLoaderVersion().isBlank()) {
+                server.setLoaderVersion(option.platformVersion());
+            }
+
+            guardarServidor(server);
+            return server;
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se ha podido convertir el servidor: " + e.getMessage(),
+                    "Convertir servidor",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return null;
+        }
+    }
+
+    private Path crearBackupConversion(Path serverDir, modelo.extensions.ServerPlatform targetPlatform) throws IOException {
+        Path parent = serverDir.getParent();
+        if (parent == null) {
+            parent = serverDir.toAbsolutePath().getParent();
+        }
+        if (parent == null) {
+            throw new IOException("No se ha podido resolver una carpeta para el backup.");
+        }
+
+        String platformName = targetPlatform == null ? "conversion" : targetPlatform.getLegacyTypeName().toLowerCase();
+        String backupName = serverDir.getFileName() + "_backup_before_" + platformName + "_" + BACKUP_TIMESTAMP_FORMAT.format(LocalDateTime.now());
+        Path backupDir = parent.resolve(backupName);
+        Utilidades.copiarDirectorio(serverDir, backupDir);
+        return backupDir;
+    }
+
+    private void restaurarDatosTrasConversion(Path backupDir, Path targetDir, Properties preservedProperties) throws IOException {
+        if (backupDir == null || targetDir == null) return;
+
+        for (String fileName : ARCHIVOS_CONFIG_PRESERVABLES) {
+            Path backupFile = backupDir.resolve(fileName);
+            Path targetFile = targetDir.resolve(fileName);
+            if (Files.isRegularFile(backupFile) && !Files.exists(targetFile)) {
+                Files.copy(backupFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+
+        if (preservedProperties != null && !preservedProperties.isEmpty()) {
+            Properties current = cargarPropertiesSilenciosamente(targetDir.resolve("server.properties"));
+            current.putAll(preservedProperties);
+            Utilidades.guardarPropertiesUtf8(targetDir.resolve("server.properties"), current, null);
+        }
+
+        try (Stream<Path> children = Files.list(backupDir)) {
+            for (Path backupChild : children.toList()) {
+                if (!Files.isDirectory(backupChild)) continue;
+                String name = backupChild.getFileName().toString();
+                if (!debePreservarseDirectorioEnConversion(backupChild, name)) continue;
+                Path targetChild = targetDir.resolve(name);
+                if (!Files.exists(targetChild)) {
+                    Utilidades.copiarDirectorio(backupChild, targetChild);
+                }
+            }
+        }
+    }
+
+    private boolean debePreservarseDirectorioEnConversion(Path backupChild, String name) {
+        if (name == null || name.isBlank()) return false;
+        if (GestorMundos.DIRECTORIO_MUNDOS.equals(name)) return true;
+        if (Files.isRegularFile(backupChild.resolve("level.dat"))) return true;
+        return name.endsWith("_nether") || name.endsWith("_the_end");
+    }
+
+    private Properties cargarPropertiesSilenciosamente(Path propertiesPath) {
+        try {
+            return Utilidades.cargarPropertiesUtf8(propertiesPath);
+        } catch (IOException e) {
+            return new Properties();
+        }
+    }
+
     private <T> T ejecutarTareaConDialogo(String titulo, String descripcion, Callable<T> task) throws IOException {
+        if (GraphicsEnvironment.isHeadless()) {
+            try {
+                return task.call();
+            } catch (Exception e) {
+                Throwable cause = e.getCause() == null ? e : e.getCause();
+                if (cause instanceof IOException ioException) {
+                    throw ioException;
+                }
+                throw new IOException(cause.getMessage(), cause);
+            }
+        }
+
         final JDialog dialog = new JDialog((Frame) null, titulo, true);
         dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 

@@ -1,5 +1,6 @@
 package vista;
 
+import com.formdev.flatlaf.extras.components.FlatButton;
 import controlador.GestorServidores;
 import modelo.Server;
 
@@ -21,7 +22,12 @@ final class VentanaPrincipalRightContentBuilder {
     ) {
     }
 
-    Result build(Server server, GestorServidores gestorServidores, int preferredConsoleHeight) {
+    Result build(
+            Server server,
+            GestorServidores gestorServidores,
+            int preferredConsoleHeight,
+            Consumer<Server> onServerConverted
+    ) {
         JPanel home = new JPanel(new BorderLayout(0, 8));
         home.setOpaque(false);
 
@@ -32,6 +38,10 @@ final class VentanaPrincipalRightContentBuilder {
 
         CardPanel headerCard = new CardPanel("Servidor seleccionado");
         headerCard.setBorder(BorderFactory.createEmptyBorder());
+        JButton conversionButton = crearBotonConversion(server, gestorServidores, onServerConverted);
+        if (conversionButton != null) {
+            headerCard.getHeaderActionsPanel().add(conversionButton);
+        }
         headerCard.getContentPanel().add(panelTotalServidor, BorderLayout.CENTER);
         headerCard.setFullHeightSideComponent(new PanelControlServidor(gestorServidores));
         home.add(headerCard, BorderLayout.NORTH);
@@ -71,5 +81,27 @@ final class VentanaPrincipalRightContentBuilder {
                 panelConsola,
                 panelConfigServidor
         );
+    }
+
+    private JButton crearBotonConversion(
+            Server server,
+            GestorServidores gestorServidores,
+            Consumer<Server> onServerConverted
+    ) {
+        if (gestorServidores == null || !gestorServidores.puedeConvertirseAPlataformaCompatible(server)) {
+            return null;
+        }
+
+        FlatButton button = new FlatButton();
+        AppTheme.applyHeaderIconButtonStyle(button);
+        button.setToolTipText("Convertir a una plataforma compatible");
+        button.setIcon(SvgIconFactory.create("easymcicons/box-unselected.svg", 18, 18));
+        button.addActionListener(e -> {
+            Server converted = gestorServidores.convertirServidorAPlataformaCompatible(server);
+            if (converted != null && onServerConverted != null) {
+                onServerConverted.accept(converted);
+            }
+        });
+        return button;
     }
 }
