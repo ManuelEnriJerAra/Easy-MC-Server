@@ -1015,7 +1015,9 @@ public class PanelServidores extends FlatScrollPane {
 
     private String extraerPrimeraLineaMotd(String motd){
         if(motd == null) return "";
-        String limpio = motd.replace("\r", "");
+        String limpio = MotdRenderUtil.stripCodes(motd);
+        if(limpio == null) return "";
+        limpio = limpio.replace("\r", "");
         int salto = limpio.indexOf('\n');
         if(salto >= 0){
             limpio = limpio.substring(0, salto);

@@ -129,6 +129,7 @@ public class VentanaPrincipal extends JFrame {
         botonesServidoresPanel = new JPanel(new GridLayout(1,4));
         botonesServidoresPanel.setOpaque(true);
         botonesServidoresPanel.setBackground(panelBg);
+        botonesServidoresPanel.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
         servidoresPanel.add(botonesServidoresPanel, BorderLayout.SOUTH);
 
         nuevoServerButton = new FlatButton();
