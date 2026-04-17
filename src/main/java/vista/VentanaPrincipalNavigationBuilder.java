@@ -12,6 +12,11 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 final class VentanaPrincipalNavigationBuilder {
+    static final String NAV_ICON_PATH_PROPERTY = "navIconPath";
+    static final String NAV_ICON_UNSELECTED_PATH_PROPERTY = "navIconUnselectedPath";
+    static final String NAV_SELECTED_PROPERTY = "navSelected";
+    static final float NAV_UNSELECTED_OPACITY = 0.70f;
+
     record Result(JPanel panel, Map<VentanaPrincipal.PaginaDerecha, JButton> navButtons) {
     }
 
@@ -34,7 +39,7 @@ final class VentanaPrincipalNavigationBuilder {
         JButton mundo = crearNavButton("easymcicons/earth.svg", "Mundos", VentanaPrincipal.PaginaDerecha.MUNDO, pageNavigator, navButtons);
         JButton config = crearNavButton("easymcicons/settings.svg", "Configuración del servidor", VentanaPrincipal.PaginaDerecha.CONFIG, pageNavigator, navButtons);
         JButton stats = crearNavButton("easymcicons/chart.svg", "Estadísticas", VentanaPrincipal.PaginaDerecha.STATS, pageNavigator, navButtons);
-        JButton temas = crearActionButton("easymcicons/pallete.svg", "Temas", openThemeSelector);
+        JButton temas = crearActionButton("easymcicons/pallete-unselected.svg", "Temas", openThemeSelector);
         JButton info = crearNavButton("easymcicons/info.svg", "Información", VentanaPrincipal.PaginaDerecha.INFO, pageNavigator, navButtons);
 
         botones.add(home);
@@ -53,14 +58,9 @@ final class VentanaPrincipalNavigationBuilder {
         MouseAdapter navHover = new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                Object src = e.getSource();
-                if (!(src instanceof JButton button)) {
-                    return;
+                if (e.getSource() instanceof JButton button) {
+                    aplicarHover(button);
                 }
-                if (button.getBackground() != null && button.isOpaque()) {
-                    return;
-                }
-                aplicarHover(button);
             }
 
             @Override
@@ -84,10 +84,8 @@ final class VentanaPrincipalNavigationBuilder {
 
             @Override
             public void mouseExited(MouseEvent e) {
-                temas.setOpaque(false);
-                temas.setContentAreaFilled(false);
-                temas.setBackground(null);
-                temas.setBorder(new FlatLineBorder(new Insets(6, 6, 6, 6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc()));
+                restaurarIconoBase(temas);
+                restaurarEstadoBase(temas);
                 temas.repaint();
             }
         });
@@ -125,7 +123,10 @@ final class VentanaPrincipalNavigationBuilder {
 
     private FlatButton createBaseButton(String iconPath, String tooltip) {
         FlatButton button = new FlatButton();
-        button.setIcon(SvgIconFactory.create(iconPath, 32, 32));
+        button.putClientProperty(NAV_ICON_PATH_PROPERTY, iconPath);
+        button.putClientProperty(NAV_ICON_UNSELECTED_PATH_PROPERTY, toUnselectedIconPath(iconPath));
+        button.putClientProperty(NAV_SELECTED_PROPERTY, Boolean.FALSE);
+        button.setIcon(SvgIconFactory.createWithOpacity(toUnselectedIconPath(iconPath), 32, 32, NAV_UNSELECTED_OPACITY));
         button.setFocusPainted(false);
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
@@ -140,11 +141,79 @@ final class VentanaPrincipalNavigationBuilder {
         return button;
     }
 
+    static void actualizarIconoNavegacion(AbstractButton button, boolean selected) {
+        if (button == null) {
+            return;
+        }
+        button.putClientProperty(NAV_SELECTED_PROPERTY, selected);
+        Object selectedPath = button.getClientProperty(NAV_ICON_PATH_PROPERTY);
+        Object unselectedPath = button.getClientProperty(NAV_ICON_UNSELECTED_PATH_PROPERTY);
+        if (!(selectedPath instanceof String iconPath) || !(unselectedPath instanceof String unselectedIconPath)) {
+            return;
+        }
+        button.setIcon(SvgIconFactory.createWithOpacity(
+                selected ? iconPath : unselectedIconPath,
+                32,
+                32,
+                selected ? 1f : NAV_UNSELECTED_OPACITY
+        ));
+        restaurarEstadoBase(button);
+    }
+
+    private static String toUnselectedIconPath(String iconPath) {
+        if (iconPath == null || iconPath.isBlank() || iconPath.endsWith("-unselected.svg")) {
+            return iconPath;
+        }
+        int extensionIndex = iconPath.lastIndexOf(".svg");
+        if (extensionIndex < 0) {
+            return iconPath + "-unselected";
+        }
+        return iconPath.substring(0, extensionIndex) + "-unselected.svg";
+    }
+
+
     private void aplicarHover(JButton button) {
-        button.setOpaque(true);
-        button.setContentAreaFilled(true);
-        button.setBackground(AppTheme.getSelectionBackground());
-        button.setBorder(new FlatLineBorder(new Insets(6, 6, 6, 6), AppTheme.getMainAccent(), 1f, AppTheme.getArc()));
+        Object selectedPath = button.getClientProperty(NAV_ICON_PATH_PROPERTY);
+        Object unselectedPath = button.getClientProperty(NAV_ICON_UNSELECTED_PATH_PROPERTY);
+        if (!(selectedPath instanceof String iconPath) || !(unselectedPath instanceof String unselectedIconPath)) {
+            return;
+        }
+        button.setIcon(SvgIconFactory.createWithOpacity(
+                isSelected(button) ? iconPath : unselectedIconPath,
+                32,
+                32,
+                1f
+        ));
+        restaurarEstadoBase(button);
         button.repaint();
     }
+
+    private static boolean isSelected(AbstractButton button) {
+        return Boolean.TRUE.equals(button.getClientProperty(NAV_SELECTED_PROPERTY));
+    }
+
+    private static void restaurarIconoBase(AbstractButton button) {
+        Object selectedPath = button.getClientProperty(NAV_ICON_PATH_PROPERTY);
+        Object unselectedPath = button.getClientProperty(NAV_ICON_UNSELECTED_PATH_PROPERTY);
+        if (!(selectedPath instanceof String iconPath) || !(unselectedPath instanceof String unselectedIconPath)) {
+            return;
+        }
+        boolean selected = isSelected(button);
+        button.setIcon(SvgIconFactory.createWithOpacity(
+                selected ? iconPath : unselectedIconPath,
+                32,
+                32,
+                selected ? 1f : NAV_UNSELECTED_OPACITY
+        ));
+    }
+
+    private static void restaurarEstadoBase(AbstractButton button) {
+        button.setOpaque(false);
+        button.setContentAreaFilled(false);
+        button.setBackground(null);
+        button.setBorder(new FlatLineBorder(new Insets(6, 6, 6, 6), AppTheme.getTransparentColor(), 1f, AppTheme.getArc()));
+    }
 }
+
+
+

@@ -132,16 +132,13 @@ public class VentanaPrincipal extends JFrame {
         servidoresPanel.add(botonesServidoresPanel, BorderLayout.SOUTH);
 
         nuevoServerButton = new FlatButton();
-        nuevoServerButton.setText("+");
+        nuevoServerButton.setToolTipText("Nuevo servidor");
         importarServerButton = new FlatButton();
-        importarServerButton.setText("↓");
-        importarServerButton.setToolTipText("Importar");
+                importarServerButton.setToolTipText("Importar");
         borrarServerButton = new FlatButton();
-        borrarServerButton.setText("-");
         borrarServerButton.setToolTipText("Eliminar");
         abrirCarpetaServerButton = new FlatButton();
-        abrirCarpetaServerButton.setText("📁");
-        abrirCarpetaServerButton.setToolTipText("Abrir carpeta");
+                abrirCarpetaServerButton.setToolTipText("Abrir carpeta");
         abrirCarpetaServerButton.setEnabled(false);
         borrarServerButton.setEnabled(false);
 
@@ -150,6 +147,11 @@ public class VentanaPrincipal extends JFrame {
         estilizarBoton(importarServerButton);
         estilizarBoton(borrarServerButton);
         estilizarBoton(abrirCarpetaServerButton);
+        aplicarIconoBotonServidores(nuevoServerButton, "easymcicons/plus.svg");
+        aplicarIconoBotonServidores(importarServerButton, "easymcicons/download.svg");
+        aplicarIconoBotonServidores(borrarServerButton, "easymcicons/minus.svg");
+        aplicarIconoBotonServidores(abrirCarpetaServerButton, "easymcicons/folder.svg");
+        configurarHoverIconoCarpeta(abrirCarpetaServerButton);
 
         botonesServidoresPanel.add(nuevoServerButton);
         botonesServidoresPanel.add(importarServerButton);
@@ -642,22 +644,10 @@ public class VentanaPrincipal extends JFrame {
         paginaDerechaActual = pagina;
         cardDerecho.show(panelDerechoCards, pagina.name());
 
-        Color acento = AppTheme.getMainAccent();
-        Color bg = AppTheme.getPanelBackground();
-        Color fg = AppTheme.getForeground();
-        int arc = AppTheme.getArc();
-
         for(Map.Entry<PaginaDerecha, JButton> e : navButtons.entrySet()){
             JButton b = e.getValue();
             boolean sel = e.getKey() == pagina;
-            b.setOpaque(sel); // sólo se pinta el fondo cuando está seleccionado
-            b.setContentAreaFilled(sel);
-            b.setBackground(sel ? acento : bg);
-            b.setForeground(sel ? Color.WHITE : fg);
-            // conservar borde redondeado al seleccionar
-            b.setBorder(sel
-                    ? new FlatLineBorder(new Insets(6,6,6,6), acento, 1f, arc)
-                    : new FlatLineBorder(new Insets(6,6,6,6), AppTheme.getTransparentColor(), 1f, arc));
+            VentanaPrincipalNavigationBuilder.actualizarIconoNavegacion(b, sel);
         }
     }
 
@@ -834,7 +824,14 @@ public class VentanaPrincipal extends JFrame {
         if (importarServerButton != null) importarServerButton.setBackground(bgApp);
         if (borrarServerButton != null) borrarServerButton.setBackground(bgApp);
         if (abrirCarpetaServerButton != null) abrirCarpetaServerButton.setBackground(bgApp);
-        if (panelBarraVertical != null) {
+        if (panelBarraVertical instanceof CardPanel navigationCard) {
+            navigationCard.setBackground(panelBg);
+            navigationCard.setBorderInsets(new Insets(6, 6, 6, 6));
+            navigationCard.setBorderColor(borderColor);
+            navigationCard.setBorderThickness(1f);
+            navigationCard.refreshTheme();
+            navigationCard.setBorder(BorderFactory.createEmptyBorder());
+        } else if (panelBarraVertical != null) {
             panelBarraVertical.setBackground(panelBg);
             aplicarBordeRedondoGestionado(panelBarraVertical, new Insets(6, 6, 6, 6), borderColor, 1f, arc);
         }
@@ -1075,6 +1072,10 @@ public class VentanaPrincipal extends JFrame {
         button.setFont(base.deriveFont(Font.BOLD, Math.max(14f, base.getSize2D() + 2f)));
         button.setMargin(new Insets(10, 14, 10, 14));
         button.setFocusPainted(false);
+        button.setHorizontalAlignment(SwingConstants.CENTER);
+        button.setVerticalAlignment(SwingConstants.CENTER);
+        button.setIconTextGap(0);
+        button.setText(null);
         button.setOpaque(true);
         button.setContentAreaFilled(true);
         button.setBackground(AppTheme.getBackground());
@@ -1095,5 +1096,30 @@ public class VentanaPrincipal extends JFrame {
             }
         });
     }
+
+    private void aplicarIconoBotonServidores(AbstractButton button, String iconPath){
+        if(button == null || iconPath == null || iconPath.isBlank()) return;
+        button.setIcon(SvgIconFactory.create(iconPath, 20, 20));
+    }
+
+    private void configurarHoverIconoCarpeta(AbstractButton button){
+        if(button == null) return;
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if(!button.isEnabled()) return;
+                button.setIcon(SvgIconFactory.create("easymcicons/folder-open.svg", 20, 20));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setIcon(SvgIconFactory.create("easymcicons/folder.svg", 20, 20));
+            }
+        });
+    }
 }
+
+
+
+
 

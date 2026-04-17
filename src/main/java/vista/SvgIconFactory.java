@@ -14,6 +14,14 @@ public final class SvgIconFactory {
         return create(resourcePath, width, height, AppTheme::getForeground);
     }
 
+    public static Icon createWithOpacity(String resourcePath, int width, int height, float opacity) {
+        return createWithOpacity(resourcePath, width, height, AppTheme::getForeground, opacity);
+    }
+
+    public static Icon createWithOpacity(String resourcePath, int width, int height, Supplier<Color> colorSupplier, float opacity) {
+        return new AlphaIcon(create(resourcePath, width, height, colorSupplier), opacity);
+    }
+
     public static FlatSVGIcon create(String resourcePath, int width, int height, Supplier<Color> colorSupplier) {
         FlatSVGIcon icon = new FlatSVGIcon(resourcePath, width, height);
         Supplier<Color> resolvedSupplier = colorSupplier != null ? colorSupplier : AppTheme::getForeground;
@@ -29,5 +37,36 @@ public final class SvgIconFactory {
             return;
         }
         button.setIcon(create(resourcePath, width, height, colorSupplier));
+    }
+
+    private static final class AlphaIcon implements Icon {
+        private final Icon delegate;
+        private final float opacity;
+
+        private AlphaIcon(Icon delegate, float opacity) {
+            this.delegate = delegate;
+            this.opacity = Math.max(0f, Math.min(1f, opacity));
+        }
+
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            if (delegate == null) {
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, opacity));
+            delegate.paintIcon(c, g2, x, y);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return delegate != null ? delegate.getIconWidth() : 0;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return delegate != null ? delegate.getIconHeight() : 0;
+        }
     }
 }
