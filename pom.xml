@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.example</groupId>
-    <artifactId>easy_mc_server_0.4</artifactId>
+    <artifactId>easy_mc_server_0.5</artifactId>
     <version>alpha</version>
 
     <properties>
