@@ -7,8 +7,10 @@ import java.nio.file.Path;
 public record ServerInstallationRequest(
         Path targetDirectory,
         String minecraftVersion,
+        String platformVersion,
         boolean acceptEula,
         Path defaultIconSource,
-        MojangAPI mojangApi
+        MojangAPI mojangApi,
+        FileDownloader downloader
 ) {
 }

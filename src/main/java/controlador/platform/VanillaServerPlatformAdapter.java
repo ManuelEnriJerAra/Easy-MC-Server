@@ -10,6 +10,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAdapter {
+    private final MojangAPI mojangApi;
+
+    public VanillaServerPlatformAdapter() {
+        this(new MojangAPI());
+    }
+
+    VanillaServerPlatformAdapter(MojangAPI mojangApi) {
+        this.mojangApi = mojangApi == null ? new MojangAPI() : mojangApi;
+    }
+
     @Override
     public ServerPlatform getPlatform() {
         return ServerPlatform.VANILLA;
@@ -30,6 +40,29 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
     }
 
     @Override
+    public boolean supportsAutomatedCreation() {
+        return true;
+    }
+
+    @Override
+    public String getCreationDisplayName() {
+        return "Vanilla";
+    }
+
+    @Override
+    public java.util.List<ServerCreationOption> listCreationOptions() {
+        return mojangApi.obtenerListaVersiones().stream()
+                .map(version -> new ServerCreationOption(
+                        ServerPlatform.VANILLA,
+                        version,
+                        version,
+                        "Minecraft " + version,
+                        version + "_server"
+                ))
+                .toList();
+    }
+
+    @Override
     public void install(Server server, ServerInstallationRequest request) throws IOException {
         if (server == null) {
             throw new IOException("El servidor no es valido.");
@@ -40,9 +73,9 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
         if (request.minecraftVersion() == null || request.minecraftVersion().isBlank()) {
             throw new IOException("No se ha indicado la version de Minecraft.");
         }
-        MojangAPI mojangApi = request.mojangApi();
-        if (mojangApi == null) {
-            throw new IOException("No se ha proporcionado acceso a Mojang API.");
+        FileDownloader downloader = request.downloader();
+        if (downloader == null) {
+            throw new IOException("No se ha proporcionado un descargador de archivos.");
         }
 
         Files.createDirectories(request.targetDirectory());
@@ -53,7 +86,7 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
 
         Path destinationJar = request.targetDirectory().resolve(request.minecraftVersion() + "_server.jar");
         if (!Files.isRegularFile(destinationJar)) {
-            mojangApi.descargar(url, destinationJar.toFile(), null);
+            downloader.download(url, destinationJar.toFile());
         }
 
         if (request.acceptEula()) {

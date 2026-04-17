@@ -13,6 +13,7 @@ package controlador;
 import modelo.Server;
 import modelo.ServerConfig;
 import controlador.platform.ServerInstallationRequest;
+import controlador.platform.ServerCreationOption;
 import controlador.platform.ServerPlatformAdapter;
 import controlador.platform.ServerPlatformAdapters;
 import controlador.platform.ServerPlatformProfile;
@@ -45,6 +46,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.jar.JarFile;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -541,43 +543,46 @@ public class GestorServidores {
     // ===== FUNCIONES Y MÉTODOS =====
 
     public Server crearServidor(){
-        // Conectándonos a la API de Mojang nos descargamos el server.jar de la versión seleccionada por el usuario
+        ServerPlatformAdapter adapter = seleccionarAdaptadorCreacion();
+        if (adapter == null) return null;
+
+        List<ServerCreationOption> options = cargarOpcionesCreacion(adapter);
+        if (options == null || options.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No hay versiones disponibles para " + adapter.getCreationDisplayName() + ".",
+                    "Crear servidor",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return null;
+        }
+
+        ServerCreationOption selectedOption = seleccionarOpcionCreacion(adapter, options);
+        if (selectedOption == null) return null;
+
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.setAcceptAllFileFilterUsed(false);
         chooser.setDialogTitle("Selecciona donde se creará la carpeta del servidor");
-        if(chooser.showDialog(chooser,"Seleccionar") == JFileChooser.APPROVE_OPTION){
-            int eula = JOptionPane.showConfirmDialog(null, "¿Aceptas el EULA de Mojang (https://aka.ms/MinecraftEULA)?", "EULA",  JOptionPane.YES_NO_OPTION);
-            if(eula == JOptionPane.YES_OPTION){
-                File carpetaSeleccionada = chooser.getSelectedFile();
-                if(!carpetaSeleccionada.isDirectory()){
-                    carpetaSeleccionada = carpetaSeleccionada.getParentFile();
-                }
-                // listado y selección de versión
-                JComboBox<String> versionesBox = new JComboBox<>(MOJANG_API.obtenerListaVersiones().toArray(new String[0]));
-
-                int versionSeleccionada = JOptionPane.showConfirmDialog(null, versionesBox, "Selecciona una versión", JOptionPane.OK_CANCEL_OPTION);
-                if (versionSeleccionada == JOptionPane.OK_OPTION) {
-                    String version = (String) versionesBox.getSelectedItem();
-                    File targetFolder = resolverDirectorioServidorDisponible(
-                            carpetaSeleccionada.getAbsoluteFile(),
-                            version + "_server"
-                    );
-                    if (!instalarServidorVanilla(version, targetFolder.toPath())) {
-                        return null;
-                    }
-                    Server server = new Server();
-                    server.setServerDir(targetFolder.getAbsolutePath());
-                    server.setDisplayName(construirNombreServidorImportado(version, server.getServerDir(), false));
-                    aplicarPerfilPlataforma(server, inspeccionarServidor(Path.of(server.getServerDir())));
-                    guardarServidor(server);
-                    GestorMundos.sincronizarMundosServidor(server);
-
-                    return server;
-                }
-            }
+        if(chooser.showDialog(chooser,"Seleccionar") != JFileChooser.APPROVE_OPTION){
+            return null;
         }
-        return null;
+
+        int eula = JOptionPane.showConfirmDialog(null, "¿Aceptas el EULA de Mojang (https://aka.ms/MinecraftEULA)?", "EULA",  JOptionPane.YES_NO_OPTION);
+        if(eula != JOptionPane.YES_OPTION){
+            return null;
+        }
+
+        File carpetaSeleccionada = chooser.getSelectedFile();
+        if(!carpetaSeleccionada.isDirectory()){
+            carpetaSeleccionada = carpetaSeleccionada.getParentFile();
+        }
+
+        File targetFolder = resolverDirectorioServidorDisponible(
+                carpetaSeleccionada.getAbsoluteFile(),
+                selectedOption.directoryName()
+        );
+        return crearServidorAutomatizado(adapter, selectedOption, targetFolder.toPath());
     }
 
     // esta función descarga de una url a un destino dándole un nombre y mostrando una barra de carga
@@ -656,7 +661,89 @@ public class GestorServidores {
         }
     }
 
-    private boolean instalarServidorVanilla(String version, Path targetDirectory) {
+    private ServerPlatformAdapter seleccionarAdaptadorCreacion() {
+        List<ServerPlatformAdapter> creatableAdapters = ServerPlatformAdapters.creatable();
+        if (creatableAdapters.isEmpty()) {
+            return null;
+        }
+        JComboBox<ServerPlatformAdapter> platformBox = new JComboBox<>(creatableAdapters.toArray(ServerPlatformAdapter[]::new));
+        platformBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
+            JLabel label = new JLabel(value == null ? "" : value.getCreationDisplayName());
+            label.setOpaque(true);
+            if (isSelected) {
+                label.setBackground(list.getSelectionBackground());
+                label.setForeground(list.getSelectionForeground());
+            } else {
+                label.setBackground(list.getBackground());
+                label.setForeground(list.getForeground());
+            }
+            return label;
+        });
+
+        int option = JOptionPane.showConfirmDialog(
+                null,
+                platformBox,
+                "Selecciona una plataforma",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+        if (option != JOptionPane.OK_OPTION) {
+            return null;
+        }
+        return (ServerPlatformAdapter) platformBox.getSelectedItem();
+    }
+
+    private List<ServerCreationOption> cargarOpcionesCreacion(ServerPlatformAdapter adapter) {
+        try {
+            return ejecutarTareaConDialogo(
+                    "Cargando versiones",
+                    "Consultando versiones disponibles de " + adapter.getCreationDisplayName() + "...",
+                    adapter::listCreationOptions
+            );
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se han podido cargar las versiones de " + adapter.getCreationDisplayName() + ": " + e.getMessage(),
+                    "Crear servidor",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return List.of();
+        }
+    }
+
+    private ServerCreationOption seleccionarOpcionCreacion(ServerPlatformAdapter adapter, List<ServerCreationOption> options) {
+        JComboBox<ServerCreationOption> versionBox = new JComboBox<>(options.toArray(ServerCreationOption[]::new));
+        versionBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
+            JLabel label = new JLabel(value == null ? "" : value.displayName());
+            label.setOpaque(true);
+            if (isSelected) {
+                label.setBackground(list.getSelectionBackground());
+                label.setForeground(list.getSelectionForeground());
+            } else {
+                label.setBackground(list.getBackground());
+                label.setForeground(list.getForeground());
+            }
+            return label;
+        });
+
+        int option = JOptionPane.showConfirmDialog(
+                null,
+                versionBox,
+                "Selecciona una versión de " + adapter.getCreationDisplayName(),
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+        if (option != JOptionPane.OK_OPTION) {
+            return null;
+        }
+        return (ServerCreationOption) versionBox.getSelectedItem();
+    }
+
+    Server crearServidorAutomatizado(ServerPlatformAdapter adapter, ServerCreationOption option, Path targetDirectory) {
+        if (adapter == null || option == null || targetDirectory == null) {
+            return null;
+        }
+
         try {
             Files.createDirectories(targetDirectory);
         } catch (IOException e) {
@@ -666,48 +753,92 @@ public class GestorServidores {
                     "Instalacion",
                     JOptionPane.ERROR_MESSAGE
             );
-            return false;
+            return null;
         }
 
-        File destino = targetDirectory.resolve(version + "_server.jar").toFile();
-        String urlServer = MOJANG_API.obtenerUrlServerJar(version);
-        if(urlServer == null || urlServer.isBlank()){
-            JOptionPane.showMessageDialog(
-                    null,
-                    "No se ha podido obtener la URL del servidor para la version " + version,
-                    "Descarga",
-                    JOptionPane.ERROR_MESSAGE
-            );
-            return false;
-        }
-
-        boolean descargado = descargarConBarra(urlServer, destino, "Descargando servidor " + version);
-        if (!descargado) {
-            return false;
-        }
-
-        Server serverTemporal = new Server();
-        ServerPlatformAdapter adapter = ServerPlatformAdapters.forPlatform(modelo.extensions.ServerPlatform.VANILLA);
         try {
-            Path iconoTemporal = resolverIconoPorDefecto();
-            adapter.install(serverTemporal, new ServerInstallationRequest(
-                    targetDirectory,
-                    version,
-                    true,
-                    iconoTemporal,
-                    MOJANG_API
-            ));
-            return true;
-        } catch (UnsupportedOperationException e) {
-            return false;
+            ejecutarTareaConDialogo(
+                    "Instalando " + adapter.getCreationDisplayName(),
+                    "Preparando servidor " + option.displayName() + "...",
+                    () -> {
+                        Server transientServer = new Server();
+                        adapter.install(transientServer, new ServerInstallationRequest(
+                                targetDirectory,
+                                option.minecraftVersion(),
+                                option.platformVersion(),
+                                true,
+                                resolverIconoPorDefecto(),
+                                MOJANG_API,
+                                (url, destination) -> MOJANG_API.descargar(url, destination, null)
+                        ));
+                        return transientServer;
+                    }
+            );
         } catch (IOException e) {
             JOptionPane.showMessageDialog(
                     null,
-                    "No se ha podido finalizar la instalacion del servidor: " + e.getMessage(),
+                    "No se ha podido instalar el servidor: " + e.getMessage(),
                     "Instalacion",
                     JOptionPane.ERROR_MESSAGE
             );
-            return false;
+            return null;
+        }
+
+        Server server = new Server();
+        server.setServerDir(targetDirectory.toAbsolutePath().toString());
+        aplicarPerfilPlataforma(server, inspeccionarServidor(targetDirectory));
+        if (server.getVersion() == null || server.getVersion().isBlank()) {
+            server.setVersion(option.minecraftVersion());
+        }
+        if (server.getPlatform() == null || server.getPlatform() == modelo.extensions.ServerPlatform.UNKNOWN) {
+            server.setPlatform(option.platform());
+        }
+        server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), false));
+        guardarServidor(server);
+        GestorMundos.sincronizarMundosServidor(server);
+        return server;
+    }
+
+    private <T> T ejecutarTareaConDialogo(String titulo, String descripcion, Callable<T> task) throws IOException {
+        final JDialog dialog = new JDialog((Frame) null, titulo, true);
+        dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+        JPanel contenido = new JPanel(new BorderLayout(10, 10));
+        contenido.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        JLabel label = new JLabel(descripcion == null ? "Procesando..." : descripcion);
+        FlatProgressBar progreso = new FlatProgressBar();
+        progreso.setIndeterminate(true);
+        progreso.setStringPainted(true);
+        progreso.setString("...");
+        contenido.add(label, BorderLayout.NORTH);
+        contenido.add(progreso, BorderLayout.CENTER);
+        dialog.setContentPane(contenido);
+        dialog.setSize(460, 120);
+        dialog.setLocationRelativeTo(null);
+
+        SwingWorker<T, Void> worker = new SwingWorker<>() {
+            @Override
+            protected T doInBackground() throws Exception {
+                return task.call();
+            }
+
+            @Override
+            protected void done() {
+                dialog.dispose();
+            }
+        };
+
+        worker.execute();
+        dialog.setVisible(true);
+
+        try {
+            return worker.get();
+        } catch (Exception e) {
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException(cause.getMessage(), cause);
         }
     }
 

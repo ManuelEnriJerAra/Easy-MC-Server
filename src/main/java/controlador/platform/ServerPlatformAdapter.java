@@ -28,6 +28,18 @@ public interface ServerPlatformAdapter {
 
     Path resolveExecutableJar(Path serverDir) throws IOException;
 
+    default boolean supportsAutomatedCreation() {
+        return false;
+    }
+
+    default String getCreationDisplayName() {
+        return getPlatform().getLegacyTypeName();
+    }
+
+    default List<ServerCreationOption> listCreationOptions() throws IOException {
+        return List.of();
+    }
+
     default ServerLoader getLoader() {
         return getPlatform().getDefaultLoader();
     }
