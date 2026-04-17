@@ -513,10 +513,13 @@ public class GestorServidores {
 
                 int versionSeleccionada = JOptionPane.showConfirmDialog(null, versionesBox, "Selecciona una versión", JOptionPane.OK_CANCEL_OPTION);
                 if (versionSeleccionada == JOptionPane.OK_OPTION) {
-                    File newCarpeta = new File (carpetaSeleccionada.getAbsoluteFile(), versionesBox.getSelectedItem().toString()+"_server");
+                    String version = (String) versionesBox.getSelectedItem();
+                    File newCarpeta = resolverDirectorioServidorDisponible(
+                            carpetaSeleccionada.getAbsoluteFile(),
+                            version + "_server"
+                    );
                     newCarpeta.mkdir();
                     carpetaSeleccionada = newCarpeta;
-                    String version = (String) versionesBox.getSelectedItem();
                     File serverFile = new File(carpetaSeleccionada,version+"_server.jar");
                     String urlServer = MOJANG_API.obtenerUrlServerJar(version);
                     if(urlServer == null || urlServer.isBlank()){
@@ -537,9 +540,9 @@ public class GestorServidores {
                     File icono = new File(carpetaSeleccionada, "server-icon.png");
                     copiarArchivo(new File("default_image.png"), icono);
                     Server server = new Server();
-                    server.setDisplayName("Servidor "+version);
                     server.setVersion(version);
                     server.setServerDir(carpetaSeleccionada.getAbsolutePath());
+                    server.setDisplayName(construirNombreServidorImportado(version, server.getServerDir(), false));
                     server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
                     guardarServidor(server);
                     GestorMundos.sincronizarMundosServidor(server);
@@ -644,9 +647,9 @@ public class GestorServidores {
                 }
             }
             Server server = new Server();
-            server.setDisplayName("Servidor "+chooser.getSelectedFile().getName());
             server.setServerDir(directorio.getAbsolutePath());
             server.setVersion(DetectorVersionServidor.detectarVersionVanilla(server));
+            server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), true));
             server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
 
             guardarServidor(server);
@@ -1054,6 +1057,42 @@ public class GestorServidores {
             if(actual >= objetivo) return;
             if(NEXT_PORT_SESION.compareAndSet(actual, objetivo)) return;
         }
+    }
+
+    private File resolverDirectorioServidorDisponible(File directorioPadre, String nombreBase) {
+        File padre = directorioPadre != null ? directorioPadre : new File(".");
+        String base = (nombreBase == null || nombreBase.isBlank()) ? "server" : nombreBase;
+        File candidato = new File(padre, base);
+        int copia = 1;
+        while(candidato.exists()){
+            candidato = new File(padre, base + "_" + copia);
+            copia++;
+        }
+        return candidato;
+    }
+
+    private String construirNombreServidorImportado(String version, String serverDir, boolean forzarSufijoCopia) {
+        String versionNormalizada = (version == null || version.isBlank()) ? "sin versión" : version.trim();
+        String base = "Servidor " + versionNormalizada;
+
+        int duplicadosExistentes = 0;
+        if (listaServidores != null) {
+            for (Server existente : listaServidores) {
+                if (existente == null) continue;
+                if (serverDir != null && serverDir.equals(existente.getServerDir())) continue;
+                if (!Objects.equals(versionNormalizada, normalizarVersionNombre(existente.getVersion()))) continue;
+                duplicadosExistentes++;
+            }
+        }
+
+        if (!forzarSufijoCopia && duplicadosExistentes == 0) {
+            return base;
+        }
+        return base + " (" + duplicadosExistentes + ")";
+    }
+
+    private String normalizarVersionNombre(String version) {
+        return (version == null || version.isBlank()) ? "sin versión" : version.trim();
     }
 }
 

@@ -217,9 +217,16 @@ public class VentanaPrincipal extends JFrame {
                 boolean eliminado = gestorServidores.eliminarServidor(server);
                 if(eliminado){
                     gestorServidores.setServidorSeleccionado(null);
-                    panelDerecho.removeAll();
-                    panelDerecho.revalidate();
-                    panelDerecho.repaint();
+                    if(serverMostrado != null && consoleListenerActual != null){
+                        serverMostrado.removeConsoleListener(consoleListenerActual);
+                    }
+                    serverMostrado = null;
+                    consoleListenerActual = null;
+                    if(panelDerechoCards != null){
+                        panelDerechoCards.removeAll();
+                        panelDerechoCards.revalidate();
+                        panelDerechoCards.repaint();
+                    }
                     borrarServerButton.setEnabled(false);
                     abrirCarpetaServerButton.setEnabled(false);
 
