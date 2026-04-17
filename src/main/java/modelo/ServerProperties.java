@@ -17,6 +17,7 @@ import lombok.AllArgsConstructor;
 
 import java.io.*;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 
 @Getter
 @Setter
@@ -167,18 +168,16 @@ public class ServerProperties{
 
     public void escribePropiedades(File serverDirectory) throws IOException, IllegalAccessException {
         File propiedades = new File(serverDirectory,"server.properties"); // creamos el archivo server.properties
-        FileWriter fw = new FileWriter(propiedades);
-        PrintWriter pw = new PrintWriter(fw);
-        pw.println("# Minecraft server Properties");
-        for(Field campo : this.getClass().getDeclaredFields()) {
-            // copiamos cada campo, menos si es el servidor
-            if(!campo.getName().equals("server")){
-                campo.setAccessible(true);
-                pw.println(campo.getName().replace("_","-") + " = " + campo.get(this).toString());
+        try(PrintWriter pw = new PrintWriter(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(propiedades), StandardCharsets.UTF_8)))){
+            pw.println("# Minecraft server Properties");
+            for(Field campo : this.getClass().getDeclaredFields()) {
+                // copiamos cada campo, menos si es el servidor
+                if(!campo.getName().equals("server")){
+                    campo.setAccessible(true);
+                    pw.println(campo.getName().replace("_","-") + " = " + campo.get(this).toString());
+                }
             }
         }
-        pw.close();
-        fw.close();
         System.out.println("Escritura de propiedades finalizada");
     }
 
@@ -188,7 +187,7 @@ public class ServerProperties{
         File properties = new File(serverFolder, "server.properties");
         if (properties.exists()) {
             try{
-                BufferedReader br = new BufferedReader(new FileReader(properties));
+                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(properties), StandardCharsets.UTF_8));
                 int caracter; // vamos a leer caracter a caracter
                 String propiedad; // aqui almaceno la propiedad
                 String valor; // aqui almaceno el valor

@@ -37,7 +37,7 @@ class GestorServidoresTest {
         assertThat(persisted.getFirst().getId()).isNotBlank();
         assertThat(persisted.getFirst().getServerConfig()).isNotNull();
         assertThat(persisted.getFirst().getOrdenLista()).isZero();
-        assertThat(persisted.getFirst().getPreviewRenderProfileId()).isEqualTo("balanced");
+        assertThat(persisted.getFirst().getPreviewRenderProfileId()).isEqualTo("quality");
         assertThat(persisted.getFirst().getPreviewRenderRealtime()).isFalse();
         assertThat(persisted.getFirst().getPreviewShowSpawn()).isFalse();
         assertThat(persisted.getFirst().getPreviewShowPlayers()).isFalse();
@@ -70,7 +70,7 @@ class GestorServidoresTest {
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());
 
         Server persisted = gestor.getListaServidores().getFirst();
-        assertThat(persisted.getPreviewRenderProfileId()).isEqualTo("balanced");
+        assertThat(persisted.getPreviewRenderProfileId()).isEqualTo("quality");
         assertThat(persisted.getPreviewRenderRealtime()).isFalse();
         assertThat(persisted.getPreviewShowSpawn()).isFalse();
         assertThat(persisted.getPreviewShowPlayers()).isFalse();

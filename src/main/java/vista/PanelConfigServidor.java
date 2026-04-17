@@ -8,6 +8,7 @@ import com.formdev.flatlaf.extras.components.FlatSpinner;
 import com.formdev.flatlaf.extras.components.FlatTextArea;
 import com.formdev.flatlaf.extras.components.FlatTextField;
 import controlador.GestorServidores;
+import controlador.Utilidades;
 import modelo.Server;
 import modelo.ServerConfig;
 import modelo.MinecraftConstants;
@@ -19,8 +20,6 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -148,9 +147,9 @@ public class PanelConfigServidor extends JPanel {
             return;
         }
 
-        Properties props = new Properties();
-        try(InputStream in = Files.newInputStream(propertiesPath)){
-            props.load(in);
+        Properties props;
+        try{
+            props = Utilidades.cargarPropertiesUtf8(propertiesPath);
         } catch (IOException ex){
             mostrarVacio(tr("panel.config.empty.read_error", "Error leyendo server.properties: ") + ex.getMessage());
             return;
@@ -308,8 +307,8 @@ public class PanelConfigServidor extends JPanel {
             out.setProperty(entry.getKey(), entry.getValue());
         }
 
-        try(OutputStream os = Files.newOutputStream(propertiesPath)){
-            out.store(os, "Edited by Easy-MC-Server");
+        try{
+            Utilidades.guardarPropertiesUtf8(propertiesPath, out, "Edited by Easy-MC-Server");
         } catch (IOException ex){
             JOptionPane.showMessageDialog(this, tr("panel.config.save.error", "Error guardando: ") + ex.getMessage(), tr("panel.config.dialog.title", "CONFIG"), JOptionPane.ERROR_MESSAGE);
             return false;

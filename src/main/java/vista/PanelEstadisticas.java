@@ -6,6 +6,7 @@ import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import com.formdev.flatlaf.extras.components.FlatSlider;
 import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
+import controlador.Utilidades;
 import modelo.Server;
 
 import javax.imageio.ImageIO;
@@ -24,7 +25,6 @@ import java.time.format.DateTimeFormatter;
 import java.beans.PropertyChangeListener;
 import java.io.ByteArrayOutputStream;
 import java.io.BufferedWriter;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -745,10 +745,7 @@ public class PanelEstadisticas extends JPanel {
             if (!Files.exists(propertiesPath)) {
                 return 20;
             }
-            Properties props = new Properties();
-            try (FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
-                props.load(fis);
-            }
+            Properties props = Utilidades.cargarPropertiesUtf8(propertiesPath);
             String value = props.getProperty("max-players");
             if (value == null || value.isBlank()) {
                 return 20;

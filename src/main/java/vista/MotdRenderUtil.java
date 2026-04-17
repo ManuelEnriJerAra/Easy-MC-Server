@@ -1,11 +1,15 @@
 package vista;
 
+import controlador.Utilidades;
+
 public class MotdRenderUtil {
+    private static final char SECTION_SIGN = '\u00A7';
+
     private MotdRenderUtil() {}
 
     public static String toHtml(String motdRaw) {
         if (motdRaw == null) motdRaw = "";
-        motdRaw = motdRaw.replace('&', '\u00A7');
+        motdRaw = normalizeMotd(motdRaw).replace('&', SECTION_SIGN);
 
         StringBuilder out = new StringBuilder();
         out.append("<html><div style='white-space:pre;line-height:1.2;'>");
@@ -41,7 +45,7 @@ public class MotdRenderUtil {
 
         for (int i = 0; i < motdRaw.length(); i++) {
             char c = motdRaw.charAt(i);
-            if (c == '\u00A7' && i + 1 < motdRaw.length()) {
+            if (c == SECTION_SIGN && i + 1 < motdRaw.length()) {
                 char code = Character.toLowerCase(motdRaw.charAt(i + 1));
                 st.flush();
                 switch (code) {
@@ -73,7 +77,7 @@ public class MotdRenderUtil {
                         st.strike = false;
                     }
                     default -> {
-                        // 'k' ofuscado: no intentamos emularlo aquí
+                        // 'k' ofuscado: no intentamos emularlo aqui.
                     }
                 }
                 i++;
@@ -93,7 +97,11 @@ public class MotdRenderUtil {
 
     public static String stripCodes(String s) {
         if (s == null) return null;
-        return s.replaceAll("(?i)(§.|&.)", "");
+        return normalizeMotd(s).replaceAll("(?i)(?:\\u00A7.|&.)", "").replace("\u00C2", "");
+    }
+
+    public static String normalizeMotd(String s) {
+        return Utilidades.normalizarTextoMojibakeUtf8(s);
     }
 
     private static String escapeHtml(String s) {

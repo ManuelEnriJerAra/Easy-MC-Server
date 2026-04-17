@@ -16,6 +16,7 @@ import javax.swing.filechooser.FileSystemView;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -30,6 +31,8 @@ import java.util.Properties;
 import java.util.stream.Stream;
 
 public class Utilidades {
+    private static final char SECTION_SIGN = '\u00A7';
+
     public static void copiarArchivo(File origen, File destino){
         try{
             InputStream in = new FileInputStream(origen);
@@ -152,17 +155,16 @@ public class Utilidades {
     }
 
     public static String leerMotdDesdeProperties(Path direccion){
-        File file = direccion.resolve("server.properties").toFile();
-        if(!file.exists()) return null;
+        if(direccion == null) return null;
+        Path propertiesPath = direccion.resolve("server.properties");
+        if(!Files.exists(propertiesPath)) return null;
 
-        Properties properties = new Properties();
-        try (FileInputStream fis = new FileInputStream(file)) {
-            properties.load(fis);
-            return properties.getProperty("motd");
-        } catch (IOException e) {
+        try{
+            Properties properties = cargarPropertiesUtf8(propertiesPath);
+            return normalizarTextoMojibakeUtf8(properties.getProperty("motd"));
+        } catch (IOException e){
             return null;
         }
-
     }
 
     public static void escribirPuertoEnProperties(Path direccion, int puerto){
@@ -178,16 +180,16 @@ public class Utilidades {
 
         Properties properties = new Properties();
         if(Files.exists(propertiesPath)){
-            try (FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
-                properties.load(fis);
-            } catch (IOException ignored) {
+            try{
+                properties = cargarPropertiesUtf8(propertiesPath);
+            } catch (IOException ignored){
             }
         }
 
         properties.setProperty("server-port", String.valueOf(puerto));
 
-        try (FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
-            properties.store(fos, null);
+        try{
+            guardarPropertiesUtf8(propertiesPath, properties, null);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -206,16 +208,16 @@ public class Utilidades {
 
         Properties properties = new Properties();
         if(Files.exists(propertiesPath)){
-            try (FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
-                properties.load(fis);
-            } catch (IOException ignored) {
+            try{
+                properties = cargarPropertiesUtf8(propertiesPath);
+            } catch (IOException ignored){
             }
         }
 
         properties.setProperty("motd", motd);
 
-        try (FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
-            properties.store(fos, null);
+        try{
+            guardarPropertiesUtf8(propertiesPath, properties, null);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -315,6 +317,65 @@ public class Utilidades {
         } catch (IOException ignored) {
         }
         return null;
+    }
+
+    public static Properties cargarPropertiesUtf8(Path propertiesPath) throws IOException {
+        Properties properties = new Properties();
+        if(propertiesPath == null || !Files.isRegularFile(propertiesPath)) {
+            return properties;
+        }
+        try(Reader reader = Files.newBufferedReader(propertiesPath, StandardCharsets.UTF_8)){
+            properties.load(reader);
+        }
+        return properties;
+    }
+
+    public static void guardarPropertiesUtf8(Path propertiesPath, Properties properties, String comments) throws IOException {
+        if(propertiesPath == null) {
+            throw new IOException("La ruta de properties no es valida.");
+        }
+        if(propertiesPath.getParent() != null) {
+            Files.createDirectories(propertiesPath.getParent());
+        }
+        try(Writer writer = Files.newBufferedWriter(propertiesPath, StandardCharsets.UTF_8)){
+            (properties == null ? new Properties() : properties).store(writer, comments);
+        }
+    }
+
+    public static String normalizarTextoMojibakeUtf8(String value) {
+        if(value == null || value.isEmpty()) {
+            return value;
+        }
+
+        String normalized = value.replace("\u00C2" + String.valueOf(SECTION_SIGN), String.valueOf(SECTION_SIGN));
+        String repaired = intentarRepararUtf8MalInterpretado(normalized);
+        return tieneMenosMojibake(repaired, normalized) ? repaired : normalized;
+    }
+
+    private static String intentarRepararUtf8MalInterpretado(String value) {
+        try{
+            return new String(value.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+        } catch (RuntimeException ex){
+            return value;
+        }
+    }
+
+    private static boolean tieneMenosMojibake(String candidate, String original) {
+        return puntuacionMojibake(candidate) < puntuacionMojibake(original);
+    }
+
+    private static int puntuacionMojibake(String value) {
+        if(value == null || value.isEmpty()) {
+            return 0;
+        }
+        int score = 0;
+        for(int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if(c == '\u00C2' || c == '\u00C3' || c == '\uFFFD') {
+                score++;
+            }
+        }
+        return score;
     }
 
 }

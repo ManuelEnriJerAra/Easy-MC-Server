@@ -258,7 +258,7 @@ public class GestorServidores {
             cambios = true;
         }
         if (server.getPreviewRenderProfileId() == null || server.getPreviewRenderProfileId().isBlank()) {
-            server.setPreviewRenderProfileId("balanced");
+            server.setPreviewRenderProfileId("quality");
             cambios = true;
         }
         if (server.getPreviewRenderRealtime() == null) {

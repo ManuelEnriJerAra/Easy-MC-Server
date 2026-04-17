@@ -1,5 +1,6 @@
 package controlador.world;
 
+import controlador.Utilidades;
 import modelo.Server;
 import modelo.World;
 
@@ -51,8 +52,8 @@ public final class WorldFilesService {
             return properties;
         }
 
-        try (InputStream in = Files.newInputStream(propertiesPath)) {
-            properties.load(in);
+        try {
+            properties.putAll(Utilidades.cargarPropertiesUtf8(propertiesPath));
         } catch (IOException ignored) {
         }
         return properties;
@@ -66,9 +67,7 @@ public final class WorldFilesService {
         if (propertiesPath.getParent() != null) {
             Files.createDirectories(propertiesPath.getParent());
         }
-        try (OutputStream out = Files.newOutputStream(propertiesPath)) {
-            properties.store(out, null);
-        }
+        Utilidades.guardarPropertiesUtf8(propertiesPath, properties, null);
     }
 
     public static Path getPreviewPath(World world) {

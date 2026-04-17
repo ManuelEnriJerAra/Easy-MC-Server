@@ -428,9 +428,7 @@ public final class GestorMundos {
 
         Properties props = new Properties();
         if(Files.exists(propertiesPath)) {
-            try(FileInputStream fis = new FileInputStream(propertiesPath.toFile())) {
-                props.load(fis);
-            }
+            props = Utilidades.cargarPropertiesUtf8(propertiesPath);
         }
         return props;
     }
@@ -438,9 +436,7 @@ public final class GestorMundos {
     // Guarda en disco las propiedades del servidor recibidas.
     private static void guardarServerProperties(Path serverDir, Properties props) throws IOException {
         Path propertiesPath = serverDir.resolve("server.properties");
-        try(FileOutputStream fos = new FileOutputStream(propertiesPath.toFile())) {
-            props.store(fos, null);
-        }
+        Utilidades.guardarPropertiesUtf8(propertiesPath, props, null);
     }
 
     // Guarda en un archivo auxiliar la metadata necesaria para regenerar o activar un mundo.

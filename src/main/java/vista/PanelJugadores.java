@@ -4,12 +4,12 @@ import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import controlador.GestorServidores;
 import controlador.MojangAPI;
+import controlador.Utilidades;
 import modelo.Server;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import javax.swing.*;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -556,10 +556,7 @@ public class PanelJugadores extends JPanel {
             Path p = Path.of(dir).resolve("server.properties");
             if(!Files.exists(p)) return 20;
 
-            Properties props = new Properties();
-            try(FileInputStream fis = new FileInputStream(p.toFile())){
-                props.load(fis);
-            }
+            Properties props = Utilidades.cargarPropertiesUtf8(p);
 
             String s = props.getProperty("max-players");
             if(s == null || s.isBlank()) return 20;
