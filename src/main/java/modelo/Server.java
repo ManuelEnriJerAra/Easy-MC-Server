@@ -19,21 +19,31 @@ import java.awt.image.BufferedImage;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Setter;
 import lombok.Getter;
+import modelo.extensions.ServerCapability;
+import modelo.extensions.ServerEcosystemType;
+import modelo.extensions.ServerExtension;
+import modelo.extensions.ServerLoader;
+import modelo.extensions.ServerPlatform;
 
 import javax.swing.*;
 import javax.imageio.ImageIO;
 
 @Setter
 @Getter
+@JsonIgnoreProperties(ignoreUnknown = true)
 
 public class Server {
     // ===== DATOS PERSISTENTES =====
@@ -41,6 +51,12 @@ public class Server {
     private String displayName; // nombre que el usuario le da al servidor, es persistente, lo guardamos en el JSON
     private String version; // versión del servidor
     private String tipo; // tipo del servidor (Vanilla, Forge, Fabric, etc.)
+    private ServerPlatform platform; // plataforma interna del servidor
+    private ServerLoader loader; // loader/ecosistema técnico principal
+    private String loaderVersion; // versión del loader, si se conoce
+    private Set<ServerCapability> capabilities; // capacidades detectadas o soportadas por la app
+    private ServerEcosystemType ecosystemType; // agrupa el servidor en vanilla/mods/plugins
+    private List<ServerExtension> extensions; // extensiones detectadas o gestionadas localmente
     private String serverDir; // carpeta del servidor
     private ServerConfig serverConfig; // contiene XMS RAM, XMX RAM y el puerto
     private Integer ordenLista; // orden manual/base de la lista, preparado para drag and drop futuro
@@ -82,6 +98,12 @@ public class Server {
     // constructor por defecto
     public Server(){
         id = UUID.randomUUID().toString();
+        this.platform = ServerPlatform.UNKNOWN;
+        this.loader = ServerLoader.UNKNOWN;
+        this.loaderVersion = null;
+        this.capabilities = EnumSet.noneOf(ServerCapability.class);
+        this.ecosystemType = ServerEcosystemType.UNKNOWN;
+        this.extensions = new ArrayList<>();
         this.serverConfig = new ServerConfig();
         this.estadisticasRangoSegundos = 300;
         this.estadisticasPersistenciaActiva = true;
@@ -103,6 +125,164 @@ public class Server {
         this.previewUseWholeMap = false;
         this.previewRenderLimitPixels = 256;
         this.previewRenderCenterId = "spawn";
+    }
+
+    public String getTipo() {
+        if (tipo != null && !tipo.isBlank()) {
+            return tipo;
+        }
+        if (platform != null && platform != ServerPlatform.UNKNOWN) {
+            return platform.getLegacyTypeName();
+        }
+        return null;
+    }
+
+    public void setTipo(String tipo) {
+        this.tipo = normalizarTexto(tipo);
+        ServerPlatform migratedPlatform = ServerPlatform.fromLegacyType(this.tipo);
+        if (migratedPlatform != ServerPlatform.UNKNOWN || this.platform == null || this.platform == ServerPlatform.UNKNOWN) {
+            this.platform = migratedPlatform;
+        }
+        aplicarMetadatosCompatiblesConPlataforma(false);
+    }
+
+    public void setPlatform(ServerPlatform platform) {
+        this.platform = platform == null ? ServerPlatform.UNKNOWN : platform;
+        if (this.platform != ServerPlatform.UNKNOWN) {
+            this.tipo = this.platform.getLegacyTypeName();
+        } else if (this.tipo != null && this.tipo.isBlank()) {
+            this.tipo = null;
+        }
+        aplicarMetadatosCompatiblesConPlataforma(false);
+    }
+
+    public void setCapabilities(Set<ServerCapability> capabilities) {
+        if (capabilities == null || capabilities.isEmpty()) {
+            this.capabilities = EnumSet.noneOf(ServerCapability.class);
+            return;
+        }
+        this.capabilities = EnumSet.copyOf(capabilities);
+    }
+
+    public boolean migrarModeloLegacy() {
+        boolean cambios = false;
+
+        if ((tipo == null || tipo.isBlank()) && platform != null && platform != ServerPlatform.UNKNOWN) {
+            tipo = platform.getLegacyTypeName();
+            cambios = true;
+        }
+
+        if ((platform == null || platform == ServerPlatform.UNKNOWN) && tipo != null && !tipo.isBlank()) {
+            ServerPlatform migratedPlatform = ServerPlatform.fromLegacyType(tipo);
+            if (migratedPlatform != ServerPlatform.UNKNOWN || platform == null) {
+                platform = migratedPlatform;
+                cambios = true;
+            }
+        }
+
+        if (platform == null) {
+            platform = ServerPlatform.UNKNOWN;
+            cambios = true;
+        }
+        if (loader == null) {
+            loader = platform.getDefaultLoader();
+            cambios = true;
+        }
+        if (ecosystemType == null) {
+            ecosystemType = platform.getDefaultEcosystemType();
+            cambios = true;
+        }
+        if (capabilities == null) {
+            capabilities = EnumSet.copyOf(platform.defaultCapabilities());
+            cambios = true;
+        } else if (!(capabilities instanceof EnumSet<?>)) {
+            capabilities = capabilities.isEmpty()
+                    ? EnumSet.noneOf(ServerCapability.class)
+                    : EnumSet.copyOf(capabilities);
+            cambios = true;
+        }
+        if (extensions == null) {
+            extensions = new ArrayList<>();
+            cambios = true;
+        }
+
+        if (aplicarMetadatosCompatiblesConPlataforma(true)) {
+            cambios = true;
+        }
+        if (normalizarExtensiones()) {
+            cambios = true;
+        }
+
+        return cambios;
+    }
+
+    private boolean aplicarMetadatosCompatiblesConPlataforma(boolean soloSiFalta) {
+        boolean cambios = false;
+        ServerPlatform resolvedPlatform = platform == null ? ServerPlatform.UNKNOWN : platform;
+
+        if (!soloSiFalta || loader == null || loader == ServerLoader.UNKNOWN) {
+            ServerLoader targetLoader = resolvedPlatform.getDefaultLoader();
+            if (targetLoader != null && loader != targetLoader) {
+                loader = targetLoader;
+                cambios = true;
+            }
+        }
+
+        if (!soloSiFalta || ecosystemType == null || ecosystemType == ServerEcosystemType.UNKNOWN) {
+            ServerEcosystemType targetEcosystem = resolvedPlatform.getDefaultEcosystemType();
+            if (targetEcosystem != null && ecosystemType != targetEcosystem) {
+                ecosystemType = targetEcosystem;
+                cambios = true;
+            }
+        }
+
+        Set<ServerCapability> targetCapabilities = resolvedPlatform.defaultCapabilities();
+        if (!soloSiFalta || capabilities == null || capabilities.isEmpty()) {
+            if (capabilities == null || !capabilities.equals(targetCapabilities)) {
+                capabilities = targetCapabilities.isEmpty()
+                        ? EnumSet.noneOf(ServerCapability.class)
+                        : EnumSet.copyOf(targetCapabilities);
+                cambios = true;
+            }
+        }
+
+        return cambios;
+    }
+
+    private boolean normalizarExtensiones() {
+        if (extensions == null) {
+            extensions = new ArrayList<>();
+            return true;
+        }
+        boolean cambios = false;
+        for (ServerExtension extension : extensions) {
+            if (extension == null) {
+                continue;
+            }
+            if (extension.getId() == null || extension.getId().isBlank()) {
+                extension.setId(UUID.randomUUID().toString());
+                cambios = true;
+            }
+            if (extension.getSource() == null) {
+                extension.setSource(new modelo.extensions.ExtensionSource());
+                cambios = true;
+            }
+            if (extension.getInstallState() == null) {
+                extension.setInstallState(modelo.extensions.ExtensionInstallState.UNKNOWN);
+                cambios = true;
+            }
+            if (extension.getLocalMetadata() == null) {
+                extension.setLocalMetadata(new modelo.extensions.ExtensionLocalMetadata());
+                cambios = true;
+            }
+        }
+        return cambios;
+    }
+
+    private String normalizarTexto(String texto) {
+        if (texto == null) return null;
+        String trimmed = texto.trim();
+        return trimmed.isEmpty() ? null : trimmed.toUpperCase(Locale.ROOT);
     }
 
     // ===== CONSOLA =====
