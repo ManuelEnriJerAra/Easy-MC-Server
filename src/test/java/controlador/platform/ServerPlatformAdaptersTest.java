@@ -10,7 +10,9 @@ import org.junit.jupiter.api.io.TempDir;
 import support.TestWorldFixtures;
 
 import java.io.File;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -77,13 +79,15 @@ class ServerPlatformAdaptersTest {
         Path installDir = tempDir.resolve("vanilla-server");
 
         Server server = new Server();
-        VanillaServerPlatformAdapter adapter = new VanillaServerPlatformAdapter();
+        VanillaServerPlatformAdapter adapter = new VanillaServerPlatformAdapter(new FakeMojangApi(sourceJar));
         adapter.install(server, new ServerInstallationRequest(
                 installDir,
                 "1.21.5",
+                "1.21.5",
                 true,
                 icon,
-                new FakeMojangApi(sourceJar)
+                null,
+                (url, destination) -> Files.copy(sourceJar, destination.toPath())
         ));
 
         assertThat(server.getPlatform()).isEqualTo(ServerPlatform.VANILLA);
@@ -96,6 +100,77 @@ class ServerPlatformAdaptersTest {
         ServerPlatformProfile profile = adapter.detect(installDir);
         assertThat(profile).isNotNull();
         assertThat(profile.platform()).isEqualTo(ServerPlatform.VANILLA);
+    }
+
+    @Test
+    void install_forgeDebePrepararServidorYMetadatosBase() throws Exception {
+        Path icon = tempDir.resolve("forge-icon.png");
+        Files.write(icon, new byte[]{7, 8, 9});
+        Path installDir = tempDir.resolve("forge-created");
+        Path fakeInstaller = tempDir.resolve("downloads").resolve("forge-installer.jar");
+        TestWorldFixtures.createValidServerJar(fakeInstaller.getParent(), fakeInstaller.getFileName().toString(), "{\"id\":\"installer\"}");
+
+        ForgeRepositoryClient repositoryClient = new ForgeRepositoryClient() {
+            @Override
+            public String getInstallerUrl(String artifactVersion) {
+                return "https://maven.minecraftforge.net/fake/" + artifactVersion + "/installer.jar";
+            }
+        };
+        ForgeInstallerRunner installerRunner = (installerJar, targetDirectory) -> {
+            Files.createDirectories(targetDirectory.resolve("libraries"));
+            Files.createDirectories(targetDirectory.resolve("mods"));
+            Files.writeString(targetDirectory.resolve("run.bat"), "@echo off");
+            TestWorldFixtures.createValidServerJar(
+                    targetDirectory,
+                    "runtime.jar",
+                    "{\"id\":\"1.20.1\"}",
+                    "net/minecraftforge/server/ServerMain.class"
+            );
+        };
+
+        ForgeServerPlatformAdapter adapter = new ForgeServerPlatformAdapter(repositoryClient, installerRunner);
+        Server server = new Server();
+        adapter.install(server, new ServerInstallationRequest(
+                installDir,
+                "1.20.1",
+                "1.20.1-47.4.18",
+                true,
+                icon,
+                null,
+                (url, destination) -> Files.copy(fakeInstaller, destination.toPath())
+        ));
+
+        assertThat(server.getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(server.getVersion()).isEqualTo("1.20.1");
+        assertThat(server.getLoaderVersion()).isEqualTo("1.20.1-47.4.18");
+        assertThat(Files.exists(installDir.resolve("forge-1.20.1-47.4.18-installer.jar"))).isTrue();
+        assertThat(Files.exists(installDir.resolve("run.bat"))).isTrue();
+        assertThat(Files.exists(installDir.resolve("mods"))).isTrue();
+        assertThat(Files.exists(installDir.resolve("eula.txt"))).isTrue();
+        assertThat(Files.exists(installDir.resolve("server-icon.png"))).isTrue();
+        assertThat(adapter.detect(installDir)).isNotNull();
+        assertThat(adapter.detect(installDir).platform()).isEqualTo(ServerPlatform.FORGE);
+    }
+
+    @Test
+    void forgeRepositoryClient_debeAgruparUltimaVersionPorMinecraft() throws Exception {
+        String metadata = """
+                <metadata>
+                  <versioning>
+                    <versions>
+                      <version>1.20.1-47.4.17</version>
+                      <version>1.20.1-47.4.18</version>
+                      <version>1.21.1-52.1.13</version>
+                    </versions>
+                  </versioning>
+                </metadata>
+                """;
+
+        List<String> versions = ForgeRepositoryClient.parseArtifactVersions(
+                new ByteArrayInputStream(metadata.getBytes(StandardCharsets.UTF_8))
+        );
+
+        assertThat(versions).containsExactly("1.20.1-47.4.17", "1.20.1-47.4.18", "1.21.1-52.1.13");
     }
 
     @Test

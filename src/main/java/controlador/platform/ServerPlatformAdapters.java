@@ -20,6 +20,12 @@ public final class ServerPlatformAdapters {
         return ADAPTERS;
     }
 
+    public static List<ServerPlatformAdapter> creatable() {
+        return ADAPTERS.stream()
+                .filter(ServerPlatformAdapter::supportsAutomatedCreation)
+                .toList();
+    }
+
     public static ServerPlatformAdapter forPlatform(ServerPlatform platform) {
         ServerPlatform resolved = platform == null ? ServerPlatform.UNKNOWN : platform;
         return ADAPTERS.stream()
