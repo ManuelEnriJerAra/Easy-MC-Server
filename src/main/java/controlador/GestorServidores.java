@@ -10,6 +10,7 @@
 
 package controlador;
 
+import controlador.extensions.ExtensionCompatibilityReport;
 import controlador.extensions.ServerExtensionsService;
 import modelo.Server;
 import modelo.ServerConfig;
@@ -495,6 +496,23 @@ public class GestorServidores {
         ServerExtension installed = serverExtensionsService.installManualJar(server, extensionJar);
         guardarServidor(server);
         return installed;
+    }
+
+    public ExtensionCompatibilityReport validarCompatibilidadExtension(Server server, Path extensionJar) throws IOException {
+        return serverExtensionsService.validateCompatibility(server, extensionJar);
+    }
+
+    public ExtensionCompatibilityReport validarCompatibilidadExtension(Server server, ServerExtension extension) {
+        return serverExtensionsService.validateCompatibility(server, extension);
+    }
+
+    public boolean eliminarExtensionLocal(Server server, ServerExtension extension) throws IOException {
+        if (server == null || extension == null) {
+            return false;
+        }
+        boolean removed = serverExtensionsService.removeExtension(server, extension);
+        guardarServidor(server);
+        return removed;
     }
 
     private void aplicarPerfilPlataforma(Server server, ServerPlatformProfile profile) {
