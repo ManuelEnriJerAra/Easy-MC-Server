@@ -39,10 +39,6 @@ public class PanelPrevisualizacion extends JPanel {
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
 
-        JPanel contenido = new JPanel(new BorderLayout());
-        contenido.setOpaque(false);
-        this.add(contenido, BorderLayout.CENTER);
-
         ImageIcon icono = server.getServerIconOrUseDefault();
         ImagenRedondaLabel iconoRedondo = new ImagenRedondaLabel(icono, 10, 96, 96);
         AppTheme.applyHandCursor(iconoRedondo);
@@ -66,7 +62,7 @@ public class PanelPrevisualizacion extends JPanel {
         iconWrap.setOpaque(false);
         iconWrap.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
         iconWrap.add(iconoRedondo);
-        contenido.add(iconWrap, BorderLayout.WEST);
+        this.add(iconWrap, BorderLayout.WEST);
 
         JPanel panelDatos = new JPanel();
         panelDatos.setOpaque(false);
@@ -258,7 +254,7 @@ public class PanelPrevisualizacion extends JPanel {
         JPanel panelDatosWrap = new JPanel(new BorderLayout());
         panelDatosWrap.setOpaque(false);
         panelDatosWrap.add(panelDatos, BorderLayout.NORTH);
-        contenido.add(panelDatosWrap, BorderLayout.CENTER);
+        this.add(panelDatosWrap, BorderLayout.CENTER);
 
         Runnable ajustar = () -> aplicarEllipsisTextos(nombreField, motdLabel);
         SwingUtilities.invokeLater(ajustar);

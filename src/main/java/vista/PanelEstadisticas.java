@@ -1535,7 +1535,8 @@ public class PanelEstadisticas extends JPanel {
         for (JCheckBox checkBox : exportCheckBoxes) {
             checkBox.setOpaque(false);
         }
-        AppTheme.applySurfacePreviewStyle(previewLabel, new Insets(10, 10, 10, 10));
+        previewLabel.setOpaque(false);
+        previewLabel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         previewLabel.setForeground(AppTheme.getMutedForeground());
         previewLabel.setPreferredSize(new Dimension(920, 320));
         previewLabel.setMinimumSize(new Dimension(720, 260));
@@ -1722,7 +1723,17 @@ public class PanelEstadisticas extends JPanel {
         coloresPanel.add(ramColorButton);
         coloresPanel.add(diskColorButton);
         configContent.add(coloresPanel);
-        configCard.getContentPanel().add(configContent, BorderLayout.CENTER);
+
+        FlatScrollPane configScrollPane = new FlatScrollPane();
+        configScrollPane.setViewportView(configContent);
+        configScrollPane.setBorder(null);
+        configScrollPane.setOpaque(false);
+        configScrollPane.getViewport().setOpaque(false);
+        configScrollPane.getViewport().setBackground(AppTheme.getSurfaceBackground());
+        configScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        configScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        configScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        configCard.getContentPanel().add(configScrollPane, BorderLayout.CENTER);
         wrapper.add(configCard, BorderLayout.CENTER);
 
         JButton exportarButton = new FlatButton();
@@ -1786,10 +1797,33 @@ public class PanelEstadisticas extends JPanel {
 
         dialog.setContentPane(wrapper);
         dialog.pack();
+        ajustarTamanoDialogoExportacion(dialog);
         dialog.setMinimumSize(new Dimension(960, 700));
         dialog.setLocationRelativeTo(this);
         refreshPreview.run();
         dialog.setVisible(true);
+    }
+
+    private void ajustarTamanoDialogoExportacion(JDialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        GraphicsConfiguration graphicsConfiguration = dialog.getGraphicsConfiguration();
+        if (graphicsConfiguration == null) {
+            graphicsConfiguration = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().getDefaultConfiguration();
+        }
+        Rectangle screenBounds = graphicsConfiguration.getBounds();
+        Insets screenInsets = Toolkit.getDefaultToolkit().getScreenInsets(graphicsConfiguration);
+        int usableWidth = Math.max(1, screenBounds.width - screenInsets.left - screenInsets.right);
+        int usableHeight = Math.max(1, screenBounds.height - screenInsets.top - screenInsets.bottom);
+        int maxWidth = Math.max(960, (int) Math.floor(usableWidth * 0.92d));
+        int maxHeight = Math.max(560, (int) Math.floor(usableHeight * 0.80d));
+
+        Dimension packedSize = dialog.getSize();
+        dialog.setSize(
+                Math.min(packedSize.width, maxWidth),
+                Math.min(packedSize.height, maxHeight)
+        );
     }
 
     private JPanel crearFilaExportacion(String titulo, JComponent component) {
