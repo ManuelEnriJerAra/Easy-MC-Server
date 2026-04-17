@@ -43,7 +43,7 @@ public final class PreviewRenderPreferences {
             int renderLimitPixels,
             String renderCenterId
     ) {
-        this.preset = preset == null ? PreviewRenderPreset.BALANCED : preset;
+        this.preset = preset == null ? PreviewRenderPreset.QUALITY : preset;
         this.renderToggles = new EnumMap<>(RenderToggle.class);
         for (RenderToggle toggle : RenderToggle.values()) {
             this.renderToggles.put(toggle, Boolean.TRUE.equals(renderToggles.get(toggle)));
@@ -58,13 +58,13 @@ public final class PreviewRenderPreferences {
     }
 
     public static PreviewRenderPreferences defaults() {
-        return presetDefaults(PreviewRenderPreset.BALANCED);
+        return presetDefaults(PreviewRenderPreset.QUALITY);
     }
 
     public static PreviewRenderPreferences presetDefaults(PreviewRenderPreset preset) {
         EnumMap<RenderToggle, Boolean> toggles = new EnumMap<>(RenderToggle.class);
         PreviewRenderPreset effectivePreset = preset == null || preset == PreviewRenderPreset.CUSTOM
-                ? PreviewRenderPreset.BALANCED
+                ? PreviewRenderPreset.QUALITY
                 : preset;
         for (RenderToggle toggle : RenderToggle.values()) {
             toggles.put(toggle, toggle.enabledInPreset(effectivePreset));
@@ -340,7 +340,7 @@ public final class PreviewRenderPreferences {
                     }
                 }
             }
-            return BALANCED;
+            return QUALITY;
         }
 
         @Override

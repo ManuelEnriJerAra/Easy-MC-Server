@@ -95,7 +95,7 @@ public class Server {
         this.estadisticasDiscoHistorial = true;
         this.estadisticasJugadoresActiva = false;
         this.estadisticasJugadoresHistorial = true;
-        this.previewRenderProfileId = "balanced";
+        this.previewRenderProfileId = "quality";
         this.previewRenderRealtime = false;
         this.previewShowSpawn = false;
         this.previewShowPlayers = false;
