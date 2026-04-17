@@ -195,7 +195,7 @@ public class PanelMundo extends JPanel {
         generarButton.setText("Generar nuevo");
         generarPreviewButton.setText("Generar preview");
         guardarConfiguracionMundoButton.setText("Guardar ajustes del mundo");
-        previewMenuButton.setText("\u2630");
+        previewMenuButton.setText(null);
         AppTheme.applyRefreshIconButtonStyle(refrescarButton);
         styleActionButton(importarButton);
         styleActionButton(exportarButton);
@@ -2991,9 +2991,9 @@ public class PanelMundo extends JPanel {
     private void stylePreviewMenuButton(JButton button) {
         if (button == null) return;
         styleActionButton(button);
-        button.setText("\u2630");
+        button.setText(null);
+        button.setIcon(SvgIconFactory.create("easymcicons/tuning-2.svg", 18, 18));
         button.setMargin(new Insets(4, 8, 4, 8));
-        button.setFont(button.getFont().deriveFont(Font.PLAIN, 14f));
         button.setToolTipText("Opciones de preview");
         stylePreviewOverlayButton(button);
     }
