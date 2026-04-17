@@ -12,6 +12,11 @@ package controlador;
 
 import modelo.Server;
 import modelo.ServerConfig;
+import controlador.platform.ServerInstallationRequest;
+import controlador.platform.ServerPlatformAdapter;
+import controlador.platform.ServerPlatformAdapters;
+import controlador.platform.ServerPlatformProfile;
+import controlador.platform.ServerValidationResult;
 import com.formdev.flatlaf.extras.components.FlatProgressBar;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,6 +35,7 @@ import java.net.ServerSocket;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -197,6 +203,9 @@ public class GestorServidores {
 
     private boolean asegurarMetadatosPersistentes(Server server) {
         boolean cambios = false;
+        if (server.migrarModeloLegacy()) {
+            cambios = true;
+        }
         if (server.getId() == null || server.getId().isBlank()) {
             server.setId(UUID.randomUUID().toString());
             cambios = true;
@@ -356,6 +365,36 @@ public class GestorServidores {
         return texto == null ? "" : texto;
     }
 
+    private ServerPlatformProfile inspeccionarServidor(Path serverDir) {
+        return ServerPlatformAdapters.detect(serverDir);
+    }
+
+    private void aplicarPerfilPlataforma(Server server, ServerPlatformProfile profile) {
+        if (server == null || profile == null) return;
+        server.setPlatform(profile.platform());
+        server.setLoader(profile.loader());
+        server.setLoaderVersion(profile.loaderVersion());
+        server.setEcosystemType(profile.ecosystemType());
+        server.setCapabilities(profile.capabilities());
+        if (profile.minecraftVersion() != null && !profile.minecraftVersion().isBlank()) {
+            server.setVersion(profile.minecraftVersion());
+        }
+    }
+
+    private ServerPlatformAdapter resolverAdaptador(Server server) {
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            return ServerPlatformAdapters.forPlatform(null);
+        }
+
+        Path serverDir = Path.of(server.getServerDir());
+        ServerPlatformProfile profile = inspeccionarServidor(serverDir);
+        if (profile != null) {
+            aplicarPerfilPlataforma(server, profile);
+            return ServerPlatformAdapters.forPlatform(profile.platform());
+        }
+        return ServerPlatformAdapters.forPlatform(server.getPlatform());
+    }
+
     // esta función de encarga de comprobar si los servidores almacenados son correctos, si no lo son se eliminan
     private void validarYLimpiarServidoresPersistidos() {
         if (listaServidores == null || listaServidores.isEmpty()) return;
@@ -370,11 +409,9 @@ public class GestorServidores {
             // si el servidor no es cargable lo ignoramos y añadimos a noCargables
             if (esServidorCargable(server)) {
                 try {
-                    String tipoDetectado = DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir()));
-                    // si no tiene ningún tipo lo descartamos, no es un servidor correcto
-                    if (tipoDetectado != null && !tipoDetectado.equals(server.getTipo())) {
-                        // si tiene tipo se lo establecemos
-                        server.setTipo(tipoDetectado);
+                    ServerPlatformProfile profile = inspeccionarServidor(Path.of(server.getServerDir()));
+                    if (profile != null) {
+                        aplicarPerfilPlataforma(server, profile);
                         cambios = true;
                     }
                 } catch (RuntimeException ignored) {
@@ -443,22 +480,13 @@ public class GestorServidores {
 
         Path dir = Path.of(server.getServerDir());
         if (!Files.isDirectory(dir)) return false;
-
-        try (Stream<Path> archivos = Files.list(dir)) {
-            List<Path> jars = archivos
-                    .filter(path -> path.toString().toLowerCase().endsWith(".jar"))
-                    .toList();
-            if (jars.size() != 1) return false;
-
-            Path jar = jars.get(0);
-            try (JarFile jarFile = new JarFile(jar.toFile())) {
-                boolean tieneVersionJson = jarFile.getJarEntry("version.json") != null;
-                boolean tieneMinecraftServerClass = jarFile.getJarEntry("net/minecraft/server/MinecraftServer.class") != null;
-                return tieneVersionJson || tieneMinecraftServerClass;
-            }
-        } catch (IOException | RuntimeException e) {
-            return false;
+        ServerPlatformProfile profile = inspeccionarServidor(dir);
+        ServerPlatformAdapter adapter = ServerPlatformAdapters.forPlatform(profile == null ? server.getPlatform() : profile.platform());
+        ServerValidationResult validation = adapter.validate(dir);
+        if (validation.valid() && profile != null) {
+            aplicarPerfilPlataforma(server, profile);
         }
+        return validation.valid();
     }
     // ===== LISTENERS Y CAMBIOS =====
 
@@ -514,36 +542,17 @@ public class GestorServidores {
                 int versionSeleccionada = JOptionPane.showConfirmDialog(null, versionesBox, "Selecciona una versión", JOptionPane.OK_CANCEL_OPTION);
                 if (versionSeleccionada == JOptionPane.OK_OPTION) {
                     String version = (String) versionesBox.getSelectedItem();
-                    File newCarpeta = resolverDirectorioServidorDisponible(
+                    File targetFolder = resolverDirectorioServidorDisponible(
                             carpetaSeleccionada.getAbsoluteFile(),
                             version + "_server"
                     );
-                    newCarpeta.mkdir();
-                    carpetaSeleccionada = newCarpeta;
-                    File serverFile = new File(carpetaSeleccionada,version+"_server.jar");
-                    String urlServer = MOJANG_API.obtenerUrlServerJar(version);
-                    if(urlServer == null || urlServer.isBlank()){
-                        JOptionPane.showMessageDialog(
-                                null,
-                                "No se ha podido obtener la URL del servidor para la version " + version,
-                                "Descarga",
-                                JOptionPane.ERROR_MESSAGE
-                        );
+                    if (!instalarServidorVanilla(version, targetFolder.toPath())) {
                         return null;
                     }
-
-                    boolean descargado = descargarConBarra(urlServer, serverFile, "Descargando servidor " + version);
-                    if(!descargado){
-                        return null;
-                    }
-                    rellenaEULA(carpetaSeleccionada);
-                    File icono = new File(carpetaSeleccionada, "server-icon.png");
-                    copiarArchivo(new File("default_image.png"), icono);
                     Server server = new Server();
-                    server.setVersion(version);
-                    server.setServerDir(carpetaSeleccionada.getAbsolutePath());
+                    server.setServerDir(targetFolder.getAbsolutePath());
                     server.setDisplayName(construirNombreServidorImportado(version, server.getServerDir(), false));
-                    server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
+                    aplicarPerfilPlataforma(server, inspeccionarServidor(Path.of(server.getServerDir())));
                     guardarServidor(server);
                     GestorMundos.sincronizarMundosServidor(server);
 
@@ -630,6 +639,79 @@ public class GestorServidores {
         }
     }
 
+    private boolean instalarServidorVanilla(String version, Path targetDirectory) {
+        try {
+            Files.createDirectories(targetDirectory);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se ha podido crear la carpeta del servidor: " + e.getMessage(),
+                    "Instalacion",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return false;
+        }
+
+        File destino = targetDirectory.resolve(version + "_server.jar").toFile();
+        String urlServer = MOJANG_API.obtenerUrlServerJar(version);
+        if(urlServer == null || urlServer.isBlank()){
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se ha podido obtener la URL del servidor para la version " + version,
+                    "Descarga",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return false;
+        }
+
+        boolean descargado = descargarConBarra(urlServer, destino, "Descargando servidor " + version);
+        if (!descargado) {
+            return false;
+        }
+
+        Server serverTemporal = new Server();
+        ServerPlatformAdapter adapter = ServerPlatformAdapters.forPlatform(modelo.extensions.ServerPlatform.VANILLA);
+        try {
+            Path iconoTemporal = resolverIconoPorDefecto();
+            adapter.install(serverTemporal, new ServerInstallationRequest(
+                    targetDirectory,
+                    version,
+                    true,
+                    iconoTemporal,
+                    MOJANG_API
+            ));
+            return true;
+        } catch (UnsupportedOperationException e) {
+            return false;
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se ha podido finalizar la instalacion del servidor: " + e.getMessage(),
+                    "Instalacion",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return false;
+        }
+    }
+
+    private Path resolverIconoPorDefecto() {
+        Path local = Path.of("default_image.png");
+        if (Files.isRegularFile(local)) {
+            return local;
+        }
+        try (InputStream in = GestorServidores.class.getResourceAsStream("/default_image.png")) {
+            if (in == null) {
+                return null;
+            }
+            Path tempFile = Files.createTempFile("easymc-default-icon", ".png");
+            Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+            tempFile.toFile().deleteOnExit();
+            return tempFile;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     // Esta función es la encargada de importar un servidor a partir de una carpeta
     public Server importarServidor(){
         JFileChooser chooser = new JFileChooser();
@@ -648,9 +730,11 @@ public class GestorServidores {
             }
             Server server = new Server();
             server.setServerDir(directorio.getAbsolutePath());
-            server.setVersion(DetectorVersionServidor.detectarVersionVanilla(server));
+            aplicarPerfilPlataforma(server, inspeccionarServidor(Path.of(server.getServerDir())));
+            if (server.getVersion() == null || server.getVersion().isBlank()) {
+                server.setVersion(DetectorVersionServidor.detectarVersionVanilla(server));
+            }
             server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), true));
-            server.setTipo(DetectorTipoServidor.detectarTipo(Path.of(server.getServerDir())));
 
             guardarServidor(server);
             GestorMundos.sincronizarMundosServidor(server);
@@ -845,11 +929,16 @@ public class GestorServidores {
         } catch (RuntimeException e) {
             server.appendConsoleLinea("[WARN] No se ha podido preparar Easy-MC-Worlds: " + e.getMessage());
         }
+
+        ServerPlatformAdapter adapter = resolverAdaptador(server);
         Path jar;
         try {
-            jar = Utilidades.encontrarEjecutableJar(dir);
+            jar = adapter.resolveExecutableJar(dir);
         } catch (RuntimeException e) {
             server.appendConsoleLinea("[ERROR] No se ha podido encontrar el .jar del servidor: " + e.getMessage());
+            return;
+        } catch (IOException e) {
+            server.appendConsoleLinea("[ERROR] No se ha podido resolver el .jar del servidor: " + e.getMessage());
             return;
         }
         if (jar == null) {
@@ -875,16 +964,7 @@ public class GestorServidores {
             server.appendConsoleLinea("[ERROR] No se ha podido escribir el puerto en server.properties: " + e.getMessage());
         }
 
-        ProcessBuilder pb = new ProcessBuilder("java",
-                "-Xms"+serverConfig.getRamInit()+"M",
-                "-Xmx"+serverConfig.getRamMax()+"M",
-                "-jar",
-                jar.toString(),
-                "nogui"
-        );
-
-        pb.directory(dir.toFile());
-        pb.redirectErrorStream(true);
+        ProcessBuilder pb = adapter.buildStartProcess(server, jar);
         server.appendConsoleLinea("[INFO] Iniciando servidor con "+serverConfig.getRamInit()+"M y "+serverConfig.getRamMax()+"M de RAM.");
 
         try{

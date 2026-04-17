@@ -1,0 +1,13 @@
+package modelo.extensions;
+
+public enum ServerCapability {
+    CORE_SERVER,
+    WORLD_MANAGEMENT,
+    PLAYER_MANAGEMENT,
+    SERVER_CONFIGURATION,
+    CONSOLE_ACCESS,
+    PERFORMANCE_MONITORING,
+    EXTENSIONS,
+    MOD_EXTENSIONS,
+    PLUGIN_EXTENSIONS
+}

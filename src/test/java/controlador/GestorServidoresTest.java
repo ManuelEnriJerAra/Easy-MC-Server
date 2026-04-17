@@ -1,6 +1,10 @@
 package controlador;
 
 import modelo.Server;
+import modelo.extensions.ServerCapability;
+import modelo.extensions.ServerEcosystemType;
+import modelo.extensions.ServerLoader;
+import modelo.extensions.ServerPlatform;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import support.TestWorldFixtures;
@@ -10,6 +14,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -47,6 +52,11 @@ class GestorServidoresTest {
         assertThat(persisted.getFirst().getPreviewRenderCenterId()).isEqualTo("spawn");
         assertThat(persisted.getFirst().getEstadisticasCpuActiva()).isTrue();
         assertThat(persisted.getFirst().getEstadisticasCpuHistorial()).isTrue();
+        assertThat(persisted.getFirst().getPlatform()).isEqualTo(ServerPlatform.UNKNOWN);
+        assertThat(persisted.getFirst().getLoader()).isEqualTo(ServerLoader.UNKNOWN);
+        assertThat(persisted.getFirst().getEcosystemType()).isEqualTo(ServerEcosystemType.UNKNOWN);
+        assertThat(persisted.getFirst().getCapabilities()).contains(ServerCapability.CORE_SERVER);
+        assertThat(persisted.getFirst().getExtensions()).isNotNull().isEmpty();
     }
 
     @Test
@@ -80,6 +90,51 @@ class GestorServidoresTest {
         assertThat(persisted.getPreviewRenderCenterId()).isEqualTo("spawn");
         assertThat(persisted.getEstadisticasCpuActiva()).isTrue();
         assertThat(persisted.getEstadisticasCpuHistorial()).isTrue();
+        assertThat(persisted.getPlatform()).isEqualTo(ServerPlatform.VANILLA);
+        assertThat(persisted.getLoader()).isEqualTo(ServerLoader.VANILLA);
+        assertThat(persisted.getEcosystemType()).isEqualTo(ServerEcosystemType.NONE);
+        assertThat(persisted.getExtensions()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void constructor_debeMigrarTipoLegacyAPlataformaLoaderYCapacidades() throws Exception {
+        Path jsonPath = tempDir.resolve("ServerList.json");
+        Path forgeDir = tempDir.resolve("legacy-forge-server");
+        TestWorldFixtures.createValidServerJar(forgeDir, "server.jar");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+
+        String legacyJson = """
+                [
+                  {
+                    "id": "legacy-1",
+                    "displayName": "Legacy Forge",
+                    "tipo": "FORGE",
+                    "serverDir": "%s"
+                  }
+                ]
+                """.formatted(forgeDir.toString().replace("\\", "\\\\"));
+        Files.writeString(jsonPath, legacyJson, StandardCharsets.UTF_8);
+
+        GestorServidores gestor = new GestorServidores(jsonPath.toFile());
+
+        Server persisted = gestor.getListaServidores().getFirst();
+        assertThat(persisted.getTipo()).isEqualTo("FORGE");
+        assertThat(persisted.getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(persisted.getLoader()).isEqualTo(ServerLoader.FORGE);
+        assertThat(persisted.getEcosystemType()).isEqualTo(ServerEcosystemType.MODS);
+        assertThat(persisted.getCapabilities()).contains(
+                ServerCapability.CORE_SERVER,
+                ServerCapability.EXTENSIONS,
+                ServerCapability.MOD_EXTENSIONS
+        );
+        assertThat(persisted.getExtensions()).isNotNull().isEmpty();
+
+        List<Server> reloaded = new ObjectMapper().readValue(jsonPath.toFile(),
+                new tools.jackson.core.type.TypeReference<>() {});
+        assertThat(reloaded.getFirst().getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(reloaded.getFirst().getLoader()).isEqualTo(ServerLoader.FORGE);
+        assertThat(reloaded.getFirst().getEcosystemType()).isEqualTo(ServerEcosystemType.MODS);
     }
 
     @Test
