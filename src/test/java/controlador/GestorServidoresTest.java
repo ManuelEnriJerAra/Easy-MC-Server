@@ -5,6 +5,11 @@ import modelo.extensions.ServerCapability;
 import modelo.extensions.ServerEcosystemType;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
+import controlador.platform.ServerCreationOption;
+import controlador.platform.ServerInstallationRequest;
+import controlador.platform.ServerPlatformAdapter;
+import controlador.platform.ServerPlatformProfile;
+import controlador.platform.ServerValidationResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import support.TestWorldFixtures;
@@ -18,6 +23,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -179,6 +186,119 @@ class GestorServidoresTest {
         assertThat(imported.getLoader()).isEqualTo(ServerLoader.PAPER);
         assertThat(imported.getEcosystemType()).isEqualTo(ServerEcosystemType.PLUGINS);
         assertThat(imported.getCapabilities()).contains(ServerCapability.PLUGIN_EXTENSIONS);
+    }
+
+    @Test
+    void puedeConvertirseAPlataformaCompatible_soloDebeAceptarServidoresVanillaDetectables() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+
+        Path vanillaDir = tempDir.resolve("convertible-vanilla");
+        TestWorldFixtures.createValidServerJar(vanillaDir, "launch-anything.jar", "{\"id\":\"1.20.1\"}");
+        Server vanilla = new Server();
+        vanilla.setServerDir(vanillaDir.toString());
+        vanilla.setPlatform(ServerPlatform.UNKNOWN);
+
+        Path paperDir = tempDir.resolve("non-convertible-paper");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "runtime.jar",
+                "{\"id\":\"1.20.1\"}",
+                "io/papermc/paper/PaperBootstrap.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Server paper = new Server();
+        paper.setServerDir(paperDir.toString());
+
+        assertThat(gestor.puedeConvertirseAPlataformaCompatible(vanilla)).isTrue();
+        assertThat(vanilla.getPlatform()).isEqualTo(ServerPlatform.VANILLA);
+        assertThat(gestor.puedeConvertirseAPlataformaCompatible(paper)).isFalse();
+    }
+
+    @Test
+    void convertirServidorExistente_debeCrearBackupYPreservarConfiguracionYMundo() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path serverDir = tempDir.resolve("vanilla-to-forge");
+        TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"1.20.1\"}");
+        Files.createDirectories(serverDir.resolve("world"));
+        Files.writeString(serverDir.resolve("world").resolve("level.dat"), "world-data");
+        Properties props = new Properties();
+        props.setProperty("motd", "Vanilla MOTD");
+        props.setProperty("level-name", "world");
+        TestWorldFixtures.writeServerProperties(serverDir, props);
+
+        Server server = new Server();
+        server.setServerDir(serverDir.toString());
+        server.setDisplayName("Convertible");
+        server.setVersion("1.20.1");
+        server.setPlatform(ServerPlatform.VANILLA);
+        gestor.guardarServidor(server);
+
+        ServerPlatformAdapter forgeInstaller = new ServerPlatformAdapter() {
+            @Override
+            public ServerPlatform getPlatform() {
+                return ServerPlatform.FORGE;
+            }
+
+            @Override
+            public ServerPlatformProfile detect(Path serverDir) {
+                return null;
+            }
+
+            @Override
+            public ServerValidationResult validate(Path serverDir) {
+                return ServerValidationResult.ok();
+            }
+
+            @Override
+            public void install(Server transientServer, ServerInstallationRequest request) throws java.io.IOException {
+                Files.deleteIfExists(request.targetDirectory().resolve("server.jar"));
+                TestWorldFixtures.createValidServerJar(
+                        request.targetDirectory(),
+                        "runtime.jar",
+                        "{\"id\":\"1.20.1\"}",
+                        "net/minecraftforge/server/ServerMain.class"
+                );
+                Files.createDirectories(request.targetDirectory().resolve("libraries"));
+                Files.createDirectories(request.targetDirectory().resolve("mods"));
+                Files.writeString(request.targetDirectory().resolve("run.bat"), "@echo off");
+            }
+
+            @Override
+            public ProcessBuilder buildStartProcess(Server server, Path executableJar) {
+                return new ProcessBuilder("java", "-jar", executableJar.toString());
+            }
+
+            @Override
+            public Path resolveExecutableJar(Path serverDir) {
+                return serverDir.resolve("runtime.jar");
+            }
+        };
+
+        Server converted = gestor.convertirServidorExistente(
+                server,
+                forgeInstaller,
+                new ServerCreationOption(ServerPlatform.FORGE, "1.20.1", "1.20.1-47.4.18", "Forge 1.20.1", "ignored"),
+                (url, destination) -> {}
+        );
+
+        assertThat(converted).isNotNull();
+        assertThat(converted.getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(converted.getLoader()).isEqualTo(ServerLoader.FORGE);
+        assertThat(converted.getEcosystemType()).isEqualTo(ServerEcosystemType.MODS);
+        assertThat(converted.getCapabilities()).contains(ServerCapability.MOD_EXTENSIONS);
+        assertThat(converted.getLoaderVersion()).isEqualTo("1.20.1-47.4.18");
+        assertThat(
+                Files.exists(serverDir.resolve("world").resolve("level.dat"))
+                        || Files.exists(serverDir.resolve(GestorMundos.DIRECTORIO_MUNDOS).resolve("world").resolve("level.dat"))
+        ).isTrue();
+        assertThat(Files.exists(serverDir.resolve("mods"))).isTrue();
+        assertThat(Utilidades.leerMotdDesdeProperties(serverDir)).isEqualTo("Vanilla MOTD");
+
+        try (var backups = Files.list(tempDir)) {
+            assertThat(backups.map(path -> path.getFileName().toString())
+                    .filter(name -> name.contains("backup_before_forge"))
+                    .toList()).isNotEmpty();
+        }
     }
 
     @Test

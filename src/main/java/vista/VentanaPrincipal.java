@@ -412,7 +412,7 @@ public class VentanaPrincipal extends JFrame {
 
         panelDerechoCards.removeAll();
         VentanaPrincipalRightContentBuilder.Result content = new VentanaPrincipalRightContentBuilder()
-                .build(server, gestorServidores, this.getWidth());
+                .build(server, gestorServidores, this.getWidth(), this::actualizarServidorTrasConversion);
         splitHome = content.splitHome();
         jugadoresCard = content.jugadoresCard();
         consolaCard = content.consolaCard();
@@ -442,6 +442,20 @@ public class VentanaPrincipal extends JFrame {
         setPaginaDerecha(paginaAMostrar);
         panelDerechoCards.revalidate();
         panelDerechoCards.repaint();
+    }
+
+    private void actualizarServidorTrasConversion(Server server) {
+        if (server == null) {
+            return;
+        }
+        gestorServidores.setServidorSeleccionado(server);
+        if (listaServidoresPanel != null) {
+            listaServidoresPanel.refrescarListado();
+            listaServidoresPanel.mostrarSeleccionServidor(server);
+        }
+        if (panelDerecho != null) {
+            renderizarPanelDerecho(server);
+        }
     }
 
     private JPanel construirBarraVertical() {
