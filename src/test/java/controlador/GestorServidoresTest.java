@@ -138,6 +138,50 @@ class GestorServidoresTest {
     }
 
     @Test
+    void importarServidorDesdeDirectorio_debeDetectarForgeYActivarExperienciaMods() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path forgeDir = tempDir.resolve("import-forge");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "launch.jar",
+                "{\"id\":\"1.20.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+
+        Server imported = gestor.importarServidorDesdeDirectorio(forgeDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getTipo()).isEqualTo("FORGE");
+        assertThat(imported.getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(imported.getLoader()).isEqualTo(ServerLoader.FORGE);
+        assertThat(imported.getEcosystemType()).isEqualTo(ServerEcosystemType.MODS);
+        assertThat(imported.getCapabilities()).contains(ServerCapability.MOD_EXTENSIONS);
+    }
+
+    @Test
+    void importarServidorDesdeDirectorio_debeDetectarPaperYActivarExperienciaPlugins() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path paperDir = tempDir.resolve("import-paper");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "custom-runtime.jar",
+                "{\"id\":\"1.21.1\"}",
+                "io/papermc/paper/PaperBootstrap.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+
+        Server imported = gestor.importarServidorDesdeDirectorio(paperDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getTipo()).isEqualTo("PAPER");
+        assertThat(imported.getPlatform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(imported.getLoader()).isEqualTo(ServerLoader.PAPER);
+        assertThat(imported.getEcosystemType()).isEqualTo(ServerEcosystemType.PLUGINS);
+        assertThat(imported.getCapabilities()).contains(ServerCapability.PLUGIN_EXTENSIONS);
+    }
+
+    @Test
     void establecerFavoritoYReordenarServidores_debenMantenerOrdenVisualEstable() {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
         Server alpha = new Server();

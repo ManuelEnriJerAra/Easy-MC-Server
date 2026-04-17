@@ -738,26 +738,40 @@ public class GestorServidores {
 
         // pedimos al usuario que indique la carpeta
         if(chooser.showDialog(chooser,"Seleccionar") == JFileChooser.APPROVE_OPTION){
-            File directorio = chooser.getSelectedFile();
-            for(Server server : listaServidores){
-                if(server.getServerDir().equals(directorio.getAbsolutePath())){
-                    System.out.println("El servidor ya está importado.");
-                    return server;
-                }
-            }
-            Server server = new Server();
-            server.setServerDir(directorio.getAbsolutePath());
-            aplicarPerfilPlataforma(server, inspeccionarServidor(Path.of(server.getServerDir())));
-            if (server.getVersion() == null || server.getVersion().isBlank()) {
-                server.setVersion(DetectorVersionServidor.detectarVersionVanilla(server));
-            }
-            server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), true));
-
-            guardarServidor(server);
-            GestorMundos.sincronizarMundosServidor(server);
-            return server;
+            return importarServidorDesdeDirectorio(chooser.getSelectedFile().toPath());
         }
         return null;
+    }
+
+    Server importarServidorDesdeDirectorio(Path directorio) {
+        if (directorio == null) return null;
+
+        String directorioNormalizado = directorio.toAbsolutePath().toString();
+        for (Server existente : listaServidores) {
+            if (existente == null || existente.getServerDir() == null) continue;
+            if (existente.getServerDir().equals(directorioNormalizado)) {
+                System.out.println("El servidor ya está importado.");
+                return existente;
+            }
+        }
+
+        ServerPlatformProfile profile = inspeccionarServidor(directorio);
+        if (profile == null) {
+            System.out.println("No se ha podido detectar una plataforma valida para el servidor importado.");
+            return null;
+        }
+
+        Server server = new Server();
+        server.setServerDir(directorioNormalizado);
+        aplicarPerfilPlataforma(server, profile);
+        if (server.getVersion() == null || server.getVersion().isBlank()) {
+            server.setVersion(DetectorVersionServidor.detectarVersionVanilla(server));
+        }
+        server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), true));
+
+        guardarServidor(server);
+        GestorMundos.sincronizarMundosServidor(server);
+        return server;
     }
 
     // Guarda la lista de servidores en el JSON
