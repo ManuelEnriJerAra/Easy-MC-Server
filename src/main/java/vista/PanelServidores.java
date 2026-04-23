@@ -11,14 +11,27 @@
 
 package vista;
 
-import controlador.GestorServidores;
-import controlador.Utilidades;
-import modelo.Server;
-import com.formdev.flatlaf.extras.components.FlatScrollPane;
-import com.formdev.flatlaf.ui.*;
-
-import javax.swing.*;
-import java.awt.*;
+import java.awt.AWTEvent;
+import java.awt.AlphaComposite;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Cursor;
+import java.awt.Desktop;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridBagLayout;
+import java.awt.IllegalComponentStateException;
+import java.awt.Insets;
+import java.awt.MouseInfo;
+import java.awt.Point;
+import java.awt.PointerInfo;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
 import java.awt.event.AWTEventListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -30,8 +43,33 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JRootPane;
+import javax.swing.JScrollBar;
+import javax.swing.JViewport;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
+import com.formdev.flatlaf.ui.FlatLineBorder;
+
+import controlador.GestorServidores;
+import controlador.Utilidades;
+import modelo.Server;
+
 public class PanelServidores extends FlatScrollPane {
     private static final Dimension MIN_SIZE = new Dimension(240, 240); // ancho justo para que no tape el estado "Inactivo"
+    private static final int FAVORITE_CORNER_GAP = 6;
     int arc;
     Color acento;
     Color base;
@@ -248,7 +286,6 @@ public class PanelServidores extends FlatScrollPane {
         JPanel panelContenedor = new JPanel();
         panelContenedor.setOpaque(true);
         panelContenedor.setBackground(bgLista);
-        panelContenedor.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6)); // deja aire para que se vea el radio
         panelContenedor.setLayout(new BoxLayout(panelContenedor, BoxLayout.Y_AXIS));
 
         if(servidores == null) return panelContenedor;
@@ -305,7 +342,7 @@ public class PanelServidores extends FlatScrollPane {
         // Panel de texto, nombre arriba, MOTD centro, versión abajo
         JPanel panelDerecho = new JPanel(new BorderLayout(0,0));
         panelDerecho.setOpaque(false);
-        panelDerecho.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 10));
+        panelDerecho.setBorder(BorderFactory.createEmptyBorder(FAVORITE_CORNER_GAP, 0, 8, FAVORITE_CORNER_GAP));
 
         // Info arriba
         JPanel infoPanel = new JPanel();
@@ -318,9 +355,6 @@ public class PanelServidores extends FlatScrollPane {
         String nombreServidor = servidor.getDisplayName();
         if(nombreServidor == null || nombreServidor.isBlank()){
             nombreServidor = "(sin nombre)";
-        }
-        if(Boolean.TRUE.equals(servidor.getFavorito())){
-            nombreServidor = "\u2605 " + nombreServidor;
         }
         nombreLabel.putClientProperty("fullText", nombreServidor);
 
@@ -339,13 +373,21 @@ public class PanelServidores extends FlatScrollPane {
         infoPanel.add(motdLabel);
         infoPanel.add(versionLabel);
 
-        panelDerecho.add(infoPanel, BorderLayout.NORTH);
+        JPanel topPanel = new JPanel(new BorderLayout(0, 0));
+        topPanel.setOpaque(false);
+        topPanel.add(infoPanel, BorderLayout.CENTER);
+
+        JButton favoritoButton = crearBotonFavorito(servidor, fila);
+        JPanel favoritoWrap = new JPanel(new BorderLayout());
+        favoritoWrap.setOpaque(false);
+        favoritoWrap.add(favoritoButton, BorderLayout.NORTH);
+        topPanel.add(favoritoWrap, BorderLayout.EAST);
+
+        panelDerecho.add(topPanel, BorderLayout.NORTH);
 
         // Indicador de estado (Abajo)
         JLabel estado = new JLabel();
         estado.setFont(estado.getFont().deriveFont(Font.BOLD, 14f)); // que esté bien grande
-        boolean vivo = servidor.getServerProcess() != null && servidor.getServerProcess().isAlive();
-        // El texto no cambia de color: solo el punto.
         estado.setForeground(AppTheme.getForeground());
         actualizarEstadoLabel(estado, servidor);
         estado.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -381,6 +423,8 @@ public class PanelServidores extends FlatScrollPane {
         fila.putClientProperty("server", servidor);
         fila.putClientProperty("estadoLabel", estado);
         fila.putClientProperty("panelIcono", panelIcono);
+        fila.putClientProperty("favoritoButton", favoritoButton);
+        fila.putClientProperty("hovered", Boolean.FALSE);
         MouseAdapter filaMouse = new MouseAdapter() {
             private void maybeShow(MouseEvent e){
                 if(dragActiva) return;
@@ -424,19 +468,12 @@ public class PanelServidores extends FlatScrollPane {
             @Override
             public void mouseEntered(MouseEvent e){
                 if(dragActiva && fila == filaArrastrada) return;
-                refrescarTema(false);
-                if(fila != filaSeleccionada){
-                    fila.setBorder(bordeHover);
-                    fila.setBackground(bgHover);
-                    syncIconBg(fila);
-                    fila.repaint();
-                }
+                aplicarEstadoHoverFila(fila, true);
             }
 
             @Override
             public void mouseExited(MouseEvent e){
                 if(dragActiva && fila == filaArrastrada) return;
-                refrescarTema(false);
                 try{
                     Point p = obtenerPuntoPantalla(e);
                     if(p == null) return;
@@ -444,16 +481,30 @@ public class PanelServidores extends FlatScrollPane {
                     if(fila.contains(p)) return;
                 } catch (IllegalComponentStateException ignored){
                 }
-                if (fila != filaSeleccionada){
-                    fila.setBorder(bordeRedondo);
-                    fila.setBackground(bgNormal);
-                    syncIconBg(fila);
-                    fila.repaint();
-                }
+                aplicarEstadoHoverFila(fila, false);
             }
         };
+        favoritoButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                aplicarEstadoHoverFila(fila, true);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                try{
+                    Point p = obtenerPuntoPantalla(e);
+                    if(p == null) return;
+                    SwingUtilities.convertPointFromScreen(p, fila);
+                    if(fila.contains(p)) return;
+                } catch (IllegalComponentStateException ignored){
+                }
+                aplicarEstadoHoverFila(fila, false);
+            }
+        });
         hacerFilaClickable(fila, filaMouse);
         fila.setBorder(bordeRedondo);
+        actualizarBotonFavorito(favoritoButton, servidor, false);
         return fila;
     }
 
@@ -946,6 +997,9 @@ public class PanelServidores extends FlatScrollPane {
 
     private void hacerFilaClickable(Component c, MouseAdapter adapter){
         if(c == null) return;
+        if(c instanceof JComponent component && Boolean.TRUE.equals(component.getClientProperty("excludeRowMouseHandling"))){
+            return;
+        }
         c.addMouseListener(adapter);
         c.addMouseMotionListener(adapter);
         c.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -980,6 +1034,56 @@ public class PanelServidores extends FlatScrollPane {
         String dotColor = iniciando ? "#FF9800" : (vivo ? "#00C853" : "#D50000");
         String texto = iniciando ? "Iniciando" : (vivo ? "Activo" : "Inactivo");
         estado.setText("<html><span style='color:" + dotColor + ";'>●</span> " + texto + "</html>");
+    }
+
+    private JButton crearBotonFavorito(Server servidor, JPanel fila){
+        JButton button = new JButton();
+        button.putClientProperty("excludeRowMouseHandling", Boolean.TRUE);
+        button.setFocusable(false);
+        button.setOpaque(false);
+        button.setContentAreaFilled(false);
+        button.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(32, 32));
+        button.setMinimumSize(new Dimension(32, 32));
+        button.setMaximumSize(new Dimension(32, 32));
+        button.addActionListener(e -> {
+            boolean nuevoFavorito = !Boolean.TRUE.equals(servidor.getFavorito());
+            gestorServidores.establecerFavorito(servidor, nuevoFavorito);
+            actualizarBotonFavorito(button, servidor, true);
+        });
+        return button;
+    }
+
+    private void actualizarBotonFavorito(AbstractButton button, Server servidor, boolean hovered){
+        if(button == null) return;
+        boolean favorito = servidor != null && Boolean.TRUE.equals(servidor.getFavorito());
+        String iconPath = favorito ? "easymcicons/star.svg" : "easymcicons/star-unselected.svg";
+        button.setIcon(SvgIconFactory.create(iconPath, 24, 24, this::getFavoriteStarColor));
+        button.setToolTipText(favorito ? "Quitar de favoritos" : "Marcar como favorito");
+        button.setVisible(favorito || hovered);
+        button.repaint();
+    }
+
+    private Color getFavoriteStarColor(){
+        return AppTheme.isLightTheme() ? new Color(0xE0AA00) : new Color(0xFFC933);
+    }
+
+    private void aplicarEstadoHoverFila(JPanel fila, boolean hovered){
+        if(fila == null) return;
+        fila.putClientProperty("hovered", hovered);
+        refrescarTema(false);
+        if(fila != filaSeleccionada){
+            fila.setBorder(hovered ? bordeHover : bordeRedondo);
+            fila.setBackground(hovered ? bgHover : bgNormal);
+            syncIconBg(fila);
+            fila.repaint();
+        }
+        Object favoritoButtonObj = fila.getClientProperty("favoritoButton");
+        Object serverObj = fila.getClientProperty("server");
+        if(favoritoButtonObj instanceof AbstractButton favoritoButton && serverObj instanceof Server server){
+            actualizarBotonFavorito(favoritoButton, server, hovered);
+        }
     }
 
     private void marcarFilaSeleccionada(JPanel fila){
@@ -1107,9 +1211,17 @@ public class PanelServidores extends FlatScrollPane {
             } else if(fila == filaSeleccionada){
                 fila.setBorder(bordeSeleccionado);
                 fila.setBackground(bgSelected);
+            } else if(Boolean.TRUE.equals(fila.getClientProperty("hovered"))){
+                fila.setBorder(bordeHover);
+                fila.setBackground(bgHover);
             } else {
                 fila.setBorder(bordeRedondo);
                 fila.setBackground(bgNormal);
+            }
+            Object favoritoButtonObj = fila.getClientProperty("favoritoButton");
+            Object serverObj = fila.getClientProperty("server");
+            if(favoritoButtonObj instanceof AbstractButton favoritoButton && serverObj instanceof Server server){
+                actualizarBotonFavorito(favoritoButton, server, Boolean.TRUE.equals(fila.getClientProperty("hovered")));
             }
             syncIconBg(fila); // sincroniza el panel del icono con el fondo nuevo del tema
             fila.repaint();
