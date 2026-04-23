@@ -104,6 +104,18 @@ public class MojangAPI {
         }
     }
 
+    public JsonNode obtenerVersionJson(String versionId) {
+        try {
+            String versionJsonUrl = obtenerUrlVersionJson(versionId);
+            if (versionJsonUrl == null || versionJsonUrl.isBlank()) {
+                throw new IllegalArgumentException("No se encontro metadata para la version " + versionId);
+            }
+            return readJsonFromUrl(versionJsonUrl);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public interface DownloadProgressListener {
         void onProgress(long bytesLeidos, long totalBytes);
     }

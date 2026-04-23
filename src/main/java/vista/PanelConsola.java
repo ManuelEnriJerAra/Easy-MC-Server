@@ -6,12 +6,13 @@ import com.formdev.flatlaf.extras.components.FlatCheckBox;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 
 import javax.swing.*;
+import java.beans.PropertyChangeListener;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
-import java.awt.event.ActionEvent;
+import java.awt.event.HierarchyEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashSet;
@@ -25,16 +26,15 @@ public class PanelConsola extends JPanel {
     private static final Pattern LEFT = Pattern.compile("([^\\s]+) left the game");
     private static final Pattern HORA = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
 
-    // Colores por tipo
     private static final Color COLOR_INFO = AppTheme.getConsoleInfoForeground();
     private static final Color COLOR_CHAT = AppTheme.getConsoleChatForeground();
     private static final Color COLOR_ERROR = AppTheme.getConsoleErrorForeground();
 
-    private final int MAX_LINEAS = 5000;
+    private static final int MAX_LINEAS = 5000;
 
     private final JTextPane consolaPane = new JTextPane();
-    private JTextPane comandoPane = new JTextPane();
     private final StyledDocument documento = consolaPane.getStyledDocument();
+    private final AdvancedConsoleInput advancedConsoleInput;
 
     private Style styleInfo;
     private Style styleChat;
@@ -45,6 +45,7 @@ public class PanelConsola extends JPanel {
 
     private final GestorServidores gestorServidores;
     private final FlatCheckBox vistaSimpleCheckbox = new FlatCheckBox();
+    private final PropertyChangeListener estadoServidorListener;
 
     private int arc;
     private RoundedBackgroundPanel scrollWrap;
@@ -54,15 +55,27 @@ public class PanelConsola extends JPanel {
         this.setLayout(new BorderLayout(0, 8));
         this.setOpaque(false);
         this.gestorServidores = gestorServidores;
+        this.advancedConsoleInput = new AdvancedConsoleInput(
+                gestorServidores::getServidorSeleccionado,
+                this::snapshotJugadoresConectados,
+                this::enviarComando
+        );
+        this.estadoServidorListener = evt -> {
+            if (!"estadoServidor".equals(evt.getPropertyName())) {
+                return;
+            }
+            advancedConsoleInput.notifyRuntimeStateChanged();
+        };
         this.setMinimumSize(new Dimension(this.getWidth(), 200));
-        consolaPane.setEditable(false);
         this.setBorder(BorderFactory.createEmptyBorder());
-        refreshThemeRefs();
+        this.gestorServidores.addPropertyChangeListener("estadoServidor", estadoServidorListener);
 
-        // Inicialización de estilo
+        consolaPane.setEditable(false);
         consolaPane.setBackground(AppTheme.getConsoleBackground());
         consolaPane.setFont(new Font("Monospaced", Font.PLAIN, 12));
         consolaPane.setOpaque(true);
+
+        refreshThemeRefs();
         inicializarEstilo();
 
         FlatScrollPane scroll = new FlatScrollPane();
@@ -76,7 +89,7 @@ public class PanelConsola extends JPanel {
 
         vistaSimpleCheckbox.setText("Vista Simple");
         vistaSimpleCheckbox.setSelected(true);
-        vistaSimpleCheckbox.addActionListener(e->actualizarConsola());
+        vistaSimpleCheckbox.addActionListener(e -> actualizarConsola());
         vistaSimpleCheckbox.setOpaque(false);
         vistaSimpleCheckbox.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
         vistaSimpleCheckbox.setHorizontalTextPosition(SwingConstants.LEFT);
@@ -107,9 +120,9 @@ public class PanelConsola extends JPanel {
         overlayHeader.setOpaque(false);
         overlayHeader.add(overlayBadge);
 
-        JLayeredPane layeredConsole = new JLayeredPane(){
+        JLayeredPane layeredConsole = new JLayeredPane() {
             @Override
-            public void doLayout(){
+            public void doLayout() {
                 int w = getWidth();
                 int h = getHeight();
                 scrollWrap.setBounds(0, 0, w, h);
@@ -130,42 +143,33 @@ public class PanelConsola extends JPanel {
         JLabel pico = new JLabel(">");
         pico.setForeground(AppTheme.getConsoleForeground());
         pico.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        comandoPane.setEditable(true);
-        comandoPane.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        comandoPane.setOpaque(false);
-        comandoPane.setForeground(AppTheme.getConsoleForeground());
-        comandoPane.setBorder(null);
         panelComandos.add(pico, BorderLayout.WEST);
-        panelComandos.add(comandoPane, BorderLayout.CENTER);
-        // Interacción con la línea de comandos
-        comandoPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), "enviarComando");
-        comandoPane.getActionMap().put("enviarComando", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String comando = comandoPane.getText().trim();
-                if(comando.isBlank()) return;
-                Server server = gestorServidores.getServidorSeleccionado();
-                gestorServidores.mandarComando(server, comando);
-                comandoPane.setText("");
-            }
-        });
+        panelComandos.add(advancedConsoleInput, BorderLayout.CENTER);
+
         comandoWrap = new RoundedBackgroundPanel(AppTheme.getConsoleBackground(), arc);
         comandoWrap.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         comandoWrap.add(panelComandos, BorderLayout.CENTER);
-
         this.add(comandoWrap, BorderLayout.SOUTH);
 
+        this.addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) {
+                return;
+            }
+            if (!isDisplayable()) {
+                gestorServidores.removePropertyChangeListener("estadoServidor", estadoServidorListener);
+            }
+        });
     }
 
     @Override
-    public void updateUI(){
+    public void updateUI() {
         super.updateUI();
         refreshThemeRefs();
-        if(scrollWrap != null) scrollWrap.setArc(arc);
-        if(comandoWrap != null) comandoWrap.setArc(arc);
+        if (scrollWrap != null) scrollWrap.setArc(arc);
+        if (comandoWrap != null) comandoWrap.setArc(arc);
     }
 
-    private void refreshThemeRefs(){
+    private void refreshThemeRefs() {
         arc = AppTheme.getArc();
         Color consoleBackground = AppTheme.getConsoleBackground();
         if (consolaPane != null) {
@@ -176,6 +180,9 @@ public class PanelConsola extends JPanel {
         }
         if (comandoWrap != null) {
             comandoWrap.setBackground(consoleBackground);
+        }
+        if (advancedConsoleInput != null) {
+            advancedConsoleInput.refreshTheme();
         }
     }
 
@@ -190,30 +197,33 @@ public class PanelConsola extends JPanel {
         StyleConstants.setForeground(styleError, COLOR_ERROR);
     }
 
-    void actualizarConsola(){
+    void actualizarConsola() {
         Server server = gestorServidores.getServidorSeleccionado();
-        if(server == null) return;
+        if (server == null) return;
 
         rawLineas.clear();
         rawLineas.addAll(server.getRawLogLines());
         jugadoresConectados.clear();
 
         reconstruirDocumentoCompleto();
+        advancedConsoleInput.notifyServerSelectionChanged();
+        advancedConsoleInput.notifyOnlinePlayersChanged(snapshotJugadoresConectados());
+        advancedConsoleInput.refreshContext();
     }
 
-    public void escribirLinea(String raw){
-        SwingUtilities.invokeLater(()->{
-            if(raw.isBlank()) return;
+    public void escribirLinea(String raw) {
+        SwingUtilities.invokeLater(() -> {
+            if (raw == null || raw.isBlank()) return;
 
             rawLineas.addLast(raw);
 
             boolean recortado = false;
-            while(rawLineas.size()>MAX_LINEAS){
+            while (rawLineas.size() > MAX_LINEAS) {
                 rawLineas.removeFirst();
                 recortado = true;
             }
 
-            if(recortado){
+            if (recortado) {
                 reconstruirDocumentoCompleto();
                 return;
             }
@@ -221,35 +231,37 @@ public class PanelConsola extends JPanel {
             boolean vistaSimple = vistaSimpleCheckbox.isSelected();
             RenderLine renderLine = render(raw, vistaSimple);
             actualizarJugadoresConectados(raw);
+            advancedConsoleInput.notifyOnlinePlayersChanged(snapshotJugadoresConectados());
 
-            // si no hay traducción no imprimimos nada
-            if(vistaSimple && renderLine.texto==null) return;
+            if (vistaSimple && renderLine.texto == null) return;
 
             appendStyledLine(renderLine.texto, renderLine.estilo);
         });
     }
 
-    private void reconstruirDocumentoCompleto(){
-        try{
+    private void reconstruirDocumentoCompleto() {
+        try {
             documento.remove(0, documento.getLength());
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
         }
         boolean vistaSimple = vistaSimpleCheckbox.isSelected();
         jugadoresConectados.clear();
-        for(String raw : rawLineas){
+        for (String raw : rawLineas) {
             RenderLine renderLine = render(raw, vistaSimple);
             actualizarJugadoresConectados(raw);
 
-            if(vistaSimple && renderLine.texto==null) continue;
+            if (vistaSimple && renderLine.texto == null) continue;
 
             appendStyledLine(renderLine.texto, renderLine.estilo);
         }
+        advancedConsoleInput.notifyOnlinePlayersChanged(snapshotJugadoresConectados());
+        advancedConsoleInput.refreshContext();
     }
 
-    private void appendStyledLine(String texto, Style estilo){
-        if (texto.isEmpty()) return;
-        try{
+    private void appendStyledLine(String texto, Style estilo) {
+        if (texto == null || texto.isEmpty()) return;
+        try {
             documento.insertString(documento.getLength(), texto + "\n", estilo);
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
@@ -257,82 +269,71 @@ public class PanelConsola extends JPanel {
         consolaPane.setCaretPosition(documento.getLength());
     }
 
-    private RenderLine render(String raw, boolean vistaSimple){
-        if(vistaSimple){
-            String traducida = traducirLinea(raw); // puede devolver null
-            if(traducida == null) return new RenderLine(null, styleInfo); // no se muestra
+    private RenderLine render(String raw, boolean vistaSimple) {
+        if (vistaSimple) {
+            String traducida = traducirLinea(raw);
+            if (traducida == null) return new RenderLine(null, styleInfo);
             return new RenderLine(traducida, estiloPorTexto(traducida));
         } else {
             return new RenderLine(raw, styleInfo);
         }
     }
 
-    private Style estiloPorTexto(String texto){
-        // Errores
+    private Style estiloPorTexto(String texto) {
         if (texto.contains("[ERROR]")) return styleError;
-
-        // chat
         if (texto.contains("[CHAT]")) return styleChat;
-
-        // info
-        return  styleInfo;
+        return styleInfo;
     }
 
-    private String traducirLinea(String linea){
-        // ===== TRADUCCIÓN DE EVENTOS CONOCIDOS =====
-        // vamos a quitarle la hora primero
+    private String traducirLinea(String linea) {
         String hora = extraerHora(linea);
 
-
         if (linea.contains("[INFO]") || linea.contains("[CHAT]") || linea.contains("[ERROR]")) {
-            return linea; // es una línea que yo he escrito, que pase
+            return linea;
         }
 
-        // Errores
-        if (linea.contains("FAILED TO BIND TO PORT")){
-            return hora+"[ERROR] El puerto ya está en uso, es probable que haya otro servidor abierto.";
+        if (linea.contains("FAILED TO BIND TO PORT")) {
+            return hora + "[ERROR] El puerto ya esta en uso, es probable que haya otro servidor abierto.";
         }
 
-        if(linea.contains("Done")){
-            return(hora+"[INFO] El servidor se ha iniciado exitosamente.");
+        if (linea.contains("Done")) {
+            return hora + "[INFO] El servidor se ha iniciado exitosamente.";
         }
-        if(linea.contains("All dimensions are saved")){
-            return(hora+"[INFO] Mundo guardado.");
+        if (linea.contains("All dimensions are saved")) {
+            return hora + "[INFO] Mundo guardado.";
         }
 
-        // Chat
         Matcher mChat = CHAT.matcher(linea);
-        if(mChat.find()){
+        if (mChat.find()) {
             String user = mChat.group(1);
-            if(user != null) user = user.trim();
-            if(user == null || user.isBlank() || !jugadoresConectados.contains(user)) return null;
+            if (user != null) user = user.trim();
+            if (user == null || user.isBlank() || !jugadoresConectados.contains(user)) return null;
             String mensaje = mChat.group(2);
-            mensaje = mensaje.replaceAll("§.", "").trim();
-            if(mensaje.isBlank()) return null;
-            return (hora+"[CHAT] " + user + " ha dicho: " + mensaje);
+            mensaje = mensaje.replaceAll("Â§.", "").trim();
+            if (mensaje.isBlank()) return null;
+            return hora + "[CHAT] " + user + " ha dicho: " + mensaje;
         }
 
-        // Join / Leave
         Matcher mJoin = JOIN.matcher(linea);
-        if(mJoin.find()){
-            return(hora+"[INFO] "+mJoin.group(1)+" ha entrado.");
+        if (mJoin.find()) {
+            return hora + "[INFO] " + mJoin.group(1) + " ha entrado.";
         }
         Matcher mLeft = LEFT.matcher(linea);
-        if(mLeft.find()){
-            return (hora+"[INFO] "+mLeft.group(1)+" ha salido.");
+        if (mLeft.find()) {
+            return hora + "[INFO] " + mLeft.group(1) + " ha salido.";
         }
         return null;
     }
 
-    private void actualizarJugadoresConectados(String linea){
-        if(linea == null || linea.isBlank()) return;
+    private void actualizarJugadoresConectados(String linea) {
+        if (linea == null || linea.isBlank()) return;
 
         Matcher mJoin = JOIN.matcher(linea);
-        if(mJoin.find()){
+        if (mJoin.find()) {
             String nombre = mJoin.group(1);
-            if(nombre != null){
+            if (nombre != null) {
                 nombre = nombre.trim();
-                if(!nombre.isBlank()){
+                if (!nombre.isBlank()) {
                     jugadoresConectados.add(nombre);
                 }
             }
@@ -340,32 +341,45 @@ public class PanelConsola extends JPanel {
         }
 
         Matcher mLeft = LEFT.matcher(linea);
-        if(mLeft.find()){
+        if (mLeft.find()) {
             String nombre = mLeft.group(1);
-            if(nombre != null){
+            if (nombre != null) {
                 nombre = nombre.trim();
-                if(!nombre.isBlank()){
+                if (!nombre.isBlank()) {
                     jugadoresConectados.remove(nombre);
                 }
             }
         }
     }
+
+    private void enviarComando(String comando) {
+        if (comando == null || comando.isBlank()) return;
+        Server server = gestorServidores.getServidorSeleccionado();
+        if (server == null) return;
+        gestorServidores.mandarComando(server, comando);
+        advancedConsoleInput.refreshContext();
+    }
+
+    private Set<String> snapshotJugadoresConectados() {
+        return new LinkedHashSet<>(jugadoresConectados);
+    }
+
     private static class RenderLine {
         final String texto;
         final Style estilo;
+
         RenderLine(String texto, Style estilo) {
             this.texto = texto;
             this.estilo = estilo;
         }
     }
 
-    private String extraerHora(String linea){
-        if(linea == null) return null;
+    private String extraerHora(String linea) {
+        if (linea == null) return "";
         Matcher mHora = HORA.matcher(linea);
-        if(mHora.find()){
-            return "["+mHora.group(1)+"] ";
+        if (mHora.find()) {
+            return "[" + mHora.group(1) + "] ";
         }
-        return null;
+        return "";
     }
 }
-
