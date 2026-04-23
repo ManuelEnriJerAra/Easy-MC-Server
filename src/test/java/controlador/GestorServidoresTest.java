@@ -22,7 +22,7 @@ class GestorServidoresTest {
 
     @Test
     void guardarServidor_debeCompletarMetadatosYPersistirEnJsonAislado() throws Exception {
-        Path jsonPath = tempDir.resolve("ServerList.json");
+        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());
         Server server = new Server();
         server.setId(null);
@@ -51,7 +51,7 @@ class GestorServidoresTest {
 
     @Test
     void constructor_debeCompletarPreferenciasPreviewFaltantes() throws Exception {
-        Path jsonPath = tempDir.resolve("ServerList.json");
+        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
         Path serverDir = tempDir.resolve("previewless-server");
         TestWorldFixtures.createValidServerJar(serverDir, "server.jar");
         Server server = new Server();
@@ -84,7 +84,7 @@ class GestorServidoresTest {
 
     @Test
     void establecerFavoritoYReordenarServidores_debenMantenerOrdenVisualEstable() {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
         Server alpha = new Server();
         alpha.setDisplayName("Alpha");
         Server beta = new Server();
@@ -105,7 +105,7 @@ class GestorServidoresTest {
 
     @Test
     void constructor_debeEliminarServidoresPersistidosNoCargables() throws Exception {
-        Path jsonPath = tempDir.resolve("ServerList.json");
+        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
         Path validDir = tempDir.resolve("valid-server");
         Path invalidDir = tempDir.resolve("invalid-server");
         Files.createDirectories(invalidDir);
@@ -129,7 +129,7 @@ class GestorServidoresTest {
 
     @Test
     void eliminarServidor_debeFallarSiProcesoSigueVivo() {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
         Server server = new Server();
         server.setDisplayName("Busy");
         gestor.guardarServidor(server);

@@ -10,7 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class GestorConfiguracion {
-    private static final String JSON_FILE = "EasyMCConfig.json";
+    private static final String JSON_FILE = "easy-mc-config.json";
+    private static final String LEGACY_JSON_FILE = "EasyMCConfig.json";
     private static final String DEFAULT_THEME_CLASS =
             "com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTSolarizedLightIJTheme";
     private static final int DEFAULT_STATS_RANGE_SECONDS = 60;
@@ -41,7 +42,7 @@ public final class GestorConfiguracion {
             }
             return config;
         } catch (JacksonException e) {
-            System.err.println("Error al cargar EasyMCConfig.json: " + e.getMessage());
+            System.err.println("Error al cargar " + JSON_FILE + ": " + e.getMessage());
             EasyMCConfig config = crearConfiguracionPorDefecto();
             guardarConfiguracion(config);
             return config;
@@ -69,7 +70,7 @@ public final class GestorConfiguracion {
         try {
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(getJsonFile(), config);
         } catch (JacksonException e) {
-            System.err.println("Error al guardar EasyMCConfig.json: " + e.getMessage());
+            System.err.println("Error al guardar " + JSON_FILE + ": " + e.getMessage());
         }
     }
 
@@ -164,7 +165,24 @@ public final class GestorConfiguracion {
     }
 
     private static File getJsonFile() {
-        return getBaseDirectory().resolve(JSON_FILE).toFile();
+        Path baseDir = getBaseDirectory();
+        Path jsonPath = baseDir.resolve(JSON_FILE);
+        migrateLegacyFileIfNeeded(baseDir.resolve(LEGACY_JSON_FILE), jsonPath);
+        return jsonPath.toFile();
+    }
+
+    private static void migrateLegacyFileIfNeeded(Path legacyPath, Path targetPath) {
+        if (legacyPath == null || targetPath == null || Files.exists(targetPath) || !Files.exists(legacyPath)) {
+            return;
+        }
+        try {
+            if (targetPath.getParent() != null) {
+                Files.createDirectories(targetPath.getParent());
+            }
+            Files.move(legacyPath, targetPath);
+        } catch (Exception e) {
+            System.err.println("No se ha podido migrar " + legacyPath.getFileName() + " a " + targetPath.getFileName() + ": " + e.getMessage());
+        }
     }
 
     private static boolean normalizarConfiguracion(EasyMCConfig config) {

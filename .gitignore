@@ -37,4 +37,8 @@ build/
 ServerList.json
 dependency-reduced-pom.xml
 .m2/
+
+### Other ###
 EasyMCConfig.json
+easy-mc-config.json
+easy-mc-server-list.json

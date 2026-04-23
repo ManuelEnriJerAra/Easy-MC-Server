@@ -51,7 +51,7 @@ class WorldPreviewOverlayServiceTest {
     void loadOverlayData_debeDevolverNullSiElArchivoEsInvalido() throws Exception {
         Path worldDir = tempDir.resolve("broken-world");
         Files.createDirectories(worldDir);
-        Files.writeString(worldDir.resolve(".preview-overlay.properties"), "originBlockX=invalid");
+        Files.writeString(worldDir.resolve("easy-mc-preview-overlay.properties"), "originBlockX=invalid");
 
         assertThat(WorldPreviewOverlayService.loadOverlayData(TestWorldFixtures.world(worldDir, "broken-world")))
                 .isNull();

@@ -10,6 +10,7 @@
 
 package controlador;
 
+import controlador.world.WorldFilesService;
 import modelo.MinecraftConstants;
 import modelo.Server;
 import modelo.ServerProperties;
@@ -31,8 +32,10 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 public final class GestorMundos {
-    public static final String DIRECTORIO_MUNDOS = "Easy-MC-Worlds";
-    private static final String META_ARCHIVO = ".emw-world.properties";
+    public static final String DIRECTORIO_MUNDOS = "easy-mc-worlds";
+    private static final String DIRECTORIO_MUNDOS_LEGACY = "Easy-MC-Worlds";
+    private static final String META_ARCHIVO = WorldFilesService.WORLD_METADATA_FILE;
+    private static final String META_ARCHIVO_LEGACY = ".emw-world.properties";
     private static final String SUFIJO_NETHER = "_nether";
     private static final String SUFIJO_END = "_the_end";
 
@@ -48,6 +51,7 @@ public final class GestorMundos {
             Path serverDir = Path.of(server.getServerDir());
             if(!Files.isDirectory(serverDir)) return false;
 
+            boolean cambios = migrarDirectorioMundosLegacy(serverDir);
             Files.createDirectories(getDirectorioMundos(server));
             Properties props = cargarServerProperties(serverDir, true);
 
@@ -59,9 +63,11 @@ public final class GestorMundos {
 
             World mundoActivo = new World(getDirectorioMundo(server, mundoActivoNombre).toString(), mundoActivoNombre);
 
-            boolean cambios = false;
             if(!esRutaGestionada(levelNameBruto)) {
                 cambios |= migrarMundoRaizASistemaGestionado(serverDir, mundoActivo);
+                props.setProperty("level-name", construirLevelNameGestionado(mundoActivo));
+                cambios = true;
+            } else if(esRutaGestionadaLegacy(levelNameBruto)) {
                 props.setProperty("level-name", construirLevelNameGestionado(mundoActivo));
                 cambios = true;
             }
@@ -415,6 +421,29 @@ public final class GestorMundos {
         return true;
     }
 
+    private static boolean migrarDirectorioMundosLegacy(Path serverDir) throws IOException {
+        Path legacyDir = serverDir.resolve(DIRECTORIO_MUNDOS_LEGACY);
+        Path targetDir = serverDir.resolve(DIRECTORIO_MUNDOS);
+        if(!Files.isDirectory(legacyDir)) {
+            return false;
+        }
+        if(Files.exists(targetDir)) {
+            if(!Files.isSameFile(legacyDir, targetDir)) {
+                return false;
+            }
+            Path tempDir = serverDir.resolve(DIRECTORIO_MUNDOS + "-migration");
+            int suffix = 1;
+            while(Files.exists(tempDir)) {
+                tempDir = serverDir.resolve(DIRECTORIO_MUNDOS + "-migration-" + suffix++);
+            }
+            Files.move(legacyDir, tempDir);
+            Files.move(tempDir, targetDir);
+            return true;
+        }
+        Utilidades.moverDirectorio(legacyDir, targetDir);
+        return true;
+    }
+
     // Carga server.properties y lo crea con valores por defecto si se solicita y no existe.
     private static Properties cargarServerProperties(Path serverDir, boolean crearSiNoExiste) throws IOException {
         Path propertiesPath = serverDir.resolve("server.properties");
@@ -462,7 +491,7 @@ public final class GestorMundos {
 
     // Copia al server.properties la metadata persistida del mundo seleccionado.
     private static void aplicarMetadataMundo(Path mundoDir, Properties props) throws IOException {
-        Path metadataPath = mundoDir.resolve(META_ARCHIVO);
+        Path metadataPath = resolverMetadataMundo(mundoDir);
         if(!Files.exists(metadataPath)) return;
 
         Properties metadata = new Properties();
@@ -516,11 +545,31 @@ public final class GestorMundos {
         }
     }
 
+    private static Path resolverMetadataMundo(Path mundoDir) {
+        Path metadataPath = mundoDir.resolve(META_ARCHIVO);
+        Path legacyMetadataPath = mundoDir.resolve(META_ARCHIVO_LEGACY);
+        if(Files.exists(metadataPath) || !Files.exists(legacyMetadataPath)) {
+            return metadataPath;
+        }
+        try {
+            Files.move(legacyMetadataPath, metadataPath);
+            return metadataPath;
+        } catch (IOException ignored) {
+            return legacyMetadataPath;
+        }
+    }
+
     // Indica si el level-name ya apunta al directorio gestionado de mundos.
     private static boolean esRutaGestionada(String levelName) {
         if(levelName == null) return false;
         String normalizado = levelName.replace('\\', '/');
-        return normalizado.startsWith(DIRECTORIO_MUNDOS + "/");
+        return normalizado.startsWith(DIRECTORIO_MUNDOS + "/") || esRutaGestionadaLegacy(normalizado);
+    }
+
+    private static boolean esRutaGestionadaLegacy(String levelName) {
+        if(levelName == null) return false;
+        String normalizado = levelName.replace('\\', '/');
+        return normalizado.startsWith(DIRECTORIO_MUNDOS_LEGACY + "/");
     }
 
     // Construye el valor de level-name usando la ruta gestionada por la aplicacion.
@@ -539,6 +588,8 @@ public final class GestorMundos {
         String normalizado = levelName.replace('\\', '/').trim();
         if(normalizado.startsWith(DIRECTORIO_MUNDOS + "/")) {
             normalizado = normalizado.substring((DIRECTORIO_MUNDOS + "/").length());
+        } else if(normalizado.startsWith(DIRECTORIO_MUNDOS_LEGACY + "/")) {
+            normalizado = normalizado.substring((DIRECTORIO_MUNDOS_LEGACY + "/").length());
         }
         int ultimaBarra = normalizado.lastIndexOf('/');
         if(ultimaBarra >= 0 && ultimaBarra + 1 < normalizado.length()) {

@@ -42,6 +42,34 @@ class WorldFilesServiceTest {
         assertThat(WorldFilesService.getPreviewPath(TestWorldFixtures.world(worldDir, "world")))
                 .isEqualTo(worldDir.resolve("preview.png"));
         assertThat(WorldFilesService.getPreviewOverlayMetadataPath(TestWorldFixtures.world(worldDir, "world")))
-                .isEqualTo(worldDir.resolve(".preview-overlay.properties"));
+                .isEqualTo(worldDir.resolve("easy-mc-preview-overlay.properties"));
+    }
+
+    @Test
+    void getWorldMetadataPath_debeMigrarNombreLegacy() throws Exception {
+        Path worldDir = tempDir.resolve("legacy-world");
+        Files.createDirectories(worldDir);
+        Path legacyPath = worldDir.resolve(".emw-world.properties");
+        Files.writeString(legacyPath, "display-name=Legacy");
+
+        Path metadataPath = WorldFilesService.getWorldMetadataPath(TestWorldFixtures.world(worldDir, "legacy-world"));
+
+        assertThat(metadataPath).isEqualTo(worldDir.resolve("easy-mc-world-config.properties"));
+        assertThat(metadataPath).exists();
+        assertThat(legacyPath).doesNotExist();
+    }
+
+    @Test
+    void getPreviewOverlayMetadataPath_debeMigrarNombreLegacy() throws Exception {
+        Path worldDir = tempDir.resolve("legacy-preview");
+        Files.createDirectories(worldDir);
+        Path legacyPath = worldDir.resolve(".preview-overlay.properties");
+        Files.writeString(legacyPath, "originBlockX=0");
+
+        Path metadataPath = WorldFilesService.getPreviewOverlayMetadataPath(TestWorldFixtures.world(worldDir, "legacy-preview"));
+
+        assertThat(metadataPath).isEqualTo(worldDir.resolve("easy-mc-preview-overlay.properties"));
+        assertThat(metadataPath).exists();
+        assertThat(legacyPath).doesNotExist();
     }
 }

@@ -57,7 +57,8 @@ public class GestorServidores {
     // AtomicInteger nos elimina el riesgo de condición de carrera si varios servidores intentan acceder a la vez
     private static final AtomicInteger NEXT_PORT_SESION = new AtomicInteger(25565);
 
-    private static final String JSON_FILE = "ServerList.json";
+    private static final String JSON_FILE = "easy-mc-server-list.json";
+    private static final String LEGACY_JSON_FILE = "ServerList.json";
 
     private static File getJsonFile() {
         try {
@@ -75,9 +76,25 @@ public class GestorServidores {
                 baseDir = baseDir.getParent().getParent();
             }
 
-            return baseDir.resolve(JSON_FILE).toFile();
+            Path jsonPath = baseDir.resolve(JSON_FILE);
+            migrateLegacyFileIfNeeded(baseDir.resolve(LEGACY_JSON_FILE), jsonPath);
+            return jsonPath.toFile();
         } catch (URISyntaxException | RuntimeException e) {
             return new File(JSON_FILE);
+        }
+    }
+
+    private static void migrateLegacyFileIfNeeded(Path legacyPath, Path targetPath) {
+        if (legacyPath == null || targetPath == null || Files.exists(targetPath) || !Files.exists(legacyPath)) {
+            return;
+        }
+        try {
+            if (targetPath.getParent() != null) {
+                Files.createDirectories(targetPath.getParent());
+            }
+            Files.move(legacyPath, targetPath);
+        } catch (IOException e) {
+            System.err.println("No se ha podido migrar " + legacyPath.getFileName() + " a " + targetPath.getFileName() + ": " + e.getMessage());
         }
     }
 
@@ -403,7 +420,7 @@ public class GestorServidores {
         sb.append("No se han podido cargar ")
                 .append(noCargables.size())
                 .append(" servidores guardados (carpeta inexistente o servidor invalido).")
-                .append("\nNo se mostraran y se han eliminado de ServerList.json.");
+                .append("\nNo se mostraran y se han eliminado de " + JSON_FILE + ".");
 
         // mostramos un máximo de 8 servidores que no se han podido cargar
         int maxDetalles = 8;
@@ -843,7 +860,7 @@ public class GestorServidores {
         try {
             GestorMundos.sincronizarMundosServidor(server);
         } catch (RuntimeException e) {
-            server.appendConsoleLinea("[WARN] No se ha podido preparar Easy-MC-Worlds: " + e.getMessage());
+            server.appendConsoleLinea("[WARN] No se ha podido preparar easy-mc-worlds: " + e.getMessage());
         }
         Path jar;
         try {
