@@ -13,6 +13,7 @@ public class EasyMCConfig {
     private Integer estadisticasResolucionHistoricaSegundos;
     private Boolean jugadoresListaCompacta;
     private Boolean consolaVistaSimple;
+    private String curseForgeApiKey;
 
     public EasyMCConfig() {
     }

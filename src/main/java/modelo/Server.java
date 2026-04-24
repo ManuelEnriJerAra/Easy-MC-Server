@@ -283,6 +283,15 @@ public class Server {
             if (extension.getLocalMetadata() == null) {
                 extension.setLocalMetadata(new modelo.extensions.ExtensionLocalMetadata());
                 cambios = true;
+            } else {
+                if (extension.getLocalMetadata().getEnabled() == null) {
+                    extension.getLocalMetadata().setEnabled(Boolean.TRUE);
+                    cambios = true;
+                }
+                if (extension.getLocalMetadata().getUpdateState() == null) {
+                    extension.getLocalMetadata().setUpdateState(modelo.extensions.ExtensionUpdateState.UNKNOWN);
+                    cambios = true;
+                }
             }
         }
         return cambios;

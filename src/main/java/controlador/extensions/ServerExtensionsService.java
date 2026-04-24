@@ -1,5 +1,6 @@
 package controlador.extensions;
 
+import controlador.platform.FileDownloader;
 import controlador.platform.ServerPlatformAdapter;
 import controlador.platform.ServerPlatformAdapters;
 import controlador.platform.ServerPlatformProfile;
@@ -8,6 +9,7 @@ import modelo.extensions.ExtensionInstallState;
 import modelo.extensions.ExtensionLocalMetadata;
 import modelo.extensions.ExtensionSource;
 import modelo.extensions.ExtensionSourceType;
+import modelo.extensions.ExtensionUpdateState;
 import modelo.extensions.ServerCapability;
 import modelo.extensions.ServerEcosystemType;
 import modelo.extensions.ServerExtension;
@@ -39,6 +41,7 @@ import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
+import java.util.zip.ZipException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -132,16 +135,137 @@ public final class ServerExtensionsService {
     }
 
     public ServerExtension installManualJar(Server server, Path sourceJar) throws IOException {
+        return installJar(server, sourceJar, null, ExtensionSourceType.MANUAL, "local-manual");
+    }
+
+    public ServerExtension installCatalogDownload(Server server,
+                                                  ExtensionDownloadPlan downloadPlan,
+                                                  FileDownloader downloader) throws IOException {
+        if (downloadPlan == null || !downloadPlan.ready()) {
+            throw new IOException("No hay un plan de descarga valido para la extension.");
+        }
+        if (downloadPlan.downloadUrl() == null || downloadPlan.downloadUrl().isBlank()) {
+            throw new IOException("La extension externa no incluye una URL de descarga valida.");
+        }
+        if (downloader == null) {
+            throw new IOException("No se ha indicado un descargador para instalar la extension externa.");
+        }
+        ensureCatalogExtensionNotAlreadyInstalled(server, downloadPlan);
+
+        Path tempJar = Files.createTempFile("easymc-extension-", ".jar");
+        try {
+            downloader.download(downloadPlan.downloadUrl(), tempJar.toFile());
+            validateDownloadedJar(tempJar, downloadPlan);
+            return installJar(server, tempJar, downloadPlan, downloadPlan.sourceType(), downloadPlan.providerId());
+        } finally {
+            Files.deleteIfExists(tempJar);
+        }
+    }
+
+    public ExtensionInstallResolution evaluateCatalogInstallation(Server server,
+                                                                  ExtensionCatalogEntry entry) {
+        if (entry == null) {
+            return new ExtensionInstallResolution(ExtensionInstallResolutionState.AVAILABLE, null, null, null, null, null);
+        }
+        return evaluateCatalogInstallation(
+                server,
+                entry.providerId(),
+                entry.projectId(),
+                entry.versionId(),
+                entry.version(),
+                null,
+                firstNonBlank(entry.displayName(), entry.projectId(), "La extension")
+        );
+    }
+
+    public ExtensionInstallResolution evaluateCatalogInstallation(Server server,
+                                                                  ExtensionDownloadPlan downloadPlan) {
+        if (downloadPlan == null) {
+            return new ExtensionInstallResolution(ExtensionInstallResolutionState.AVAILABLE, null, null, null, null, null);
+        }
+        return evaluateCatalogInstallation(
+                server,
+                downloadPlan.providerId(),
+                downloadPlan.projectId(),
+                downloadPlan.versionId(),
+                downloadPlan.versionNumber(),
+                downloadPlan.fileName(),
+                firstNonBlank(downloadPlan.projectId(), "La extension")
+        );
+    }
+
+    public boolean applyUpdateMetadata(Server server, List<ExtensionUpdateCandidate> updates) {
+        if (server == null || server.getExtensions() == null || server.getExtensions().isEmpty()) {
+            return false;
+        }
+
+        Map<String, ExtensionUpdateCandidate> updatesByExtensionId = new HashMap<>();
+        if (updates != null) {
+            for (ExtensionUpdateCandidate update : updates) {
+                if (update == null || update.installedExtension() == null) {
+                    continue;
+                }
+                String extensionId = update.installedExtension().getId();
+                if (extensionId != null && !extensionId.isBlank()) {
+                    updatesByExtensionId.put(extensionId, update);
+                }
+            }
+        }
+
+        long now = System.currentTimeMillis();
+        boolean changed = false;
+        for (ServerExtension extension : server.getExtensions()) {
+            if (extension == null) {
+                continue;
+            }
+            ExtensionLocalMetadata metadata = ensureLocalMetadata(extension);
+            changed |= updateTrackingSnapshot(extension, metadata, now);
+
+            ExtensionSource source = ensureSource(extension);
+            if (!hasTrackedRemoteOrigin(source)) {
+                changed |= applyTrackingState(metadata, null, null, now,
+                        ExtensionUpdateState.UNTRACKED,
+                        "Instalada sin origen remoto conocido.");
+                continue;
+            }
+
+            ExtensionUpdateCandidate candidate = updatesByExtensionId.get(extension.getId());
+            if (candidate == null || candidate.targetVersion() == null) {
+                changed |= applyTrackingState(metadata,
+                        metadata.getKnownRemoteVersion(),
+                        metadata.getKnownRemoteVersionId(),
+                        now,
+                        ExtensionUpdateState.UNKNOWN,
+                        "No se ha podido determinar una version remota compatible.");
+                continue;
+            }
+
+            changed |= applyTrackingState(metadata,
+                    candidate.targetVersion().versionNumber(),
+                    candidate.targetVersion().versionId(),
+                    now,
+                    candidate.updateAvailable() ? ExtensionUpdateState.UPDATE_AVAILABLE : ExtensionUpdateState.UP_TO_DATE,
+                    candidate.message());
+        }
+        return changed;
+    }
+
+    private ServerExtension installJar(Server server,
+                                       Path sourceJar,
+                                       ExtensionDownloadPlan downloadPlan,
+                                       ExtensionSourceType sourceType,
+                                       String defaultProvider) throws IOException {
         if (server == null) {
             throw new IOException("No se ha indicado el servidor.");
         }
         if (sourceJar == null || !Files.isRegularFile(sourceJar)) {
             throw new IOException("No se ha indicado un .jar de extension valido.");
         }
-        String fileName = sourceJar.getFileName().toString();
+        String fileName = resolveInstallFileName(sourceJar, downloadPlan);
         if (!fileName.toLowerCase(Locale.ROOT).endsWith(".jar")) {
             throw new IOException("Solo se admiten archivos .jar.");
         }
+        validateLocalJar(sourceJar);
 
         ExtensionCompatibilityReport compatibility = validateCompatibility(server, sourceJar);
         if (compatibility.incompatible()) {
@@ -169,11 +293,10 @@ public final class ServerExtensionsService {
                 platform,
                 ecosystemType,
                 ExtensionInstallState.INSTALLED,
-                ExtensionSourceType.MANUAL,
+                sourceType == null ? ExtensionSourceType.MANUAL : sourceType,
                 now
         );
-        installed.getSource().setProvider("local-manual");
-        installed.getSource().setUrl(sourceJar.toAbsolutePath().toString());
+        applySourceMetadata(installed, sourceJar, downloadPlan, defaultProvider);
 
         List<ServerExtension> refreshed = detectInstalledExtensions(server);
         boolean replaced = false;
@@ -260,7 +383,9 @@ public final class ServerExtensionsService {
             warnings.add("No se ha podido determinar si la extension es un mod o un plugin.");
         }
 
-        if (extensionPlatform != ServerPlatform.UNKNOWN && serverPlatform != ServerPlatform.UNKNOWN && extensionPlatform != serverPlatform) {
+        if (extensionPlatform != ServerPlatform.UNKNOWN
+                && serverPlatform != ServerPlatform.UNKNOWN
+                && !arePlatformsCompatible(serverPlatform, extensionPlatform)) {
             incompatibilities.add("La extension se ha detectado para " + extensionPlatform.getLegacyTypeName()
                     + " y el servidor actual es " + serverPlatform.getLegacyTypeName() + ".");
         } else if (extensionPlatform == ServerPlatform.UNKNOWN) {
@@ -328,16 +453,297 @@ public final class ServerExtensionsService {
         if (detected.getSource() == null) {
             detected.setSource(new ExtensionSource());
         }
-        detected.getSource().setType(ExtensionSourceType.MANUAL);
+        detected.getSource().setType(installed.getSource().getType());
         detected.getSource().setProvider(installed.getSource().getProvider());
+        detected.getSource().setProjectId(installed.getSource().getProjectId());
+        detected.getSource().setVersionId(installed.getSource().getVersionId());
         detected.getSource().setUrl(installed.getSource().getUrl());
+        detected.getSource().setAuthor(installed.getSource().getAuthor());
+        detected.getSource().setIconUrl(installed.getSource().getIconUrl());
+        if (installed.getLocalMetadata() != null && detected.getLocalMetadata() != null) {
+            if (installed.getLocalMetadata().getMinecraftVersionConstraint() != null
+                    && !installed.getLocalMetadata().getMinecraftVersionConstraint().isBlank()) {
+                detected.getLocalMetadata().setMinecraftVersionConstraint(installed.getLocalMetadata().getMinecraftVersionConstraint());
+            }
+            detected.getLocalMetadata().setInstalledVersion(installed.getLocalMetadata().getInstalledVersion());
+            detected.getLocalMetadata().setKnownRemoteVersion(installed.getLocalMetadata().getKnownRemoteVersion());
+            detected.getLocalMetadata().setKnownRemoteVersionId(installed.getLocalMetadata().getKnownRemoteVersionId());
+            detected.getLocalMetadata().setLastCheckedForUpdatesAtEpochMillis(installed.getLocalMetadata().getLastCheckedForUpdatesAtEpochMillis());
+            detected.getLocalMetadata().setUpdateState(installed.getLocalMetadata().getUpdateState());
+            detected.getLocalMetadata().setUpdateMessage(installed.getLocalMetadata().getUpdateMessage());
+        }
         return detected;
+    }
+
+    private void ensureCatalogExtensionNotAlreadyInstalled(Server server,
+                                                           ExtensionDownloadPlan downloadPlan) throws IOException {
+        ExtensionInstallResolution resolution = evaluateCatalogInstallation(server, downloadPlan);
+        if (resolution.blocksInstall()) {
+            throw new IOException(firstNonBlank(resolution.message(), "La extension ya esta instalada o entra en conflicto con otra existente."));
+        }
+    }
+
+    private ExtensionInstallResolution evaluateCatalogInstallation(Server server,
+                                                                   String providerId,
+                                                                   String projectId,
+                                                                   String versionId,
+                                                                   String versionNumber,
+                                                                   String fileName,
+                                                                   String fallbackName) {
+        if (server == null || server.getExtensions() == null || server.getExtensions().isEmpty()) {
+            return new ExtensionInstallResolution(
+                    ExtensionInstallResolutionState.AVAILABLE,
+                    null,
+                    normalizeFileName(fileName),
+                    firstNonBlank(versionNumber, versionId),
+                    null,
+                    null
+            );
+        }
+
+        String normalizedProviderId = firstNonBlank(providerId);
+        String normalizedProjectId = firstNonBlank(projectId);
+        String normalizedVersionId = firstNonBlank(versionId);
+        String normalizedVersionNumber = firstNonBlank(versionNumber);
+        String requestedFileName = normalizeFileName(fileName);
+        String displayName = firstNonBlank(fallbackName, normalizedProjectId, "La extension");
+        String requestedVersion = firstNonBlank(normalizedVersionNumber, normalizedVersionId);
+
+        ServerExtension projectMatch = null;
+        boolean exactVersionInstalled = false;
+        ServerExtension incompleteMetadataMatch = null;
+        ServerExtension fileMatch = null;
+
+        for (ServerExtension installed : server.getExtensions()) {
+            if (installed == null) {
+                continue;
+            }
+            ExtensionSource source = installed.getSource();
+            if (source != null
+                    && normalizedProviderId != null
+                    && normalizedProjectId != null
+                    && normalizedProviderId.equalsIgnoreCase(firstNonBlank(source.getProvider()))
+                    && normalizedProjectId.equalsIgnoreCase(firstNonBlank(source.getProjectId()))) {
+                projectMatch = installed;
+                String installedVersionId = firstNonBlank(source.getVersionId(), installed.getLocalMetadata() == null ? null : installed.getLocalMetadata().getKnownRemoteVersionId());
+                String installedVersionNumber = firstNonBlank(
+                        installed.getVersion(),
+                        installed.getLocalMetadata() == null ? null : installed.getLocalMetadata().getInstalledVersion(),
+                        installed.getLocalMetadata() == null ? null : installed.getLocalMetadata().getKnownRemoteVersion()
+                );
+                exactVersionInstalled = (normalizedVersionId != null && normalizedVersionId.equalsIgnoreCase(installedVersionId))
+                        || (normalizedVersionNumber != null && normalizedVersionNumber.equalsIgnoreCase(installedVersionNumber));
+                break;
+            }
+            if (incompleteMetadataMatch == null
+                    && mayRepresentSameExtensionWithIncompleteMetadata(installed, normalizedProjectId, requestedFileName, displayName)) {
+                incompleteMetadataMatch = installed;
+            }
+            if (requestedFileName != null && requestedFileName.equalsIgnoreCase(normalizeFileName(installed.getFileName()))) {
+                fileMatch = installed;
+            }
+        }
+
+        if (projectMatch != null) {
+            String installedName = firstNonBlank(projectMatch.getDisplayName(), stripJarExtension(projectMatch.getFileName()), displayName);
+            String installedVersion = resolveInstalledVersion(projectMatch);
+            if (exactVersionInstalled) {
+                return new ExtensionInstallResolution(
+                        ExtensionInstallResolutionState.INSTALLED_EXACT,
+                        projectMatch,
+                        requestedFileName,
+                        requestedVersion,
+                        installedVersion,
+                        installedName + " ya esta instalada en este servidor con la misma version."
+                );
+            }
+            return new ExtensionInstallResolution(
+                    ExtensionInstallResolutionState.UPDATE_AVAILABLE,
+                    projectMatch,
+                    requestedFileName,
+                    requestedVersion,
+                    installedVersion,
+                    installedName + " ya esta instalada con la version "
+                            + firstNonBlank(installedVersion, "desconocida")
+                            + ". El marketplace ofrece "
+                            + firstNonBlank(requestedVersion, "otra version")
+                            + "."
+            );
+        }
+
+        if (incompleteMetadataMatch != null) {
+            String installedName = firstNonBlank(incompleteMetadataMatch.getDisplayName(), stripJarExtension(incompleteMetadataMatch.getFileName()), displayName);
+            return new ExtensionInstallResolution(
+                    ExtensionInstallResolutionState.INSTALLED_WITH_INCOMPLETE_METADATA,
+                    incompleteMetadataMatch,
+                    requestedFileName,
+                    requestedVersion,
+                    resolveInstalledVersion(incompleteMetadataMatch),
+                    installedName + " ya existe en el servidor, pero su metadata local no conserva un origen remoto completo. Revisa si fue instalada manualmente antes de duplicarla."
+            );
+        }
+
+        if (fileMatch != null) {
+            String installedName = firstNonBlank(fileMatch.getDisplayName(), stripJarExtension(fileMatch.getFileName()), displayName);
+            return new ExtensionInstallResolution(
+                    ExtensionInstallResolutionState.FILE_NAME_CONFLICT,
+                    fileMatch,
+                    requestedFileName,
+                    requestedVersion,
+                    resolveInstalledVersion(fileMatch),
+                    installedName + " ya ocupa ese archivo en el servidor."
+            );
+        }
+
+        return new ExtensionInstallResolution(
+                ExtensionInstallResolutionState.AVAILABLE,
+                null,
+                requestedFileName,
+                requestedVersion,
+                null,
+                null
+        );
+    }
+
+    private boolean mayRepresentSameExtensionWithIncompleteMetadata(ServerExtension installed,
+                                                                    String projectId,
+                                                                    String requestedFileName,
+                                                                    String fallbackName) {
+        if (installed == null || !hasIncompleteRemoteMetadata(installed)) {
+            return false;
+        }
+        String installedFileName = normalizeFileName(firstNonBlank(
+                installed.getFileName(),
+                installed.getLocalMetadata() == null ? null : installed.getLocalMetadata().getFileName()
+        ));
+        if (requestedFileName != null && requestedFileName.equalsIgnoreCase(installedFileName)) {
+            return true;
+        }
+
+        String requestedNameKey = normalizeNameKey(firstNonBlank(fallbackName, stripJarExtension(requestedFileName), projectId));
+        if (requestedNameKey == null) {
+            return false;
+        }
+        String installedDisplayKey = normalizeNameKey(installed.getDisplayName());
+        String installedFileKey = normalizeNameKey(stripJarExtension(installedFileName));
+        return requestedNameKey.equals(installedDisplayKey) || requestedNameKey.equals(installedFileKey);
+    }
+
+    private boolean hasIncompleteRemoteMetadata(ServerExtension installed) {
+        if (installed == null) {
+            return false;
+        }
+        ExtensionSource source = installed.getSource();
+        if (source == null) {
+            return true;
+        }
+        if (hasTrackedRemoteOrigin(source)) {
+            return false;
+        }
+        return source.getType() == null
+                || source.getType() == ExtensionSourceType.UNKNOWN
+                || source.getType() == ExtensionSourceType.MANUAL
+                || source.getType() == ExtensionSourceType.LOCAL_FILE
+                || source.getProvider() == null
+                || source.getProvider().isBlank()
+                || source.getProjectId() == null
+                || source.getProjectId().isBlank();
+    }
+
+    private String resolveInstalledVersion(ServerExtension installed) {
+        if (installed == null) {
+            return null;
+        }
+        ExtensionLocalMetadata metadata = installed.getLocalMetadata();
+        return firstNonBlank(
+                installed.getVersion(),
+                metadata == null ? null : metadata.getInstalledVersion(),
+                metadata == null ? null : metadata.getKnownRemoteVersion(),
+                installed.getSource() == null ? null : installed.getSource().getVersionId()
+        );
+    }
+
+    private String normalizeNameKey(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = stripJarExtension(value)
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "");
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private void applySourceMetadata(ServerExtension installed,
+                                     Path sourceJar,
+                                     ExtensionDownloadPlan downloadPlan,
+                                     String defaultProvider) {
+        if (installed == null) {
+            return;
+        }
+        if (installed.getSource() == null) {
+            installed.setSource(new ExtensionSource());
+        }
+        ExtensionSource source = installed.getSource();
+        if (downloadPlan != null && downloadPlan.sourceType() != null) {
+            source.setType(downloadPlan.sourceType());
+        }
+        source.setProvider(defaultProvider);
+        source.setUrl(downloadPlan != null && downloadPlan.downloadUrl() != null && !downloadPlan.downloadUrl().isBlank()
+                ? downloadPlan.downloadUrl()
+                : sourceJar.toAbsolutePath().toString());
+        if (downloadPlan != null && downloadPlan.iconUrl() != null && !downloadPlan.iconUrl().isBlank()) {
+            source.setIconUrl(downloadPlan.iconUrl());
+        }
+        if (downloadPlan != null) {
+            source.setProjectId(downloadPlan.projectId());
+            source.setVersionId(downloadPlan.versionId());
+            if (downloadPlan.platform() != null && downloadPlan.platform() != ServerPlatform.UNKNOWN) {
+                installed.setPlatform(downloadPlan.platform());
+            }
+            if (downloadPlan.extensionType() != null && downloadPlan.extensionType() != ServerExtensionType.UNKNOWN) {
+                installed.setExtensionType(downloadPlan.extensionType());
+            }
+            if (installed.getLocalMetadata() != null
+                    && downloadPlan.minecraftVersionConstraint() != null
+                    && !downloadPlan.minecraftVersionConstraint().isBlank()) {
+                installed.getLocalMetadata().setMinecraftVersionConstraint(downloadPlan.minecraftVersionConstraint());
+            }
+            ExtensionLocalMetadata metadata = ensureLocalMetadata(installed);
+            metadata.setKnownRemoteVersion(firstNonBlank(downloadPlan.versionNumber(), installed.getVersion()));
+            metadata.setKnownRemoteVersionId(downloadPlan.versionId());
+            metadata.setLastCheckedForUpdatesAtEpochMillis(System.currentTimeMillis());
+            if (metadata.getInstalledVersion() != null
+                    && metadata.getInstalledVersion().equalsIgnoreCase(firstNonBlank(downloadPlan.versionNumber(), metadata.getInstalledVersion()))) {
+                metadata.setUpdateState(ExtensionUpdateState.UP_TO_DATE);
+                metadata.setUpdateMessage("La extension se ha instalado desde su version remota conocida.");
+            } else {
+                metadata.setUpdateState(ExtensionUpdateState.UNKNOWN);
+                metadata.setUpdateMessage("La extension conserva origen remoto, pero su estado de actualizacion todavia no se ha verificado.");
+            }
+        }
     }
 
     private boolean sameRelativePath(ServerExtension left, ServerExtension right) {
         String leftPath = left == null || left.getLocalMetadata() == null ? null : normalizeRelativePath(left.getLocalMetadata().getRelativePath());
         String rightPath = right == null || right.getLocalMetadata() == null ? null : normalizeRelativePath(right.getLocalMetadata().getRelativePath());
         return leftPath != null && leftPath.equals(rightPath);
+    }
+
+    private boolean arePlatformsCompatible(ServerPlatform serverPlatform, ServerPlatform extensionPlatform) {
+        if (serverPlatform == extensionPlatform) {
+            return true;
+        }
+        return canonicalizePlatform(serverPlatform) == canonicalizePlatform(extensionPlatform);
+    }
+
+    private ServerPlatform canonicalizePlatform(ServerPlatform platform) {
+        if (platform == null) {
+            return ServerPlatform.UNKNOWN;
+        }
+        return switch (platform) {
+            case PURPUR, PUFFERFISH -> ServerPlatform.PAPER;
+            default -> platform;
+        };
     }
 
     private Path resolveExtensionPath(Path serverDir, Server server, ServerExtension extension) {
@@ -421,6 +827,7 @@ public final class ServerExtensionsService {
         metadata.setFileName(jarPath.getFileName().toString());
         metadata.setFileSizeBytes(Files.size(jarPath));
         metadata.setSha256(calculateSha256(jarPath));
+        metadata.setInstalledVersion(firstNonBlank(extension.getVersion(), metadata.getInstalledVersion()));
         metadata.setMinecraftVersionConstraint(firstNonBlank(
                 descriptor.minecraftVersionConstraint(),
                 inferMinecraftVersionHint(jarPath.getFileName().toString(), descriptor.version(), descriptor.displayName(), descriptor.description())
@@ -432,7 +839,135 @@ public final class ServerExtensionsService {
         if (metadata.getEnabled() == null) {
             metadata.setEnabled(Boolean.TRUE);
         }
+        if (metadata.getUpdateState() == null) {
+            metadata.setUpdateState(resolveDefaultUpdateState(source));
+        }
+        if (metadata.getUpdateMessage() == null || metadata.getUpdateMessage().isBlank()) {
+            metadata.setUpdateMessage(defaultUpdateMessage(source));
+        }
         return extension;
+    }
+
+    private void validateDownloadedJar(Path jarPath, ExtensionDownloadPlan downloadPlan) throws IOException {
+        if (downloadPlan != null && downloadPlan.fileName() != null && !downloadPlan.fileName().isBlank()) {
+            String expectedName = downloadPlan.fileName().trim().toLowerCase(Locale.ROOT);
+            if (!expectedName.endsWith(".jar")) {
+                throw new IOException("La descarga remota no apunta a un archivo .jar valido.");
+            }
+        }
+        validateLocalJar(jarPath);
+    }
+
+    private void validateLocalJar(Path jarPath) throws IOException {
+        if (jarPath == null || !Files.isRegularFile(jarPath)) {
+            throw new IOException("El archivo descargado no existe o no es accesible.");
+        }
+        long size = Files.size(jarPath);
+        if (size <= 0L) {
+            throw new IOException("El archivo descargado esta vacio.");
+        }
+        byte[] header;
+        try (InputStream input = Files.newInputStream(jarPath)) {
+            header = input.readNBytes(4);
+        }
+        if (header.length < 2 || header[0] != 'P' || header[1] != 'K') {
+            throw new IOException("El archivo descargado no tiene formato ZIP/JAR valido.");
+        }
+        try (JarFile jarFile = new JarFile(jarPath.toFile())) {
+            boolean hasEntries = jarFile.entries().hasMoreElements();
+            if (!hasEntries) {
+                throw new IOException("El archivo descargado no contiene entradas JAR.");
+            }
+        } catch (ZipException ex) {
+            throw new IOException("El archivo descargado esta corrupto o no es un JAR valido.", ex);
+        }
+    }
+
+    private ExtensionSource ensureSource(ServerExtension extension) {
+        if (extension.getSource() == null) {
+            extension.setSource(new ExtensionSource());
+        }
+        return extension.getSource();
+    }
+
+    private ExtensionLocalMetadata ensureLocalMetadata(ServerExtension extension) {
+        if (extension.getLocalMetadata() == null) {
+            extension.setLocalMetadata(new ExtensionLocalMetadata());
+        }
+        return extension.getLocalMetadata();
+    }
+
+    private boolean updateTrackingSnapshot(ServerExtension extension,
+                                           ExtensionLocalMetadata metadata,
+                                           long now) {
+        boolean changed = false;
+        changed |= setIfChanged(metadata.getInstalledVersion(), extension.getVersion(), metadata::setInstalledVersion);
+        if (metadata.getEnabled() == null) {
+            metadata.setEnabled(Boolean.TRUE);
+            changed = true;
+        }
+        if (metadata.getUpdateState() == null) {
+            metadata.setUpdateState(resolveDefaultUpdateState(extension.getSource()));
+            changed = true;
+        }
+        if (metadata.getUpdateMessage() == null || metadata.getUpdateMessage().isBlank()) {
+            metadata.setUpdateMessage(defaultUpdateMessage(extension.getSource()));
+            changed = true;
+        }
+        if (metadata.getLastCheckedForUpdatesAtEpochMillis() == null && metadata.getUpdateState() == ExtensionUpdateState.UNTRACKED) {
+            metadata.setLastCheckedForUpdatesAtEpochMillis(now);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private boolean applyTrackingState(ExtensionLocalMetadata metadata,
+                                       String knownRemoteVersion,
+                                       String knownRemoteVersionId,
+                                       long checkedAt,
+                                       ExtensionUpdateState updateState,
+                                       String updateMessage) {
+        boolean changed = false;
+        changed |= setIfChanged(metadata.getKnownRemoteVersion(), knownRemoteVersion, metadata::setKnownRemoteVersion);
+        changed |= setIfChanged(metadata.getKnownRemoteVersionId(), knownRemoteVersionId, metadata::setKnownRemoteVersionId);
+        changed |= setIfChanged(metadata.getLastCheckedForUpdatesAtEpochMillis(), checkedAt, metadata::setLastCheckedForUpdatesAtEpochMillis);
+        changed |= setIfChanged(metadata.getUpdateState(), updateState == null ? ExtensionUpdateState.UNKNOWN : updateState, metadata::setUpdateState);
+        changed |= setIfChanged(metadata.getUpdateMessage(), updateMessage, metadata::setUpdateMessage);
+        return changed;
+    }
+
+    private boolean hasTrackedRemoteOrigin(ExtensionSource source) {
+        if (source == null || source.getType() == null) {
+            return false;
+        }
+        if (source.getProvider() == null || source.getProvider().isBlank()) {
+            return false;
+        }
+        if (source.getProjectId() == null || source.getProjectId().isBlank()) {
+            return false;
+        }
+        return switch (source.getType()) {
+            case MODRINTH, CURSEFORGE, HANGAR -> true;
+            default -> false;
+        };
+    }
+
+    private ExtensionUpdateState resolveDefaultUpdateState(ExtensionSource source) {
+        return hasTrackedRemoteOrigin(source) ? ExtensionUpdateState.UNKNOWN : ExtensionUpdateState.UNTRACKED;
+    }
+
+    private String defaultUpdateMessage(ExtensionSource source) {
+        return hasTrackedRemoteOrigin(source)
+                ? "La extension tiene origen remoto, pero su estado de actualizacion aun no se ha comprobado."
+                : "Instalada sin origen remoto conocido.";
+    }
+
+    private <T> boolean setIfChanged(T currentValue, T newValue, java.util.function.Consumer<T> setter) {
+        if (Objects.equals(currentValue, newValue)) {
+            return false;
+        }
+        setter.accept(newValue);
+        return true;
     }
 
     private ExtensionDescriptor inspectJarDescriptor(Path jarPath,
@@ -892,6 +1427,25 @@ public final class ServerExtensionsService {
             }
         }
         return null;
+    }
+
+    private String resolveInstallFileName(Path sourceJar, ExtensionDownloadPlan downloadPlan) {
+        String requested = normalizeFileName(downloadPlan == null ? null : downloadPlan.fileName());
+        if (requested != null) {
+            return requested;
+        }
+        return normalizeFileName(sourceJar == null || sourceJar.getFileName() == null ? null : sourceJar.getFileName().toString());
+    }
+
+    private String normalizeFileName(String fileName) {
+        if (fileName == null || fileName.isBlank()) {
+            return null;
+        }
+        String normalized = Path.of(fileName.trim()).getFileName().toString().trim();
+        if (normalized.isBlank()) {
+            return null;
+        }
+        return normalized.toLowerCase(Locale.ROOT).endsWith(".jar") ? normalized : normalized + ".jar";
     }
 
     private String stripJarExtension(String fileName) {

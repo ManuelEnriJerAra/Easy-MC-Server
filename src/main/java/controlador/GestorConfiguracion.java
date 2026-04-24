@@ -1,13 +1,13 @@
 package controlador;
 
-import modelo.EasyMCConfig;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
-
 import java.io.File;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
+import modelo.EasyMCConfig;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 public final class GestorConfiguracion {
     private static final String JSON_FILE = "easy-mc-config.json";
@@ -159,6 +159,16 @@ public final class GestorConfiguracion {
     public static void guardarConsolaVistaSimple(boolean vistaSimple) {
         EasyMCConfig config = cargarConfiguracion();
         config.setConsolaVistaSimple(vistaSimple);
+    }
+
+    public static String getCurseForgeApiKey() {
+        String apiKey = cargarConfiguracion().getCurseForgeApiKey();
+        return apiKey == null || apiKey.isBlank() ? null : apiKey.trim();
+    }
+
+    public static void guardarCurseForgeApiKey(String apiKey) {
+        EasyMCConfig config = cargarConfiguracion();
+        config.setCurseForgeApiKey(apiKey == null || apiKey.isBlank() ? null : apiKey.trim());
         guardarConfiguracion(config);
     }
 
