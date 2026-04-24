@@ -5,12 +5,14 @@ import controlador.extensions.ExtensionCompatibilityStatus;
 import modelo.Server;
 import modelo.extensions.ExtensionInstallState;
 import modelo.extensions.ExtensionSourceType;
+import modelo.extensions.ExtensionUpdateState;
 import modelo.extensions.ServerCapability;
 import modelo.extensions.ServerEcosystemType;
 import modelo.extensions.ServerExtension;
 import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
+import controlador.extensions.ExtensionCatalogProviderDescriptor;
 import controlador.platform.ServerCreationOption;
 import controlador.platform.ServerInstallationRequest;
 import controlador.platform.ServerPlatformAdapter;
@@ -246,6 +248,8 @@ class GestorServidoresTest {
         assertThat(installed.getInstallState()).isEqualTo(ExtensionInstallState.INSTALLED);
         assertThat(installed.getSource().getType()).isEqualTo(ExtensionSourceType.MANUAL);
         assertThat(installed.getLocalMetadata().getRelativePath()).isEqualTo("mods/example-mod.jar");
+        assertThat(installed.getLocalMetadata().getInstalledVersion()).isEqualTo("1.0.0");
+        assertThat(installed.getLocalMetadata().getUpdateState()).isEqualTo(ExtensionUpdateState.UNTRACKED);
         assertThat(server.getExtensions()).hasSize(1);
         assertThat(server.getExtensions().getFirst().getLocalMetadata().getSha256()).isNotBlank();
     }
@@ -294,6 +298,8 @@ class GestorServidoresTest {
         assertThat(detected.getInstallState()).isEqualTo(ExtensionInstallState.DISCOVERED);
         assertThat(detected.getSource().getType()).isEqualTo(ExtensionSourceType.LOCAL_FILE);
         assertThat(detected.getLocalMetadata().getRelativePath()).isEqualTo("plugins/welcome-plugin.jar");
+        assertThat(detected.getLocalMetadata().getInstalledVersion()).isEqualTo("2.5.1");
+        assertThat(detected.getLocalMetadata().getUpdateState()).isEqualTo(ExtensionUpdateState.UNTRACKED);
 
         List<Server> reloaded = new ObjectMapper().readValue(jsonPath.toFile(),
                 new tools.jackson.core.type.TypeReference<>() {});
@@ -346,6 +352,26 @@ class GestorServidoresTest {
         assertThat(removed).isTrue();
         assertThat(Files.exists(forgeDir.resolve("mods").resolve("remove-mod.jar"))).isFalse();
         assertThat(server.getExtensions()).isEmpty();
+    }
+
+    @Test
+    void obtenerRepositoriosExtensiones_debeActivarModrinthYDejarCurseForgeOpcional() {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+
+        List<ExtensionCatalogProviderDescriptor> providers = gestor.obtenerRepositoriosExtensiones();
+
+        assertThat(providers).extracting(ExtensionCatalogProviderDescriptor::providerId)
+                .contains("modrinth", "curseforge", "hangar");
+        assertThat(providers.stream()
+                .filter(provider -> "modrinth".equals(provider.providerId()))
+                .findFirst()
+                .orElseThrow()
+                .capabilities()).contains(controlador.extensions.ExtensionCatalogCapability.SEARCH);
+        assertThat(providers.stream()
+                .filter(provider -> "curseforge".equals(provider.providerId()))
+                .findFirst()
+                .orElseThrow()
+                .capabilities()).isEmpty();
     }
 
     @Test

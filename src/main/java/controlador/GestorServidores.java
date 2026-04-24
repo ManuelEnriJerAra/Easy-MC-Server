@@ -11,11 +11,20 @@
 package controlador;
 
 import controlador.extensions.ExtensionCompatibilityReport;
+import controlador.extensions.ExtensionCatalogDetails;
+import controlador.extensions.ExtensionCatalogEntry;
+import controlador.extensions.ExtensionCatalogProviderDescriptor;
+import controlador.extensions.ExtensionCatalogQuery;
+import controlador.extensions.ExtensionCatalogService;
+import controlador.extensions.ExtensionDownloadPlan;
+import controlador.extensions.ExtensionInstallResolution;
+import controlador.extensions.ExtensionUpdateCandidate;
 import controlador.extensions.ServerExtensionsService;
 import modelo.Server;
 import modelo.ServerConfig;
 import controlador.platform.ServerInstallationRequest;
 import controlador.platform.ServerCreationOption;
+import controlador.platform.FileDownloader;
 import controlador.platform.ServerPlatformAdapter;
 import controlador.platform.ServerPlatformAdapters;
 import controlador.platform.ServerPlatformProfile;
@@ -114,6 +123,13 @@ public class GestorServidores {
     private final ObjectMapper mapper = new ObjectMapper();
     private final File jsonFile;
     private final ServerExtensionsService serverExtensionsService = new ServerExtensionsService();
+    private final ExtensionCatalogService extensionCatalogService = new ExtensionCatalogService();
+    private final FileDownloader extensionDownloader = (url, destination) -> {
+        java.net.URI uri = java.net.URI.create(url);
+        try (InputStream in = uri.toURL().openStream()) {
+            Files.copy(in, destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+    };
 
     private String avisoServidoresNoCargados;
 
@@ -496,6 +512,65 @@ public class GestorServidores {
         boolean removed = serverExtensionsService.removeExtension(server, extension);
         guardarServidor(server);
         return removed;
+    }
+
+    public List<ExtensionCatalogProviderDescriptor> obtenerRepositoriosExtensiones() {
+        return extensionCatalogService.getAvailableProviders();
+    }
+
+    public List<ExtensionCatalogEntry> buscarExtensionesExternas(ExtensionCatalogQuery query) throws IOException {
+        return extensionCatalogService.search(query);
+    }
+
+    public List<ExtensionCatalogEntry> buscarExtensionesExternas(Server server, String queryText, int limit) throws IOException {
+        return extensionCatalogService.search(extensionCatalogService.buildQueryForServer(server, queryText, limit));
+    }
+
+    public ExtensionCatalogDetails obtenerDetalleExtensionExterna(String providerId,
+                                                                  String projectId,
+                                                                  ExtensionCatalogQuery query) throws IOException {
+        return extensionCatalogService.getDetails(providerId, projectId, query).orElse(null);
+    }
+
+    public ExtensionDownloadPlan prepararDescargaExtensionExterna(String providerId,
+                                                                  String projectId,
+                                                                  String versionId,
+                                                                  Server server) throws IOException {
+        return extensionCatalogService.resolveDownload(providerId, projectId, versionId, server).orElse(null);
+    }
+
+    public ExtensionInstallResolution evaluarInstalacionExterna(Server server,
+                                                                ExtensionCatalogEntry entry) {
+        return serverExtensionsService.evaluateCatalogInstallation(server, entry);
+    }
+
+    public ExtensionInstallResolution evaluarInstalacionExterna(Server server,
+                                                                ExtensionDownloadPlan downloadPlan) {
+        return serverExtensionsService.evaluateCatalogInstallation(server, downloadPlan);
+    }
+
+    public List<ExtensionUpdateCandidate> buscarActualizacionesExtensiones(Server server) throws IOException {
+        List<ExtensionUpdateCandidate> updates = extensionCatalogService.findUpdates(server);
+        if (serverExtensionsService.applyUpdateMetadata(server, updates)) {
+            guardarServidor(server);
+        }
+        return updates;
+    }
+
+    public ServerExtension instalarExtensionExterna(Server server,
+                                                    String providerId,
+                                                    String projectId,
+                                                    String versionId) throws IOException {
+        if (server == null) {
+            throw new IOException("No se ha indicado el servidor.");
+        }
+        ExtensionDownloadPlan downloadPlan = prepararDescargaExtensionExterna(providerId, projectId, versionId, server);
+        if (downloadPlan == null || !downloadPlan.ready()) {
+            throw new IOException("No se ha podido resolver una descarga compatible para la extension externa.");
+        }
+        ServerExtension installed = serverExtensionsService.installCatalogDownload(server, downloadPlan, extensionDownloader);
+        guardarServidor(server);
+        return installed;
     }
 
     private void aplicarPerfilPlataforma(Server server, ServerPlatformProfile profile) {

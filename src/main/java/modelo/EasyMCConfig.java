@@ -11,6 +11,7 @@ public class EasyMCConfig {
     private Boolean estadisticasPersistenciaActiva;
     private Integer estadisticasVentanaRecienteSegundos;
     private Integer estadisticasResolucionHistoricaSegundos;
+    private String curseForgeApiKey;
 
     public EasyMCConfig() {
     }

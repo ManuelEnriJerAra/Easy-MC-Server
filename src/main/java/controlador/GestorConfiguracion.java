@@ -131,6 +131,17 @@ public final class GestorConfiguracion {
         guardarConfiguracion(config);
     }
 
+    public static String getCurseForgeApiKey() {
+        String apiKey = cargarConfiguracion().getCurseForgeApiKey();
+        return apiKey == null || apiKey.isBlank() ? null : apiKey.trim();
+    }
+
+    public static void guardarCurseForgeApiKey(String apiKey) {
+        EasyMCConfig config = cargarConfiguracion();
+        config.setCurseForgeApiKey(apiKey == null || apiKey.isBlank() ? null : apiKey.trim());
+        guardarConfiguracion(config);
+    }
+
     public static Path getBaseDirectory() {
         try {
             Path baseDir = Path.of(GestorConfiguracion.class.getProtectionDomain().getCodeSource().getLocation().toURI());

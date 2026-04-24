@@ -14,6 +14,7 @@ public class ExtensionSource {
     private String versionId;
     private String url;
     private String author;
+    private String iconUrl;
 
     public ExtensionSource() {
         this.type = ExtensionSourceType.UNKNOWN;
