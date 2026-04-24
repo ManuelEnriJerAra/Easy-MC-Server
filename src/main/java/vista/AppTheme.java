@@ -12,6 +12,7 @@ import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -308,6 +309,22 @@ public final class AppTheme {
     public static void applyHandCursor(Component component) {
         if (component == null) return;
         component.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    }
+
+    public static void applyStandardScrollSpeed(JScrollPane scrollPane) {
+        applyStandardScrollSpeed(scrollPane, 24, 96);
+    }
+
+    public static void applyStandardScrollSpeed(JScrollPane scrollPane, int unitIncrement, int blockIncrement) {
+        if (scrollPane == null) return;
+        if (scrollPane.getVerticalScrollBar() != null) {
+            scrollPane.getVerticalScrollBar().setUnitIncrement(Math.max(1, unitIncrement));
+            scrollPane.getVerticalScrollBar().setBlockIncrement(Math.max(1, blockIncrement));
+        }
+        if (scrollPane.getHorizontalScrollBar() != null) {
+            scrollPane.getHorizontalScrollBar().setUnitIncrement(Math.max(1, unitIncrement));
+            scrollPane.getHorizontalScrollBar().setBlockIncrement(Math.max(1, blockIncrement));
+        }
     }
 
     public static Color getHoverBackground() {

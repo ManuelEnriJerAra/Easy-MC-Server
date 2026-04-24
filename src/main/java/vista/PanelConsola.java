@@ -1,5 +1,6 @@
 package vista;
 
+import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import modelo.Server;
 import com.formdev.flatlaf.extras.components.FlatCheckBox;
@@ -75,8 +76,11 @@ public class PanelConsola extends JPanel {
         scroll.getViewport().setBackground(AppTheme.getConsoleBackground());
 
         vistaSimpleCheckbox.setText("Vista Simple");
-        vistaSimpleCheckbox.setSelected(true);
-        vistaSimpleCheckbox.addActionListener(e->actualizarConsola());
+        vistaSimpleCheckbox.setSelected(GestorConfiguracion.isConsolaVistaSimple());
+        vistaSimpleCheckbox.addActionListener(e -> {
+            GestorConfiguracion.guardarConsolaVistaSimple(vistaSimpleCheckbox.isSelected());
+            actualizarConsola();
+        });
         vistaSimpleCheckbox.setOpaque(false);
         vistaSimpleCheckbox.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
         vistaSimpleCheckbox.setHorizontalTextPosition(SwingConstants.LEFT);

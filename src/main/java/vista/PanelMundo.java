@@ -1295,17 +1295,7 @@ public class PanelMundo extends JPanel {
         fila.setAlignmentX(Component.LEFT_ALIGNMENT);
         fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
 
-        JLabel avatar = new JLabel(obtenerInicial(conexion.username()), SwingConstants.CENTER);
-        avatar.setPreferredSize(new Dimension(CONNECTION_HEAD_SIZE, CONNECTION_HEAD_SIZE));
-        avatar.setMinimumSize(new Dimension(CONNECTION_HEAD_SIZE, CONNECTION_HEAD_SIZE));
-        avatar.setOpaque(false);
-        avatar.setBackground(new Color(0, 0, 0, 0));
-        avatar.setForeground(AppTheme.getForeground());
-        avatar.setBorder(BorderFactory.createEmptyBorder());
-        avatar.setFont(avatar.getFont().deriveFont(Font.BOLD, 12f));
-        aplicarCabezaJugadorConexion(avatar, conexion.username());
-
-        JLabel nombre = new JLabel(conexion.username());
+        PlayerIdentityView identidad = new PlayerIdentityView(conexion.username(), PlayerIdentityView.SizePreset.COMPACT);
         JLabel fecha = new JLabel(conexion.timestamp());
         fecha.setForeground(AppTheme.getMutedForeground());
         JLabel ubicacion = new JLabel(valorOPlaceholder(conexion.location()));
@@ -1315,41 +1305,14 @@ public class PanelMundo extends JPanel {
         JPanel texto = new JPanel();
         texto.setOpaque(false);
         texto.setLayout(new BoxLayout(texto, BoxLayout.Y_AXIS));
-        texto.add(nombre);
+        texto.add(identidad);
         if (conexion.location() != null && !conexion.location().isBlank()) {
             texto.add(ubicacion);
         }
 
-        fila.add(avatar, BorderLayout.WEST);
         fila.add(texto, BorderLayout.CENTER);
         fila.add(fecha, BorderLayout.EAST);
         return fila;
-    }
-
-    private void aplicarCabezaJugadorConexion(JLabel avatar, String username) {
-        if (avatar == null || username == null || username.isBlank()) {
-            return;
-        }
-
-        String key = username.strip().toLowerCase(Locale.ROOT);
-        ImageIcon cachedHead = PLAYER_HEAD_CACHE.get(key);
-        if (cachedHead != null && cachedHead.getImage() != null) {
-            avatar.setText(null);
-            avatar.setIcon(cachedHead);
-            return;
-        }
-
-        avatar.setText(obtenerInicial(username));
-        avatar.setIcon(null);
-        cargarCabezaJugadorPreviewAsync(username, () -> {
-            ImageIcon loadedHead = PLAYER_HEAD_CACHE.get(key);
-            if (loadedHead != null && loadedHead.getImage() != null) {
-                avatar.setText(null);
-                avatar.setIcon(loadedHead);
-            }
-            avatar.revalidate();
-            avatar.repaint();
-        });
     }
 
     private World getMundoSeleccionadoOActivo() {

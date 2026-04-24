@@ -5,7 +5,6 @@ import modelo.Server;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.function.Consumer;
 
 final class VentanaPrincipalRightContentBuilder {
     record Result(
@@ -38,11 +37,7 @@ final class VentanaPrincipalRightContentBuilder {
 
         CardPanel jugadoresCard = new CardPanel("Jugadores", new Insets(8, 8, 8, 8));
         jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
-        JButton refrescarJugadoresButton = new com.formdev.flatlaf.extras.components.FlatButton();
-        refrescarJugadoresButton.setToolTipText("Refrescar");
-        AppTheme.applyRefreshIconButtonStyle(refrescarJugadoresButton);
-        refrescarJugadoresButton.addActionListener(e -> panelJugadores.refrescarPanel());
-        jugadoresCard.getHeaderActionsPanel().add(refrescarJugadoresButton);
+        panelJugadores.configureHeaderActions(jugadoresCard.getHeaderActionsPanel());
         jugadoresCard.getContentPanel().add(panelJugadores, BorderLayout.CENTER);
 
         JPanel consolaCard = new JPanel(new BorderLayout());

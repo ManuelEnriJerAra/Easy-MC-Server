@@ -11,6 +11,8 @@ public class EasyMCConfig {
     private Boolean estadisticasPersistenciaActiva;
     private Integer estadisticasVentanaRecienteSegundos;
     private Integer estadisticasResolucionHistoricaSegundos;
+    private Boolean jugadoresListaCompacta;
+    private Boolean consolaVistaSimple;
 
     public EasyMCConfig() {
     }
@@ -28,11 +30,15 @@ public class EasyMCConfig {
                         Integer estadisticasRangoSegundos,
                         Boolean estadisticasPersistenciaActiva,
                         Integer estadisticasVentanaRecienteSegundos,
-                        Integer estadisticasResolucionHistoricaSegundos) {
+                        Integer estadisticasResolucionHistoricaSegundos,
+                        Boolean jugadoresListaCompacta,
+                        Boolean consolaVistaSimple) {
         this.temaClassName = temaClassName;
         this.estadisticasRangoSegundos = estadisticasRangoSegundos;
         this.estadisticasPersistenciaActiva = estadisticasPersistenciaActiva;
         this.estadisticasVentanaRecienteSegundos = estadisticasVentanaRecienteSegundos;
         this.estadisticasResolucionHistoricaSegundos = estadisticasResolucionHistoricaSegundos;
+        this.jugadoresListaCompacta = jugadoresListaCompacta;
+        this.consolaVistaSimple = consolaVistaSimple;
     }
 }

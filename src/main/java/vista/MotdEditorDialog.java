@@ -29,6 +29,7 @@ public class MotdEditorDialog {
         FlatScrollPane scroll = new FlatScrollPane();
         scroll.setViewportView(pane);
         scroll.setBorder(BorderFactory.createTitledBorder("MOTD (máx. 2 líneas)"));
+        AppTheme.applyStandardScrollSpeed(scroll);
 
         JToolBar bar = new JToolBar();
         bar.setFloatable(false);

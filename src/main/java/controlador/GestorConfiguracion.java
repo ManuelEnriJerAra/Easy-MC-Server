@@ -18,6 +18,8 @@ public final class GestorConfiguracion {
     private static final boolean DEFAULT_STATS_PERSISTENCE_ENABLED = true;
     private static final int DEFAULT_STATS_RECENT_WINDOW_SECONDS = 24 * 60 * 60;
     private static final int DEFAULT_STATS_HISTORICAL_RESOLUTION_SECONDS = 60;
+    private static final boolean DEFAULT_PLAYER_LIST_COMPACT = false;
+    private static final boolean DEFAULT_CONSOLE_SIMPLE_VIEW = true;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -65,6 +67,12 @@ public final class GestorConfiguracion {
         }
         if (config.getEstadisticasResolucionHistoricaSegundos() == null || config.getEstadisticasResolucionHistoricaSegundos() <= 0) {
             config.setEstadisticasResolucionHistoricaSegundos(DEFAULT_STATS_HISTORICAL_RESOLUTION_SECONDS);
+        }
+        if (config.getJugadoresListaCompacta() == null) {
+            config.setJugadoresListaCompacta(DEFAULT_PLAYER_LIST_COMPACT);
+        }
+        if (config.getConsolaVistaSimple() == null) {
+            config.setConsolaVistaSimple(DEFAULT_CONSOLE_SIMPLE_VIEW);
         }
 
         try {
@@ -132,6 +140,28 @@ public final class GestorConfiguracion {
         guardarConfiguracion(config);
     }
 
+    public static boolean isJugadoresListaCompacta() {
+        Boolean compacta = cargarConfiguracion().getJugadoresListaCompacta();
+        return compacta == null ? DEFAULT_PLAYER_LIST_COMPACT : compacta;
+    }
+
+    public static void guardarJugadoresListaCompacta(boolean compacta) {
+        EasyMCConfig config = cargarConfiguracion();
+        config.setJugadoresListaCompacta(compacta);
+        guardarConfiguracion(config);
+    }
+
+    public static boolean isConsolaVistaSimple() {
+        Boolean vistaSimple = cargarConfiguracion().getConsolaVistaSimple();
+        return vistaSimple == null ? DEFAULT_CONSOLE_SIMPLE_VIEW : vistaSimple;
+    }
+
+    public static void guardarConsolaVistaSimple(boolean vistaSimple) {
+        EasyMCConfig config = cargarConfiguracion();
+        config.setConsolaVistaSimple(vistaSimple);
+        guardarConfiguracion(config);
+    }
+
     public static Path getBaseDirectory() {
         try {
             Path baseDir = Path.of(GestorConfiguracion.class.getProtectionDomain().getCodeSource().getLocation().toURI());
@@ -160,7 +190,9 @@ public final class GestorConfiguracion {
                 DEFAULT_STATS_RANGE_SECONDS,
                 DEFAULT_STATS_PERSISTENCE_ENABLED,
                 DEFAULT_STATS_RECENT_WINDOW_SECONDS,
-                DEFAULT_STATS_HISTORICAL_RESOLUTION_SECONDS
+                DEFAULT_STATS_HISTORICAL_RESOLUTION_SECONDS,
+                DEFAULT_PLAYER_LIST_COMPACT,
+                DEFAULT_CONSOLE_SIMPLE_VIEW
         );
     }
 
@@ -201,6 +233,14 @@ public final class GestorConfiguracion {
         }
         if (config.getEstadisticasResolucionHistoricaSegundos() == null || config.getEstadisticasResolucionHistoricaSegundos() <= 0) {
             config.setEstadisticasResolucionHistoricaSegundos(DEFAULT_STATS_HISTORICAL_RESOLUTION_SECONDS);
+            changed = true;
+        }
+        if (config.getJugadoresListaCompacta() == null) {
+            config.setJugadoresListaCompacta(DEFAULT_PLAYER_LIST_COMPACT);
+            changed = true;
+        }
+        if (config.getConsolaVistaSimple() == null) {
+            config.setConsolaVistaSimple(DEFAULT_CONSOLE_SIMPLE_VIEW);
             changed = true;
         }
         return changed;

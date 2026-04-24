@@ -43,6 +43,30 @@ public class MojangAPI {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    public static final class PlayerProfile {
+        private final String name;
+        private final String uuid;
+        private final String skinUrl;
+
+        public PlayerProfile(String name, String uuid, String skinUrl) {
+            this.name = name;
+            this.uuid = uuid;
+            this.skinUrl = skinUrl;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getUuid() {
+            return uuid;
+        }
+
+        public String getSkinUrl() {
+            return skinUrl;
+        }
+    }
+
     public static void runBackgroundRequest(Runnable task) {
         if (task == null) {
             return;
@@ -158,6 +182,33 @@ public class MojangAPI {
             g.dispose();
 
             return new ImageIcon(out);
+        } catch (Exception e){
+            return null;
+        }
+    }
+
+    public String obtenerUuidJugador(String username){
+        if(username == null || username.isBlank()) return null;
+        return obtenerUuidPorUsername(username.strip());
+    }
+
+    public String obtenerNombreJugadorExacto(String username){
+        PlayerProfile profile = obtenerPerfilJugadorExacto(username);
+        return profile == null ? null : profile.getName();
+    }
+
+    public PlayerProfile obtenerPerfilJugadorExacto(String username){
+        if(username == null || username.isBlank()) return null;
+        try{
+            JsonNode node = readJsonFromUrl(UUID_BY_USERNAME_URL + username.strip());
+            JsonNode nameNode = node.get("name");
+            JsonNode idNode = node.get("id");
+            if(nameNode == null || idNode == null) return null;
+            String name = nameNode.asString();
+            String uuid = idNode.asString();
+            if(name == null || name.isBlank() || uuid == null || uuid.isBlank()) return null;
+            String skinUrl = obtenerUrlSkinPorUuid(uuid);
+            return new PlayerProfile(name, uuid, skinUrl);
         } catch (Exception e){
             return null;
         }

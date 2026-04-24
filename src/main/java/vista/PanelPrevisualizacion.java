@@ -1,17 +1,23 @@
 package vista;
 
-import com.formdev.flatlaf.extras.components.FlatButton;
-import com.formdev.flatlaf.extras.components.FlatScrollPane;
-import com.formdev.flatlaf.extras.components.FlatTextField;
-import controlador.GestorServidores;
-import controlador.Utilidades;
-import controlador.world.WorldPreviewCatalogService;
-import controlador.world.WorldPreviewOption;
-import modelo.Server;
-
-import javax.imageio.ImageIO;
-import javax.swing.*;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Cursor;
+import java.awt.Dialog;
+import java.awt.Dimension;
+import java.awt.FileDialog;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Frame;
+import java.awt.Graphics2D;
+import java.awt.GridBagLayout;
+import java.awt.Image;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.Window;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.MouseAdapter;
@@ -23,6 +29,40 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.imageio.ImageIO;
+import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
+import javax.swing.TransferHandler;
+import javax.swing.WindowConstants;
+
+import com.formdev.flatlaf.extras.components.FlatButton;
+import com.formdev.flatlaf.extras.components.FlatScrollPane;
+import com.formdev.flatlaf.extras.components.FlatTextField;
+
+import controlador.GestorServidores;
+import controlador.Utilidades;
+import controlador.world.WorldPreviewCatalogService;
+import controlador.world.WorldPreviewOption;
+import modelo.Server;
 
 public class PanelPrevisualizacion extends JPanel {
     private static final String[] EASY_MC_IMAGE_RESOURCES = {
@@ -402,18 +442,9 @@ public class PanelPrevisualizacion extends JPanel {
             content.setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
             content.setBackground(AppTheme.getPanelBackground());
 
-            JLabel title = new JLabel("Selecciona una imagen");
-            title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
-
-            JLabel subtitle = new JLabel("Usa una imagen interna, una preview de cualquier servidor o arrastra una imagen desde el ordenador.");
-            subtitle.setForeground(AppTheme.getMutedForeground());
-
             JPanel header = new JPanel();
             header.setOpaque(false);
             header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
-            header.add(title);
-            header.add(Box.createVerticalStrut(4));
-            header.add(subtitle);
             content.add(header, BorderLayout.NORTH);
 
             JPanel center = new JPanel(new BorderLayout(12, 12));
