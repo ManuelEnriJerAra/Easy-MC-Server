@@ -1,12 +1,48 @@
 package vista;
 
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dialog;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.Shape;
+import java.awt.Window;
+import java.util.Random;
+
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JPanel;
+import javax.swing.JTextPane;
+import javax.swing.JToolBar;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.UIManager;
+import javax.swing.WindowConstants;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.Document;
+import javax.swing.text.DocumentFilter;
+import javax.swing.text.Element;
+import javax.swing.text.LabelView;
+import javax.swing.text.MutableAttributeSet;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
+import javax.swing.text.StyledEditorKit;
+import javax.swing.text.View;
+import javax.swing.text.ViewFactory;
+
 import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
-
-import javax.swing.*;
-import javax.swing.text.*;
-import java.awt.*;
-import java.util.Random;
 
 public class MotdEditorDialog {
     private static final char SECTION = '\u00A7';
@@ -19,6 +55,7 @@ public class MotdEditorDialog {
         pane.setEditorKit(new ObfuscatedEditorKit());
         pane.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
         pane.setFont(UIManager.getFont("TextField.font"));
+        pane.setBackground(AppTheme.getConsoleBackground());
         if (pane.getFont() == null) pane.setFont(new Font("Dialog", Font.PLAIN, 14));
 
         // Limitar a 2 líneas (0 o 1 salto de línea)

@@ -63,7 +63,6 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
-import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
@@ -77,8 +76,8 @@ import javax.swing.event.ListDataListener;
 import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 
-import controlador.GestorServidores;
 import controlador.GestorConfiguracion;
+import controlador.GestorServidores;
 import controlador.GestorUsuariosConocidos;
 import controlador.MojangAPI;
 import controlador.Utilidades;
@@ -395,7 +394,7 @@ public class PanelJugadores extends JPanel {
         int opsCount = cargarListaDesdeArchivo(TipoLista.OPS).size();
 
         btnWhitelist.setToolTipText("Abrir Whitelist (" + whitelistCount + ")");
-        btnBaneados.setToolTipText("Abrir Baneados: ID (" + bannedPlayersCount + "), IP (" + bannedIpsCount + ")");
+        btnBaneados.setToolTipText("Abrir Baneados: IDs baneadas (" + bannedPlayersCount + "), IPs baneadas (" + bannedIpsCount + ")");
         btnOps.setToolTipText("Abrir OPs (" + opsCount + ")");
         revalidate();
         repaint();
@@ -449,12 +448,22 @@ public class PanelJugadores extends JPanel {
         DefaultListModel<String> modelPlayers = crearModelo(TipoLista.BANNED_PLAYERS);
         DefaultListModel<String> modelIps = crearModelo(TipoLista.BANNED_IPS);
 
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.addTab("Baneados por ID", crearPanelLista(TipoLista.BANNED_PLAYERS, modelPlayers));
-        tabs.addTab("Baneados por IP", crearPanelLista(TipoLista.BANNED_IPS, modelIps));
+        JPanel splitPanel = new JPanel(new GridLayout(1, 2, 24, 0));
+        splitPanel.setOpaque(false);
+        JPanel leftPanel = crearSeccionListaBaneados("IDs baneadas", crearPanelLista(TipoLista.BANNED_PLAYERS, modelPlayers));
+        leftPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 0, 1, AppTheme.getSubtleBorderColor()),
+                BorderFactory.createEmptyBorder(0, 0, 0, 12)
+        ));
 
-        JDialog dialog = crearDialogoLista("Baneados", tabs);
-        dialog.setSize(480, 430);
+        JPanel rightPanel = crearSeccionListaBaneados("IPs baneadas", crearPanelLista(TipoLista.BANNED_IPS, modelIps));
+        rightPanel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
+
+        splitPanel.add(leftPanel);
+        splitPanel.add(rightPanel);
+
+        JDialog dialog = crearDialogoLista("Baneados", splitPanel);
+        dialog.setSize(560, 460);
         dialog.setLocationRelativeTo(this);
         dialog.addWindowListener(new WindowAdapter() {
             @Override
@@ -467,6 +476,17 @@ public class PanelJugadores extends JPanel {
         modelosListasAbiertas.put(TipoLista.BANNED_IPS, modelIps);
         dialog.setVisible(true);
         recargarContadores();
+    }
+
+    private JPanel crearSeccionListaBaneados(String titulo, JComponent contenido) {
+        JLabel titleLabel = new JLabel(titulo);
+        AppTheme.applyCardTitleStyle(titleLabel);
+
+        JPanel panel = new JPanel(new BorderLayout(0, 6));
+        panel.setOpaque(false);
+        panel.add(titleLabel, BorderLayout.NORTH);
+        panel.add(contenido, BorderLayout.CENTER);
+        return panel;
     }
 
     private DefaultListModel<String> crearModelo(TipoLista tipo) {
@@ -566,11 +586,11 @@ public class PanelJugadores extends JPanel {
 
         JPanel botones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         botones.setOpaque(false);
+        botones.add(btnAdd);
+        botones.add(btnRemove);
         if (admiteModoCompacto) {
             botones.add(compactToggleButton);
         }
-        botones.add(btnAdd);
-        botones.add(btnRemove);
 
         JPanel accionesCabecera = new JPanel(new BorderLayout(8, 0));
         accionesCabecera.setOpaque(false);
@@ -813,7 +833,7 @@ public class PanelJugadores extends JPanel {
         if (count <= 0) {
             return switch (tipo) {
                 case WHITELIST -> "No hay ningun jugador en la whitelist.";
-                case OPS -> "No hay ningun administrador.";
+                case OPS -> "No hay ningun operador.";
                 case BANNED_PLAYERS -> "No hay ningun jugador baneado.";
                 case BANNED_IPS -> "No hay ninguna IP baneada.";
             };
@@ -877,7 +897,7 @@ public class PanelJugadores extends JPanel {
         if (cmd == null) return;
         if (isServerActivo()) {
             enviarComando(cmd);
-            GestorUsuariosConocidos.recordarUsuario(input, null, null, "manual-add");
+            recordarUsuarioConocidoSiProcede(tipo, input, "manual-add");
 
             new Timer(500, (ActionEvent e) -> {
                 ((Timer) e.getSource()).stop();
@@ -887,7 +907,7 @@ public class PanelJugadores extends JPanel {
         }
 
         if (!modificarListaOffline(tipo, input, true)) return;
-        GestorUsuariosConocidos.recordarUsuario(input, null, null, "manual-add");
+        recordarUsuarioConocidoSiProcede(tipo, input, "manual-add");
         recargarModel(tipo, model);
     }
 
@@ -1250,11 +1270,16 @@ public class PanelJugadores extends JPanel {
         if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
             return;
         }
-        GestorUsuariosConocidos.recordarUsuarios(cargarNombresDesdeUsercache(), "usercache");
         GestorUsuariosConocidos.recordarUsuarios(cargarListaDesdeArchivo(TipoLista.WHITELIST), "whitelist");
         GestorUsuariosConocidos.recordarUsuarios(cargarListaDesdeArchivo(TipoLista.OPS), "ops");
         GestorUsuariosConocidos.recordarUsuarios(cargarListaDesdeArchivo(TipoLista.BANNED_PLAYERS), "banned-players");
         GestorUsuariosConocidos.recordarUsuarios(panelsPorJugador.keySet(), "online-players");
+    }
+
+    private void recordarUsuarioConocidoSiProcede(TipoLista tipo, String username, String source) {
+        if (tipo == null || username == null || username.isBlank()) return;
+        if (tipo == TipoLista.BANNED_IPS) return;
+        GestorUsuariosConocidos.recordarUsuario(username, null, null, source);
     }
 
     private void onRemove(TipoLista tipo, JList<String> list, DefaultListModel<String> model) {
