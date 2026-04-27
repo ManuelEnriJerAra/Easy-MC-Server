@@ -30,12 +30,13 @@ final class VentanaPrincipalRightContentBuilder {
         PanelConsola panelConsola = new PanelConsola(gestorServidores);
         panelConsola.setPreferredSize(new Dimension(preferredConsoleHeight, 100));
 
-        CardPanel headerCard = new CardPanel("Servidor seleccionado", new Insets(8, 8, 8, 8));
+        CardPanel headerCard = new CardPanel("Servidor seleccionado");
         headerCard.setBorder(BorderFactory.createEmptyBorder());
         headerCard.getContentPanel().add(panelTotalServidor, BorderLayout.CENTER);
+        headerCard.setFullHeightSideComponent(new PanelControlServidor(gestorServidores));
         home.add(headerCard, BorderLayout.NORTH);
 
-        CardPanel jugadoresCard = new CardPanel("Jugadores", new Insets(8, 8, 8, 8));
+        CardPanel jugadoresCard = new CardPanel("Jugadores");
         jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
         panelJugadores.configureHeaderActions(jugadoresCard.getHeaderActionsPanel());
         jugadoresCard.getContentPanel().add(panelJugadores, BorderLayout.CENTER);

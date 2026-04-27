@@ -129,7 +129,7 @@ public class PanelJugadores extends JPanel {
         setBackground(AppTheme.getPanelBackground());
 
         if (showTitle) {
-            JLabel titulo = new JLabel("Jugadores");
+            JLabel titulo = new CardTitleLabel("Jugadores");
             AppTheme.applyCardTitleStyle(titulo);
             add(titulo, BorderLayout.NORTH);
         }
@@ -479,7 +479,7 @@ public class PanelJugadores extends JPanel {
     }
 
     private JPanel crearSeccionListaBaneados(String titulo, JComponent contenido) {
-        JLabel titleLabel = new JLabel(titulo);
+        JLabel titleLabel = new CardTitleLabel(titulo);
         AppTheme.applyCardTitleStyle(titleLabel);
 
         JPanel panel = new JPanel(new BorderLayout(0, 6));

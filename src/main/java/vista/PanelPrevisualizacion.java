@@ -17,12 +17,15 @@ import java.awt.Image;
 import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.Window;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -51,14 +54,17 @@ import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import javax.swing.TransferHandler;
 import javax.swing.WindowConstants;
+import javax.swing.border.Border;
 
 import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import com.formdev.flatlaf.extras.components.FlatTextField;
 
 import controlador.GestorServidores;
+import controlador.IPPublica;
 import controlador.Utilidades;
 import controlador.world.WorldPreviewCatalogService;
 import controlador.world.WorldPreviewOption;
@@ -100,13 +106,13 @@ public class PanelPrevisualizacion extends JPanel {
 
         JPanel iconWrap = new JPanel(new GridBagLayout());
         iconWrap.setOpaque(false);
-        iconWrap.setBorder(BorderFactory.createEmptyBorder(0, 8, 8, 8));
+        iconWrap.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
         iconWrap.add(iconoRedondo);
         this.add(iconWrap, BorderLayout.WEST);
 
         JPanel panelDatos = new JPanel();
         panelDatos.setOpaque(false);
-        panelDatos.setBorder(BorderFactory.createEmptyBorder(0, 10, 8, 10));
+        panelDatos.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
         panelDatos.setLayout(new BoxLayout(panelDatos, BoxLayout.Y_AXIS));
 
         String nombre = server.getDisplayName();
@@ -125,15 +131,19 @@ public class PanelPrevisualizacion extends JPanel {
         FlatTextField nombreField = new FlatTextField();
         nombreField.setText(nombre);
         nombreField.setFont(nombreLabel.getFont());
-        javax.swing.border.Border borderNormal = BorderFactory.createEmptyBorder(2, 6, 2, 6);
+        Border bordeVacio = BorderFactory.createEmptyBorder(0, 0, 0, 0);
         Font fontNormal = nombreField.getFont();
-        nombreField.setBorder(borderNormal);
+        nombreField.setBorder(bordeVacio);
         nombreField.setOpaque(false);
         nombreField.setEditable(false);
         nombreField.setForeground(nombreLabel.getForeground());
         nombreField.setHorizontalAlignment(SwingConstants.LEFT);
         nombreField.putClientProperty("fullText", nombre == null ? "" : nombre);
         nombreField.setToolTipText(nombre);
+        Dimension nombrePreferredSize = nombreField.getPreferredSize();
+        nombreField.setPreferredSize(new Dimension(0, nombrePreferredSize.height));
+        nombreField.setMinimumSize(new Dimension(0, nombrePreferredSize.height));
+        nombreField.setMaximumSize(new Dimension(Integer.MAX_VALUE, nombrePreferredSize.height));
 
         AppTheme.applyHandCursor(nombreField);
         nombreField.setToolTipText("Click para editar (Enter o fuera para guardar)");
@@ -153,7 +163,6 @@ public class PanelPrevisualizacion extends JPanel {
             public void mouseExited(MouseEvent e) {
                 if(nombreField.isEditable()) return;
                 nombreField.setOpaque(false);
-                nombreField.setBorder(borderNormal);
                 if(fontNormal != null){
                     nombreField.setFont(fontNormal);
                 }
@@ -170,7 +179,6 @@ public class PanelPrevisualizacion extends JPanel {
                     nombreField.setFont(fontNormal);
                 }
                 nombreField.setOpaque(false);
-                nombreField.setBorder(borderNormal);
                 nombreField.requestFocusInWindow();
                 nombreField.selectAll();
             }
@@ -197,7 +205,7 @@ public class PanelPrevisualizacion extends JPanel {
             nombreField.setEditable(false);
             nombreField.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             nombreField.setOpaque(false);
-            nombreField.setBorder(borderNormal);
+            nombreField.setBorder(bordeVacio);
             if(fontNormal != null){
                 nombreField.setFont(fontNormal);
             }
@@ -216,7 +224,8 @@ public class PanelPrevisualizacion extends JPanel {
         motdRawDisplay = motdRawParts.length <= 2 ? motdRawDisplay : (motdRawParts[0] + "\n" + motdRawParts[1]);
 
         JLabel motdLabel = new JLabel(MotdRenderUtil.toHtml(motdRawDisplay));
-        motdLabel.setFont(motdLabel.getFont().deriveFont(Font.PLAIN, 15f));
+        motdLabel.putClientProperty("motdRawDisplay", motdRawDisplay);
+        motdLabel.setFont(AppTheme.getConsoleLikeFont(15f));
         motdLabel.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
         motdLabel.setHorizontalAlignment(SwingConstants.LEFT);
         motdLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -224,6 +233,7 @@ public class PanelPrevisualizacion extends JPanel {
         motdLabel.putClientProperty("fullText", motd == null ? "" : motd);
         motdLabel.setToolTipText(motd);
         motdLabel.setForeground(AppTheme.getConsoleForeground());
+        installAnimatedMotdHtml(motdLabel, motdRawDisplay);
         motdLabelRef[0] = motdLabel;
 
         Font motdFontNormal = motdLabel.getFont();
@@ -258,7 +268,9 @@ public class PanelPrevisualizacion extends JPanel {
                 String nuevoDisplay = (nuevo == null) ? "" : nuevo.replace("\r", "").replace('&', '\u00A7');
                 String[] nuevoParts = nuevoDisplay.split("\\R", -1);
                 nuevoDisplay = nuevoParts.length <= 2 ? nuevoDisplay : (nuevoParts[0] + "\n" + nuevoParts[1]);
+                motdLabel.putClientProperty("motdRawDisplay", nuevoDisplay);
                 motdLabel.setText(MotdRenderUtil.toHtml(nuevoDisplay));
+                installAnimatedMotdHtml(motdLabel, nuevoDisplay);
                 aplicarEllipsisTextos(nombreField, motdLabel);
                 try{
                     gestorServidores.guardarServidor(server);
@@ -267,28 +279,110 @@ public class PanelPrevisualizacion extends JPanel {
             }
         });
 
-        JLabel versionLabel = new JLabel((version == null || version.isBlank()) ? "(sin version)" : ("Version: " + version));
+        JLabel ipServidor = new JLabel("(cargando...)");
+        ipServidor.putClientProperty("fullText", "(cargando...)");
+        ipServidor.setFont(ipServidor.getFont().deriveFont(Font.BOLD, 16f));
+        ipServidor.setForeground(AppTheme.getLinkForeground());
+        ipServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        JLabel versionLabel = new JLabel((version == null || version.isBlank()) ? "(sin version)" : version);
         versionLabel.setFont(versionLabel.getFont().deriveFont(Font.PLAIN, 15f));
-        versionLabel.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        versionLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
         versionLabel.setHorizontalAlignment(SwingConstants.LEFT);
+
+        String tipo = (server == null || server.getTipo() == null || server.getTipo().isBlank())
+                ? "desconocido"
+                : server.getTipo();
+        JLabel tipoLabel = new JLabel(tipo);
+        tipoLabel.setFont(tipoLabel.getFont().deriveFont(Font.PLAIN, 15f));
+
+        JPanel infoServidor = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        infoServidor.setOpaque(false);
+        infoServidor.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+        infoServidor.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        Runnable ajustarInfoServidor = () -> {
+            int fixedWidth = versionLabel.getPreferredSize().width
+                    + tipoLabel.getPreferredSize().width
+                    + 44;
+            int maxWidth = Math.max(0, infoServidor.getWidth() - fixedWidth);
+            aplicarEllipsisLabel(ipServidor, maxWidth);
+        };
+
+        Runnable actualizarTextoIp = () -> {
+            String ip = (String) ipServidor.getClientProperty("ipPublica");
+            if(ip == null || ip.isBlank()){
+                ipServidor.putClientProperty("fullText", "(sin conexion)");
+                ipServidor.putClientProperty("copyText", null);
+                SwingUtilities.invokeLater(ajustarInfoServidor);
+                return;
+            }
+            int puerto = (server == null || server.getServerConfig() == null) ? 0 : server.getServerConfig().getPuerto();
+            String texto = puerto > 0 ? (ip + ":" + puerto) : (ip + ":(sin puerto)");
+            ipServidor.putClientProperty("fullText", texto);
+            ipServidor.putClientProperty("copyText", puerto > 0 ? (ip + ":" + puerto) : ip);
+            SwingUtilities.invokeLater(ajustarInfoServidor);
+        };
+
+        IPPublica.getAsync(ip -> {
+            ipServidor.putClientProperty("ipPublica", ip);
+            actualizarTextoIp.run();
+        });
+
+        PropertyChangeListener listenerEstado = null;
+        if(server != null){
+            listenerEstado = evt -> {
+                if(!"estadoServidor".equals(evt.getPropertyName())) return;
+                Object v = evt.getNewValue();
+                if(!(v instanceof Server s)) return;
+                if(!s.getId().equals(server.getId())) return;
+                SwingUtilities.invokeLater(actualizarTextoIp);
+            };
+            gestorServidores.addPropertyChangeListener("estadoServidor", listenerEstado);
+        }
+
+        ipServidor.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                Object copyObj = ipServidor.getClientProperty("copyText");
+                if(!(copyObj instanceof String copyText) || copyText.isBlank()) return;
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(copyText), null);
+                JOptionPane.showMessageDialog(
+                        SwingUtilities.getWindowAncestor(PanelPrevisualizacion.this),
+                        "Copiado al portapapeles: " + copyText,
+                        "Copiado",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+            }
+        });
+
+        infoServidor.add(ipServidor);
+        infoServidor.add(crearSeparadorInfo());
+        infoServidor.add(versionLabel);
+        infoServidor.add(crearSeparadorInfo());
+        infoServidor.add(tipoLabel);
+        infoServidor.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                ajustarInfoServidor.run();
+            }
+        });
 
         nombreField.setAlignmentX(Component.LEFT_ALIGNMENT);
         motdLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        versionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel motdBox = new JPanel(new BorderLayout());
-        motdBox.setOpaque(true);
-        motdBox.setBackground(AppTheme.getConsoleBackground());
-        motdBox.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(AppTheme.getConsoleOutlineColor(), 1, true),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)
+        JPanel motdBox = new RoundedBackgroundPanel(AppTheme.getConsoleBackground(), AppTheme.getArc());
+        motdBox.setBorder(AppTheme.createRoundedBorder(
+                new Insets(6, 8, 6, 8),
+                AppTheme.getConsoleOutlineColor(),
+                1f
         ));
         motdBox.add(motdLabel, BorderLayout.CENTER);
         motdBox.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         panelDatos.add(nombreField);
         panelDatos.add(motdBox);
-        panelDatos.add(versionLabel);
+        panelDatos.add(infoServidor);
         panelDatos.add(Box.createVerticalGlue());
 
         JPanel panelDatosWrap = new JPanel(new BorderLayout());
@@ -302,6 +396,13 @@ public class PanelPrevisualizacion extends JPanel {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
                 ajustar.run();
+            }
+        });
+
+        PropertyChangeListener finalListenerEstado = listenerEstado;
+        this.addHierarchyListener(e -> {
+            if(!isDisplayable() && finalListenerEstado != null){
+                gestorServidores.removePropertyChangeListener("estadoServidor", finalListenerEstado);
             }
         });
     }
@@ -338,6 +439,60 @@ public class PanelPrevisualizacion extends JPanel {
                     JOptionPane.ERROR_MESSAGE
             );
         }
+    }
+
+    private static JLabel crearSeparadorInfo(){
+        JLabel separador = new JLabel("|");
+        separador.setForeground(AppTheme.getMutedForeground());
+        separador.setFont(separador.getFont().deriveFont(Font.PLAIN, 15f));
+        return separador;
+    }
+
+    private static void installAnimatedMotdHtml(JLabel label, String motdRaw){
+        if(label == null) return;
+        Object oldTimer = label.getClientProperty("motdAnimationTimer");
+        if(oldTimer instanceof Timer timer){
+            timer.stop();
+        }
+
+        if(!MotdRenderUtil.hasObfuscated(motdRaw)){
+            label.putClientProperty("motdAnimationToken", null);
+            label.putClientProperty("motdAnimationTimer", null);
+            label.setText(MotdRenderUtil.toHtml(motdRaw));
+            return;
+        }
+
+        Timer timer = new Timer(140, e -> label.setText(MotdRenderUtil.toHtml(motdRaw)));
+        Object token = new Object();
+        label.putClientProperty("motdAnimationToken", token);
+        label.putClientProperty("motdAnimationTimer", timer);
+        Runnable syncTimer = () -> {
+            if(label.getClientProperty("motdAnimationToken") != token){
+                timer.stop();
+                return;
+            }
+            if(label.isShowing()){
+                if(!timer.isRunning()) timer.start();
+                label.setText(MotdRenderUtil.toHtml(motdRaw));
+            } else {
+                timer.stop();
+            }
+        };
+        label.addHierarchyListener(e -> {
+            syncTimer.run();
+        });
+        SwingUtilities.invokeLater(syncTimer);
+    }
+
+    private static void aplicarEllipsisLabel(JLabel label, int maxWidth){
+        if(label == null) return;
+        Object fullObj = label.getClientProperty("fullText");
+        String full = (fullObj instanceof String s) ? s : label.getText();
+        if(full == null) full = "";
+        label.setToolTipText(full);
+
+        FontMetrics fm = label.getFontMetrics(label.getFont());
+        label.setText(ellipsizePx(full, fm, maxWidth));
     }
 
     private ImageSelectionResult seleccionarImagenServidor(Server server) throws IOException {
@@ -845,9 +1000,13 @@ public class PanelPrevisualizacion extends JPanel {
 
         Container parent = nombreField.getParent();
         if(parent == null) return;
-        int maxWidth = parent.getWidth();
+        int maxWidth = nombreField.getWidth() > 0 ? nombreField.getWidth() : parent.getWidth();
         if(maxWidth <= 0) return;
-        maxWidth = Math.max(0, maxWidth - 16);
+        Insets nameInsets = nombreField.getInsets();
+        if(nameInsets != null){
+            maxWidth -= nameInsets.left + nameInsets.right;
+        }
+        maxWidth = Math.max(0, maxWidth);
 
         Object fullNameObj = nombreField.getClientProperty("fullText");
         String fullName = fullNameObj == null ? "" : String.valueOf(fullNameObj);

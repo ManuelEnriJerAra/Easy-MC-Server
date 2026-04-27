@@ -21,7 +21,7 @@ class CardPanelThemeTest {
         UIManager.put("Panel.background", Color.WHITE);
         UIManager.put("Label.foreground", Color.BLACK);
 
-        CardPanel cardPanel = new CardPanel("Lista de servidores", new Insets(8, 8, 8, 8));
+        CardPanel cardPanel = new CardPanel("Lista de servidores");
         Color colorClaro = cardPanel.getTitleLabel().getForeground();
 
         UIManager.put("Panel.background", new Color(38, 43, 51));

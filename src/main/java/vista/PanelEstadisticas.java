@@ -157,7 +157,7 @@ public class PanelEstadisticas extends JPanel {
         setLayout(new BorderLayout());
         setOpaque(false);
 
-        CardPanel card = new CardPanel("Estadísticas", new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Estadísticas");
         card.setBorder(BorderFactory.createEmptyBorder());
         card.getContentPanel().add(crearContenido(), BorderLayout.CENTER);
         add(card, BorderLayout.CENTER);
@@ -416,7 +416,7 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private JPanel crearTarjetaResumen(String title, JLabel valueLabel) {
-        CardPanel card = new CardPanel(title, new Insets(10, 10, 10, 10));
+        CardPanel card = new CardPanel(title);
         card.setBackground(AppTheme.getSurfaceBackground());
         JLabel titleLabel = card.getTitleLabel();
         titleLabel.setForeground(AppTheme.getMutedForeground());
@@ -430,7 +430,7 @@ public class PanelEstadisticas extends JPanel {
     }
 
     private JPanel crearPanelAjustesHistorico() {
-        CardPanel card = new CardPanel("Configuración", new Insets(10, 10, 10, 10));
+        CardPanel card = new CardPanel("Configuración");
         card.setBackground(AppTheme.getSurfaceBackground());
         JLabel titulo = card.getTitleLabel();
         titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 13f));
@@ -1658,7 +1658,7 @@ public class PanelEstadisticas extends JPanel {
         wrapper.setBackground(AppTheme.getBackground());
         wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
-        CardPanel previewCard = new CardPanel("Previsualización", new Insets(10, 10, 10, 10));
+        CardPanel previewCard = new CardPanel("Previsualización");
         previewCard.setBackground(AppTheme.getSurfaceBackground());
         JLabel previewTitle = previewCard.getTitleLabel();
         previewTitle.setFont(previewTitle.getFont().deriveFont(Font.BOLD, 13f));
@@ -1669,7 +1669,7 @@ public class PanelEstadisticas extends JPanel {
         previewCard.getContentPanel().add(previewContent, BorderLayout.CENTER);
         wrapper.add(previewCard, BorderLayout.NORTH);
 
-        CardPanel configCard = new CardPanel("Opciones", new Insets(10, 10, 10, 10));
+        CardPanel configCard = new CardPanel("Opciones");
         configCard.setBackground(AppTheme.getSurfaceBackground());
         JLabel configTitle = configCard.getTitleLabel();
         configTitle.setFont(configTitle.getFont().deriveFont(Font.BOLD, 13f));

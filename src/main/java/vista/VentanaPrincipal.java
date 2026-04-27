@@ -113,7 +113,7 @@ public class VentanaPrincipal extends JFrame {
         panelIzquierdo.add(rendimientoPanel, BorderLayout.NORTH);
 
         // PANEL DE SERVIDORES (card con borde redondeado)
-        servidoresCard = new CardPanel("Lista de servidores", new Insets(8, 8, 8, 8));
+        servidoresCard = new CardPanel("Lista de servidores");
         servidoresCard.setBorder(BorderFactory.createEmptyBorder());
         panelIzquierdo.add(servidoresCard, BorderLayout.CENTER);
 
@@ -464,14 +464,15 @@ public class VentanaPrincipal extends JFrame {
         panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
 
         // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
-        CardPanel headerCard = new CardPanel("Servidor seleccionado", new Insets(8, 8, 8, 8));
+        CardPanel headerCard = new CardPanel("Servidor seleccionado");
         headerCard.setBorder(BorderFactory.createEmptyBorder());
         headerCard.getContentPanel().add(panelTotalServidor, BorderLayout.CENTER);
+        headerCard.setFullHeightSideComponent(new PanelControlServidor(gestorServidores));
 
         home.add(headerCard, BorderLayout.NORTH);
 
         // Jugadores y consola con splitpane y bordes redondeados
-        jugadoresCard = new CardPanel("Jugadores", new Insets(8, 8, 8, 8));
+        jugadoresCard = new CardPanel("Jugadores");
         jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
         jugadoresCard.getContentPanel().add(panelJugadores, BorderLayout.CENTER);
 
@@ -528,7 +529,7 @@ public class VentanaPrincipal extends JFrame {
 
     private JPanel crearBarraVertical(){
 
-        CardPanel barra = new CardPanel(new BorderLayout(), new Insets(6, 6, 6, 6));
+        CardPanel barra = new CardPanel("");
         barra.setBackground(AppTheme.getPanelBackground());
         barra.setPreferredSize(new Dimension(56, 0)); // más estrecha
 
@@ -845,7 +846,6 @@ public class VentanaPrincipal extends JFrame {
         if (abrirCarpetaServerButton != null) abrirCarpetaServerButton.setBackground(bgApp);
         if (panelBarraVertical instanceof CardPanel navigationCard) {
             navigationCard.setBackground(panelBg);
-            navigationCard.setBorderInsets(new Insets(6, 6, 6, 6));
             navigationCard.setBorderColor(borderColor);
             navigationCard.setBorderThickness(1f);
             navigationCard.refreshTheme();

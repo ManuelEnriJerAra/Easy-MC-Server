@@ -25,7 +25,7 @@ final class VentanaPrincipalNavigationBuilder {
             Runnable openThemeSelector,
             Consumer<JButton> selectionRestorer
     ) {
-        CardPanel barra = new CardPanel(new BorderLayout(), new Insets(6, 6, 6, 6));
+        CardPanel barra = new CardPanel("");
         barra.setBackground(AppTheme.getPanelBackground());
         barra.setPreferredSize(new Dimension(56, 0));
 

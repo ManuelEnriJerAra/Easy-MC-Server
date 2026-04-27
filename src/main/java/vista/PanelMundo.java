@@ -295,9 +295,10 @@ public class PanelMundo extends JPanel {
     }
 
     private JPanel crearTarjetaPrincipal() {
-        CardPanel card = new CardPanel(new BorderLayout(12, 0), new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Mundo");
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        card.getHeaderActionsPanel().add(refrescarButton);
 
         JPanel izquierda = new JPanel();
         izquierda.setOpaque(false);
@@ -305,15 +306,6 @@ public class PanelMundo extends JPanel {
 
         JPanel izquierdaWrap = new JPanel(new BorderLayout());
         izquierdaWrap.setOpaque(false);
-
-        JLabel titulo = new JLabel("Mundo");
-        AppTheme.applyCardTitleStyle(titulo);
-
-        JPanel cabeceraIzquierda = new JPanel(new BorderLayout(8, 0));
-        cabeceraIzquierda.setOpaque(false);
-        cabeceraIzquierda.setAlignmentX(Component.LEFT_ALIGNMENT);
-        cabeceraIzquierda.add(titulo, BorderLayout.WEST);
-        cabeceraIzquierda.add(refrescarButton, BorderLayout.EAST);
 
         JPanel selectorPanel = new JPanel(new BorderLayout(8, 0));
         selectorPanel.setOpaque(false);
@@ -356,8 +348,6 @@ public class PanelMundo extends JPanel {
         JPanel contenidoIzquierdo = new JPanel();
         contenidoIzquierdo.setOpaque(false);
         contenidoIzquierdo.setLayout(new BoxLayout(contenidoIzquierdo, BoxLayout.Y_AXIS));
-        contenidoIzquierdo.add(cabeceraIzquierda);
-        contenidoIzquierdo.add(Box.createVerticalStrut(6));
         contenidoIzquierdo.add(selectorPanel);
         contenidoIzquierdo.add(Box.createVerticalStrut(6));
         contenidoIzquierdo.add(infoPanel);
@@ -369,30 +359,8 @@ public class PanelMundo extends JPanel {
         izquierdaWrap.add(izquierda, BorderLayout.CENTER);
         card.getContentPanel().add(izquierdaWrap, BorderLayout.CENTER);
 
-        JPanel previewWrap = new JPanel(new BorderLayout());
-        previewWrap.setOpaque(false);
-        previewWrap.add(crearPanelPreview(), BorderLayout.NORTH);
-        card.getContentPanel().add(previewWrap, BorderLayout.EAST);
-        ajustarAlturaTarjetaPrincipal(card);
+        card.setFullHeightSideComponent(crearPanelPreview());
         return card;
-    }
-
-    private void ajustarAlturaTarjetaPrincipal(JPanel card) {
-        if (card == null) {
-            return;
-        }
-        int previewHeight = Math.max(320, previewImageLabel.getPreferredSize().height);
-        int verticalInsets = 24; // insets de la tarjeta principal (12 arriba + 12 abajo)
-        int targetHeight = previewHeight + verticalInsets;
-        Dimension preferredSize = card.getPreferredSize();
-        if (preferredSize == null) {
-            preferredSize = new Dimension(0, targetHeight);
-        } else {
-            preferredSize = new Dimension(preferredSize.width, targetHeight);
-        }
-        card.setPreferredSize(preferredSize);
-        card.setMinimumSize(new Dimension(0, targetHeight));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, targetHeight));
     }
 
     private JPanel crearSeedRow() {
@@ -432,7 +400,7 @@ public class PanelMundo extends JPanel {
     }
 
     private JPanel crearTarjetaDatosMundo() {
-        CardPanel card = new CardPanel("Datos", new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Datos");
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
@@ -450,7 +418,7 @@ public class PanelMundo extends JPanel {
     }
 
     private JPanel crearTarjetaConfiguracionMundo() {
-        CardPanel card = new CardPanel("Configuración", new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Configuración");
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
@@ -483,7 +451,7 @@ public class PanelMundo extends JPanel {
     }
 
     private JPanel crearTarjetaConexiones() {
-        CardPanel card = new CardPanel("Últimas conexiones", new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Últimas conexiones");
 
         card.getContentPanel().add(conexionesPanel, BorderLayout.CENTER);
         return card;

@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -132,6 +133,41 @@ public final class AppTheme {
         return withAlpha(Color.WHITE, 25);
     }
 
+    public static Font getConsoleLikeFont(float size) {
+        return getConsoleLikeFont(Font.PLAIN, size);
+    }
+
+    public static Font getConsoleLikeFont(int style, float size) {
+        String family = resolveConsoleLikeFontFamily();
+        return new Font(family, style, Math.round(size)).deriveFont(style, size);
+    }
+
+    private static String resolveConsoleLikeFontFamily() {
+        String[] preferred = {
+                "Consolas",
+                "Cascadia Mono",
+                "JetBrains Mono",
+                "Lucida Console",
+                "Menlo",
+                "Monaco",
+                "DejaVu Sans Mono",
+                "Liberation Mono",
+                Font.MONOSPACED
+        };
+        try {
+            String[] available = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+            for (String candidate : preferred) {
+                for (String family : available) {
+                    if (family.equalsIgnoreCase(candidate)) {
+                        return family;
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return Font.MONOSPACED;
+    }
+
     public static Color getSuccessColor() {
         return DEFAULT_SUCCESS;
     }
@@ -185,7 +221,6 @@ public final class AppTheme {
     public static void applyCardTitleStyle(JLabel label) {
         if (label == null) return;
         label.setFont(label.getFont().deriveFont(Font.BOLD, Math.max(14f, label.getFont().getSize2D())));
-        label.setBorder(BorderFactory.createEmptyBorder(4, 10, 2, 10));
         label.setForeground(getCardTitleColor());
     }
 

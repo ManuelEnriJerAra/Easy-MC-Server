@@ -56,6 +56,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JRootPane;
 import javax.swing.JScrollBar;
+import javax.swing.Timer;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -360,9 +361,9 @@ public class PanelServidores extends FlatScrollPane {
 
         JLabel motdLabel = new JLabel();
         motdLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        motdLabel.putClientProperty("fullText", extraerPrimeraLineaMotd(
-                Utilidades.leerMotdDesdeProperties(Path.of(servidor.getServerDir()))
-        ));
+        String motdRaw = Utilidades.leerMotdDesdeProperties(Path.of(servidor.getServerDir()));
+        motdLabel.putClientProperty("motdRaw", motdRaw);
+        motdLabel.putClientProperty("fullText", extraerPrimeraLineaMotd(motdRaw, false));
 
         JLabel versionLabel = new JLabel();
         versionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -410,6 +411,7 @@ public class PanelServidores extends FlatScrollPane {
 
         // Primera vez (cuando Swing ya ha calculado tamaños)
         SwingUtilities.invokeLater(ajustarTextos);
+        installAnimatedMotdPlain(motdLabel, motdRaw, ajustarTextos);
 
         // Recalcular si cambia el tamaño del contenedor
         panelDerecho.addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -1121,15 +1123,43 @@ public class PanelServidores extends FlatScrollPane {
         label.setText(ellipsizePx(full, fm, maxWidthPx));
     }
 
-    private String extraerPrimeraLineaMotd(String motd){
+    private void installAnimatedMotdPlain(JLabel label, String motdRaw, Runnable refreshLayout){
+        if(label == null || !MotdRenderUtil.hasObfuscated(motdRaw)) return;
+
+        Timer timer = new Timer(140, e -> {
+            label.putClientProperty("fullText", extraerPrimeraLineaMotd(motdRaw, true));
+            if(refreshLayout != null){
+                refreshLayout.run();
+            }
+        });
+        Object token = new Object();
+        label.putClientProperty("motdAnimationToken", token);
+        label.putClientProperty("motdAnimationTimer", timer);
+        Runnable syncTimer = () -> {
+            if(label.getClientProperty("motdAnimationToken") != token){
+                timer.stop();
+                return;
+            }
+            if(label.isShowing()){
+                if(!timer.isRunning()) timer.start();
+                label.putClientProperty("fullText", extraerPrimeraLineaMotd(motdRaw, true));
+                if(refreshLayout != null){
+                    refreshLayout.run();
+                }
+            } else {
+                timer.stop();
+            }
+        };
+        label.addHierarchyListener(e -> {
+            syncTimer.run();
+        });
+        SwingUtilities.invokeLater(syncTimer);
+    }
+
+    private String extraerPrimeraLineaMotd(String motd, boolean animateObfuscated){
         if(motd == null) return "";
-        String limpio = MotdRenderUtil.stripCodes(motd);
+        String limpio = MotdRenderUtil.firstLinePlain(motd, animateObfuscated);
         if(limpio == null) return "";
-        limpio = limpio.replace("\r", "");
-        int salto = limpio.indexOf('\n');
-        if(salto >= 0){
-            limpio = limpio.substring(0, salto);
-        }
         return limpio.strip();
     }
 

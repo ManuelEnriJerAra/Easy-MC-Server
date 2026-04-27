@@ -41,8 +41,6 @@ import modelo.Server;
 
 public class PanelControlServidor extends JPanel {
     private static final int DEFAULT_SIDE_PX_X = 146;
-    private static final int DEFAULT_SIDE_PX_Y = 96;
-    private static final int RIGHT_PADDING_PX = 10;
     private final PropertyChangeListener listenerEstadoServidor;
     private JPanel panelBotones;
     private JButton btnIniciarServidor;
@@ -59,7 +57,7 @@ public class PanelControlServidor extends JPanel {
         Server server = gestorServidores.getServidorSeleccionado();
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
-        this.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, RIGHT_PADDING_PX));
+        this.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
         panelBotones = new JPanel(new BorderLayout());
         panelBotones.setOpaque(false);
         btnIniciarServidor = new FlatButton();
@@ -229,17 +227,17 @@ public class PanelControlServidor extends JPanel {
 
 @Override
 public Dimension getPreferredSize() {
-    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, 0);
+    return new Dimension(DEFAULT_SIDE_PX_X, 0);
 }
 
 @Override
 public Dimension getMinimumSize() {
-    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, 0);
+    return new Dimension(DEFAULT_SIDE_PX_X, 0);
 }
 
 @Override
 public Dimension getMaximumSize() {
-    return new Dimension(DEFAULT_SIDE_PX_X + RIGHT_PADDING_PX, Integer.MAX_VALUE);
+    return new Dimension(DEFAULT_SIDE_PX_X, Integer.MAX_VALUE);
 }
 
     private void configurarBotonAccion(AbstractButton button, FlatSVGIcon flatIcon) {
@@ -254,7 +252,9 @@ public Dimension getMaximumSize() {
         button.setFont(button.getFont().deriveFont(Font.BOLD, button.getFont().getSize2D() + 5f));
         button.setFocusPainted(false);
         button.setBorderPainted(false);
-        button.setOpaque(true);
+        button.setOpaque(false);
+        button.setContentAreaFilled(true);
+        button.putClientProperty("JButton.arc", AppTheme.getArc());
         button.setIcon(flatIcon);
         flatIcon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> Color.WHITE));
     }

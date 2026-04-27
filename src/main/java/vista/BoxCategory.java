@@ -73,7 +73,7 @@ public final class BoxCategory {
     }
 
     public static CardPanel createSummaryCard(String title, JComponent content) {
-        CardPanel card = new CardPanel(title, new Insets(10, 10, 10, 10));
+        CardPanel card = new CardPanel(title);
         card.setBackground(AppTheme.getSurfaceBackground());
         JLabel titleLabel = card.getTitleLabel();
         titleLabel.setForeground(AppTheme.getMutedForeground());
