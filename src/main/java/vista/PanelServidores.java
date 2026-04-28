@@ -24,6 +24,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.IllegalComponentStateException;
 import java.awt.Insets;
@@ -38,9 +39,9 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import javax.swing.AbstractButton;
@@ -56,7 +57,6 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JRootPane;
 import javax.swing.JScrollBar;
-import javax.swing.Timer;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -65,8 +65,8 @@ import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import com.formdev.flatlaf.ui.FlatLineBorder;
 
 import controlador.GestorServidores;
-import controlador.Utilidades;
 import modelo.Server;
+import modelo.extensions.ServerPlatform;
 
 public class PanelServidores extends FlatScrollPane {
     private static final Dimension MIN_SIZE = new Dimension(240, 240); // ancho justo para que no tape el estado "Inactivo"
@@ -80,7 +80,7 @@ public class PanelServidores extends FlatScrollPane {
     Color bgPresionado;
     Color bgSelected;
 
-    Insets insets = new Insets(3, 3, 3, 3);
+    Insets insets = new Insets(8, 8, 8, 8);
     // Bordes
     private FlatLineBorder bordeRedondo;
     private FlatLineBorder bordeHover;
@@ -308,12 +308,36 @@ public class PanelServidores extends FlatScrollPane {
         return serverObj instanceof Server server ? server : null;
     }
 
+    private String construirTextoVersionPlataforma(Server servidor, String version){
+        String versionTexto = (version == null || version.isBlank()) ? "(sin version)" : version.trim();
+        String plataforma = obtenerNombrePlataforma(servidor);
+        return plataforma == null ? versionTexto : versionTexto + " - " + plataforma;
+    }
+
+    private String obtenerNombrePlataforma(Server servidor){
+        if(servidor == null) return null;
+
+        ServerPlatform platform = servidor.getPlatform();
+        if(platform != null && platform != ServerPlatform.UNKNOWN){
+            return platform.getLegacyTypeName();
+        }
+
+        String tipo = servidor.getTipo();
+        if(tipo == null || tipo.isBlank()) return null;
+
+        ServerPlatform platformMigrada = ServerPlatform.fromLegacyType(tipo);
+        if(platformMigrada != ServerPlatform.UNKNOWN){
+            return platformMigrada.getLegacyTypeName();
+        }
+        return tipo.trim().toUpperCase(Locale.ROOT);
+    }
+
     private JPanel crearFila(Server servidor, String version){
-        final int ALTURA_FILA = 90;
+        final int ALTURA_FILA = 64 + 8 + 8;
         refrescarTema(false);
 
         RoundedBackgroundPanel fila = new RoundedBackgroundPanel(bgNormal, arc);
-        fila.setLayout(new BorderLayout(10,0));
+        fila.setLayout(new BorderLayout(8, 0));
         fila.setBorder(bordeRedondo);
         fila.setBackground(bgNormal);
         fila.setOpaque(false); // el fondo lo pintamos manualmente con bordes redondeados
@@ -332,18 +356,18 @@ public class PanelServidores extends FlatScrollPane {
 
         JPanel panelIcono = new JPanel(new GridBagLayout());
         panelIcono.setOpaque(false); // deja que el clip redondeado del padre marque el fondo
-        panelIcono.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
+        // panelIcono.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
         panelIcono.add(iconoRedondo);
 
-        panelIcono.setPreferredSize(new Dimension(64 + 8 + 8, ALTURA_FILA));
-        panelIcono.setMinimumSize(new Dimension(64 + 8 + 8, ALTURA_FILA));
+        panelIcono.setPreferredSize(new Dimension(64,64));
+        panelIcono.setMinimumSize(new Dimension(64, 64));
 
         fila.add(panelIcono, BorderLayout.WEST);
 
         // Panel de texto, nombre arriba, MOTD centro, versión abajo
-        JPanel panelDerecho = new JPanel(new BorderLayout(0,0));
+        JPanel panelDerecho = new JPanel(new GridBagLayout());
         panelDerecho.setOpaque(false);
-        panelDerecho.setBorder(BorderFactory.createEmptyBorder(FAVORITE_CORNER_GAP, 0, 8, FAVORITE_CORNER_GAP));
+        // panelDerecho.setBorder(BorderFactory.createEmptyBorder(FAVORITE_CORNER_GAP, 0, 8, FAVORITE_CORNER_GAP));
 
         // Info arriba
         JPanel infoPanel = new JPanel();
@@ -359,22 +383,23 @@ public class PanelServidores extends FlatScrollPane {
         }
         nombreLabel.putClientProperty("fullText", nombreServidor);
 
-        JLabel motdLabel = new JLabel();
-        motdLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        String motdRaw = Utilidades.leerMotdDesdeProperties(Path.of(servidor.getServerDir()));
-        motdLabel.putClientProperty("motdRaw", motdRaw);
-        motdLabel.putClientProperty("fullText", extraerPrimeraLineaMotd(motdRaw, false));
-
         JLabel versionLabel = new JLabel();
+        versionLabel.setFont(versionLabel.getFont().deriveFont(Font.PLAIN, 14f));
         versionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        String versionTexto = (version == null || version.isBlank()) ? "(sin versión)" : ("Versión: " + version);
+        String versionTexto = construirTextoVersionPlataforma(servidor, version);
         versionLabel.putClientProperty("fullText", versionTexto);
 
-        infoPanel.add(nombreLabel);
-        infoPanel.add(motdLabel);
-        infoPanel.add(versionLabel);
+        JLabel estado = new JLabel();
+        estado.setFont(estado.getFont().deriveFont(Font.BOLD, 14f));
+        estado.setForeground(AppTheme.getForeground());
+        actualizarEstadoLabel(estado, servidor);
+        estado.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel topPanel = new JPanel(new BorderLayout(0, 0));
+        infoPanel.add(nombreLabel);
+        infoPanel.add(versionLabel);
+        infoPanel.add(estado);
+
+        JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.setOpaque(false);
         topPanel.add(infoPanel, BorderLayout.CENTER);
 
@@ -384,16 +409,15 @@ public class PanelServidores extends FlatScrollPane {
         favoritoWrap.add(favoritoButton, BorderLayout.NORTH);
         topPanel.add(favoritoWrap, BorderLayout.EAST);
 
-        panelDerecho.add(topPanel, BorderLayout.NORTH);
+        GridBagConstraints textGbc = new GridBagConstraints();
+        textGbc.gridx = 0;
+        textGbc.gridy = 0;
+        textGbc.weightx = 1d;
+        textGbc.fill = GridBagConstraints.HORIZONTAL;
+        textGbc.anchor = GridBagConstraints.CENTER;
+        panelDerecho.add(topPanel, textGbc);
 
         // Indicador de estado (Abajo)
-        JLabel estado = new JLabel();
-        estado.setFont(estado.getFont().deriveFont(Font.BOLD, 14f)); // que esté bien grande
-        estado.setForeground(AppTheme.getForeground());
-        actualizarEstadoLabel(estado, servidor);
-        estado.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        panelDerecho.add(estado, BorderLayout.SOUTH);
         fila.add(panelDerecho, BorderLayout.CENTER);
 
         // Ajustar los textos al ancho disponible (con "..." si no caben).
@@ -405,13 +429,11 @@ public class PanelServidores extends FlatScrollPane {
             int maxWidth = Math.max(0, anchoDisponible - 10);
 
             aplicarEllipsisLabel(nombreLabel, maxWidth);
-            aplicarEllipsisLabel(motdLabel, maxWidth);
             aplicarEllipsisLabel(versionLabel, maxWidth);
         };
 
         // Primera vez (cuando Swing ya ha calculado tamaños)
         SwingUtilities.invokeLater(ajustarTextos);
-        installAnimatedMotdPlain(motdLabel, motdRaw, ajustarTextos);
 
         // Recalcular si cambia el tamaño del contenedor
         panelDerecho.addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -1121,46 +1143,6 @@ public class PanelServidores extends FlatScrollPane {
 
         FontMetrics fm = label.getFontMetrics(label.getFont());
         label.setText(ellipsizePx(full, fm, maxWidthPx));
-    }
-
-    private void installAnimatedMotdPlain(JLabel label, String motdRaw, Runnable refreshLayout){
-        if(label == null || !MotdRenderUtil.hasObfuscated(motdRaw)) return;
-
-        Timer timer = new Timer(140, e -> {
-            label.putClientProperty("fullText", extraerPrimeraLineaMotd(motdRaw, true));
-            if(refreshLayout != null){
-                refreshLayout.run();
-            }
-        });
-        Object token = new Object();
-        label.putClientProperty("motdAnimationToken", token);
-        label.putClientProperty("motdAnimationTimer", timer);
-        Runnable syncTimer = () -> {
-            if(label.getClientProperty("motdAnimationToken") != token){
-                timer.stop();
-                return;
-            }
-            if(label.isShowing()){
-                if(!timer.isRunning()) timer.start();
-                label.putClientProperty("fullText", extraerPrimeraLineaMotd(motdRaw, true));
-                if(refreshLayout != null){
-                    refreshLayout.run();
-                }
-            } else {
-                timer.stop();
-            }
-        };
-        label.addHierarchyListener(e -> {
-            syncTimer.run();
-        });
-        SwingUtilities.invokeLater(syncTimer);
-    }
-
-    private String extraerPrimeraLineaMotd(String motd, boolean animateObfuscated){
-        if(motd == null) return "";
-        String limpio = MotdRenderUtil.firstLinePlain(motd, animateObfuscated);
-        if(limpio == null) return "";
-        return limpio.strip();
     }
 
     // Si el texto no entra (en píxeles) añade "..."
