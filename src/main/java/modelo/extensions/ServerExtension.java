@@ -29,4 +29,16 @@ public class ServerExtension {
         this.installState = ExtensionInstallState.UNKNOWN;
         this.localMetadata = new ExtensionLocalMetadata();
     }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public ExtensionSource getSource() {
+        return source;
+    }
+
+    public ExtensionLocalMetadata getLocalMetadata() {
+        return localMetadata;
+    }
 }

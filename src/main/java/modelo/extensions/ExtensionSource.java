@@ -19,4 +19,8 @@ public class ExtensionSource {
     public ExtensionSource() {
         this.type = ExtensionSourceType.UNKNOWN;
     }
+
+    public String getIconUrl() {
+        return iconUrl;
+    }
 }

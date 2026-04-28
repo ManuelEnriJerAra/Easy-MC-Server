@@ -303,6 +303,20 @@ public class PanelConfigServidor extends JPanel {
         }
 
         Map<String, String> currentValues = captureCurrentValues();
+        String serverPortText = currentValues.get("server-port");
+        Integer serverPort = serverPortText == null ? 25565 : parsePortValue(serverPortText);
+        if(serverPort == null){
+            JOptionPane.showMessageDialog(this, "El puerto del servidor debe estar entre 1 y 65535.", tr("panel.config.dialog.title", "CONFIG"), JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        currentValues.putIfAbsent("server-port", String.valueOf(serverPort));
+        for(String portKey : java.util.List.of("query.port", "rcon.port")){
+            String value = currentValues.get(portKey);
+            if(value != null && parsePortValue(value) == null){
+                JOptionPane.showMessageDialog(this, formatLabel(portKey) + " debe estar entre 1 y 65535.", tr("panel.config.dialog.title", "CONFIG"), JOptionPane.WARNING_MESSAGE);
+                return false;
+            }
+        }
         Properties out = new Properties();
         for(Map.Entry<String, String> entry : currentValues.entrySet()){
             out.setProperty(entry.getKey(), entry.getValue());
@@ -329,6 +343,7 @@ public class PanelConfigServidor extends JPanel {
             }
             config.setRamMax(xmx);
             config.setRamInit(xms);
+            config.setPuerto(serverPort);
             gestorServidores.guardarServidor(server);
         }
 
@@ -1011,6 +1026,16 @@ public class PanelConfigServidor extends JPanel {
             return Integer.parseInt(value.strip());
         } catch (NumberFormatException ex){
             return 0;
+        }
+    }
+
+    private Integer parsePortValue(String value){
+        if(value == null || value.isBlank()) return null;
+        try{
+            int port = Integer.parseInt(value.strip());
+            return port > 0 && port <= 65535 ? port : null;
+        } catch (NumberFormatException ex){
+            return null;
         }
     }
 

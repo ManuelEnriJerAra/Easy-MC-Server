@@ -67,9 +67,9 @@ final class PanelExtensiones extends JPanel {
         setLayout(new BorderLayout());
         setOpaque(false);
 
-        listCard = new CardPanel(getSectionLabel(), new Insets(12, 12, 12, 12));
+        listCard = new CardPanel(getSectionLabel());
         listCard.setBorder(BorderFactory.createEmptyBorder());
-        detailsCard = new CardPanel("Detalles", new Insets(12, 12, 12, 12));
+        detailsCard = new CardPanel("Detalles");
         detailsCard.setBorder(BorderFactory.createEmptyBorder());
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listCard, detailsCard);
         splitPane.setOpaque(false);

@@ -174,7 +174,7 @@ public class ServerProperties{
                 // copiamos cada campo, menos si es el servidor
                 if(!campo.getName().equals("server")){
                     campo.setAccessible(true);
-                    pw.println(campo.getName().replace("_","-") + " = " + campo.get(this).toString());
+                    pw.println(propertyKeyForField(campo) + " = " + campo.get(this).toString());
                 }
             }
         }
@@ -206,7 +206,7 @@ public class ServerProperties{
                         if(!propiedad.isEmpty()) {
                             // recorro cada atributo del objeto para compararlo con cada propiedad
                             for(Field campo : this.getClass().getDeclaredFields()){
-                                if(campo.getName().replace("_","-").trim().contentEquals(propiedad)){
+                                if(propertyKeyForField(campo).trim().contentEquals(propiedad)){
                                     campo.setAccessible(true);
                                     // si coincide le asigno el valor, mirando primero que tipo es
                                     if(campo.getType().equals(Integer.class) || campo.getType().equals(int.class)) {
@@ -237,5 +237,16 @@ public class ServerProperties{
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    private static String propertyKeyForField(Field campo) {
+        if (campo == null) {
+            return "";
+        }
+        return switch (campo.getName()) {
+            case "query_port" -> "query.port";
+            case "rcon_port" -> "rcon.port";
+            default -> campo.getName().replace("_", "-");
+        };
     }
 }

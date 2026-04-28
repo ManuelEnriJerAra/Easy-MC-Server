@@ -169,7 +169,7 @@ public class Utilidades {
 
     public static void escribirPuertoEnProperties(Path direccion, int puerto){
         if(direccion == null) return;
-        if(puerto <= 0) return;
+        if(puerto <= 0 || puerto > 65535) return;
 
         Path propertiesPath = direccion.resolve("server.properties");
         try {

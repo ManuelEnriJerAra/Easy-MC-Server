@@ -1,20 +1,29 @@
 package vista;
 
-import com.formdev.flatlaf.extras.components.FlatButton;
-import controlador.GestorServidores;
-import controlador.extensions.ExtensionCatalogDetails;
-import controlador.extensions.ExtensionCatalogEntry;
-import controlador.extensions.ExtensionCatalogProviderDescriptor;
-import controlador.extensions.ExtensionCatalogQuery;
-import controlador.extensions.ExtensionCatalogVersion;
-import controlador.extensions.ExtensionCompatibilityStatus;
-import controlador.extensions.ExtensionDownloadPlan;
-import controlador.extensions.ExtensionInstallResolution;
-import controlador.extensions.ExtensionInstallResolutionState;
-import modelo.Server;
-import modelo.extensions.ServerEcosystemType;
-import modelo.extensions.ServerExtensionType;
-import modelo.extensions.ServerPlatform;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dialog;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.Window;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -43,30 +52,23 @@ import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dialog;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.GridLayout;
-import java.awt.Insets;
-import java.awt.Window;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import com.formdev.flatlaf.extras.components.FlatButton;
+
+import controlador.GestorServidores;
+import controlador.extensions.ExtensionCatalogDetails;
+import controlador.extensions.ExtensionCatalogEntry;
+import controlador.extensions.ExtensionCatalogProviderDescriptor;
+import controlador.extensions.ExtensionCatalogQuery;
+import controlador.extensions.ExtensionCatalogVersion;
+import controlador.extensions.ExtensionCompatibilityStatus;
+import controlador.extensions.ExtensionDownloadPlan;
+import controlador.extensions.ExtensionInstallResolution;
+import controlador.extensions.ExtensionInstallResolutionState;
+import modelo.Server;
+import modelo.extensions.ServerEcosystemType;
+import modelo.extensions.ServerExtensionType;
+import modelo.extensions.ServerPlatform;
 
 final class ExtensionMarketplaceDialog extends JDialog {
     private static final DateTimeFormatter VERSION_DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy")
@@ -174,7 +176,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private JComponent buildMarketplaceCard() {
-        CardPanel marketplaceCard = new CardPanel("Marketplace", new Insets(12, 12, 12, 12));
+        CardPanel marketplaceCard = new CardPanel("Marketplace");
         marketplaceCard.setBorder(BorderFactory.createEmptyBorder());
         marketplaceCard.getContentPanel().setLayout(new BorderLayout(0, 12));
         marketplaceCard.getContentPanel().add(buildFiltersPanel(), BorderLayout.NORTH);
@@ -233,7 +235,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private JComponent buildResultsCard() {
-        CardPanel card = new CardPanel("Explorar", new Insets(10, 10, 10, 10));
+        CardPanel card = new CardPanel("Explorar");
         card.setBorder(BorderFactory.createEmptyBorder());
 
         JPanel content = new JPanel(new BorderLayout(0, 10));
@@ -258,7 +260,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private JComponent buildDetailsCard() {
-        CardPanel card = new CardPanel("Detalle", new Insets(12, 12, 12, 12));
+        CardPanel card = new CardPanel("Detalle");
         card.setBorder(BorderFactory.createEmptyBorder());
 
         JPanel content = new JPanel(new BorderLayout(0, 12));
@@ -378,7 +380,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private JComponent buildFooter() {
-        CardPanel queueCard = new CardPanel("Instalaciones", new Insets(10, 10, 10, 10));
+        CardPanel queueCard = new CardPanel("Instalaciones");
         queueCard.setBorder(BorderFactory.createEmptyBorder());
 
         JPanel content = new JPanel(new BorderLayout(0, 10));

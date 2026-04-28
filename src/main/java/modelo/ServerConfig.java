@@ -28,6 +28,7 @@ public class ServerConfig {
     public ServerConfig() {
         this.ramInit = 1024;
         this.ramMax = 2048;
+        this.puerto = 25565;
     }
 
     public void setRamInit(int ramInit) {

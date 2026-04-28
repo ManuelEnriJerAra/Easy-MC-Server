@@ -6,6 +6,7 @@ import modelo.Server;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Consumer;
 
 final class VentanaPrincipalRightContentBuilder {
     record Result(
