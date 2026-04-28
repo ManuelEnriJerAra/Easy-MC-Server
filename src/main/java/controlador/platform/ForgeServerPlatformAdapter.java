@@ -163,7 +163,47 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
             processBuilder.redirectErrorStream(true);
             return processBuilder;
         }
+        Path argsFile = findForgeArgsFile(serverDir, isWindows);
+        if (argsFile != null && Files.isRegularFile(argsFile)) {
+            java.util.List<String> command = new java.util.ArrayList<>();
+            command.add("java");
+            Path userJvmArgs = serverDir.resolve("user_jvm_args.txt");
+            if (Files.isRegularFile(userJvmArgs)) {
+                command.add("@" + userJvmArgs.toString());
+            }
+            command.add("@" + argsFile.toString());
+            command.add("nogui");
+
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            processBuilder.directory(serverDir.toFile());
+            processBuilder.redirectErrorStream(true);
+            return processBuilder;
+        }
+        if (executableJar == null) {
+            throw new IllegalArgumentException("No se ha encontrado run.bat/run.sh, args de Forge ni .jar ejecutable.");
+        }
         return super.buildStartProcess(server, executableJar);
+    }
+
+    @Override
+    public boolean requiresExecutableJarForStart() {
+        return false;
+    }
+
+    private Path findForgeArgsFile(Path serverDir, boolean windows) {
+        if (serverDir == null) {
+            return null;
+        }
+        String targetName = windows ? "win_args.txt" : "unix_args.txt";
+        try (var paths = Files.walk(serverDir.resolve("libraries"), 8)) {
+            return paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equalsIgnoreCase(targetName))
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
     }
 
     private Path resolveJarSilently(Path serverDir) {

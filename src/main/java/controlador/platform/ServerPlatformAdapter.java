@@ -28,6 +28,10 @@ public interface ServerPlatformAdapter {
 
     Path resolveExecutableJar(Path serverDir) throws IOException;
 
+    default boolean requiresExecutableJarForStart() {
+        return true;
+    }
+
     default boolean supportsAutomatedCreation() {
         return false;
     }

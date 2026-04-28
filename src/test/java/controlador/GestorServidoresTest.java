@@ -13,6 +13,7 @@ import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
 import controlador.extensions.ExtensionCatalogProviderDescriptor;
+import controlador.platform.ForgeServerPlatformAdapter;
 import controlador.platform.ServerCreationOption;
 import controlador.platform.ServerInstallationRequest;
 import controlador.platform.ServerPlatformAdapter;
@@ -195,6 +196,66 @@ class GestorServidoresTest {
         assertThat(imported.getLoader()).isEqualTo(ServerLoader.PAPER);
         assertThat(imported.getEcosystemType()).isEqualTo(ServerEcosystemType.PLUGINS);
         assertThat(imported.getCapabilities()).contains(ServerCapability.PLUGIN_EXTENSIONS);
+    }
+
+    @Test
+    void importarServidorDesdeDirectorio_noDebeSufijarConCeroSiNoHayDuplicados() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path firstDir = tempDir.resolve("first-server");
+        TestWorldFixtures.createValidServerJar(firstDir, "server.jar", "{\"id\":\"1.20.1\"}");
+
+        Server first = gestor.importarServidorDesdeDirectorio(firstDir);
+
+        assertThat(first).isNotNull();
+        assertThat(first.getDisplayName()).isEqualTo("Servidor 1.20.1");
+
+        Path secondDir = tempDir.resolve("second-server");
+        TestWorldFixtures.createValidServerJar(secondDir, "server.jar", "{\"id\":\"1.20.1\"}");
+
+        Server second = gestor.importarServidorDesdeDirectorio(secondDir);
+
+        assertThat(second).isNotNull();
+        assertThat(second.getDisplayName()).isEqualTo("Servidor 1.20.1 (1)");
+    }
+
+    @Test
+    void importarServidorDesdeDirectorio_debeCargarForgeModernoSinJarEnRaiz() throws Exception {
+        Path jsonPath = tempDir.resolve("ServerList.json");
+        GestorServidores gestor = new GestorServidores(jsonPath.toFile());
+        Path forgeDir = tempDir.resolve("modern-forge");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+        Files.writeString(forgeDir.resolve("run.bat"), "@echo off");
+        Files.writeString(forgeDir.resolve("run.sh"), "#!/bin/sh\n");
+
+        Server imported = gestor.importarServidorDesdeDirectorio(forgeDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(imported.getLoader()).isEqualTo(ServerLoader.FORGE);
+        assertThat(imported.getEcosystemType()).isEqualTo(ServerEcosystemType.MODS);
+        assertThat(imported.getCapabilities()).contains(ServerCapability.MOD_EXTENSIONS);
+
+        GestorServidores reloaded = new GestorServidores(jsonPath.toFile());
+        assertThat(reloaded.getListaServidores()).hasSize(1);
+        assertThat(reloaded.getListaServidores().getFirst().getPlatform()).isEqualTo(ServerPlatform.FORGE);
+    }
+
+    @Test
+    void forgeBuildStartProcess_debeUsarScriptAunqueNoHayaJarEjecutable() throws Exception {
+        Path forgeDir = tempDir.resolve("forge-script-start");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+        Files.writeString(forgeDir.resolve("run.bat"), "@echo off");
+        Files.writeString(forgeDir.resolve("run.sh"), "#!/bin/sh\n");
+        Server server = new Server();
+        server.setServerDir(forgeDir.toString());
+
+        ProcessBuilder processBuilder = new ForgeServerPlatformAdapter().buildStartProcess(server, null);
+
+        assertThat(processBuilder.command()).isNotEmpty();
+        assertThat(String.join(" ", processBuilder.command())).contains(System.getProperty("os.name", "").toLowerCase().contains("win") ? "run.bat" : "run.sh");
+        assertThat(processBuilder.directory()).isEqualTo(forgeDir.toFile());
     }
 
     @Test

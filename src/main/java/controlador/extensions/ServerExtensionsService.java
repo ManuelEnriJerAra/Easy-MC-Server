@@ -839,7 +839,7 @@ public final class ServerExtensionsService {
         if (metadata.getEnabled() == null) {
             metadata.setEnabled(Boolean.TRUE);
         }
-        if (metadata.getUpdateState() == null) {
+        if (metadata.getUpdateState() == null || metadata.getUpdateState() == ExtensionUpdateState.UNKNOWN) {
             metadata.setUpdateState(resolveDefaultUpdateState(source));
         }
         if (metadata.getUpdateMessage() == null || metadata.getUpdateMessage().isBlank()) {
@@ -906,7 +906,7 @@ public final class ServerExtensionsService {
             metadata.setEnabled(Boolean.TRUE);
             changed = true;
         }
-        if (metadata.getUpdateState() == null) {
+        if (metadata.getUpdateState() == null || metadata.getUpdateState() == ExtensionUpdateState.UNKNOWN) {
             metadata.setUpdateState(resolveDefaultUpdateState(extension.getSource()));
             changed = true;
         }

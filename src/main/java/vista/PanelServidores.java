@@ -57,6 +57,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JRootPane;
 import javax.swing.JScrollBar;
+import javax.swing.Scrollable;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -202,8 +203,8 @@ public class PanelServidores extends FlatScrollPane {
             this.getViewport().setMinimumSize(MIN_SIZE);
             this.getViewport().setOpaque(true);
             this.getViewport().setBackground(bgLista);
-            // BACKINGSTORE fuerza repintado completo del área expuesta, evitando artefactos al cambiar tamaño/selección
-            this.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
+            // SIMPLE repinta el viewport completo y evita artefactos al hacer scroll con filas translúcidas.
+            this.getViewport().setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
         }
 
         // Scroll más rápido con la rueda del ratón
@@ -224,7 +225,7 @@ public class PanelServidores extends FlatScrollPane {
                     getViewport().setOpaque(true);
                     getViewport().setBackground(bgLista);
                     // mantener el mismo modo al cambiar L&F
-                    getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
+                    getViewport().setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
                 }
             });
         });
@@ -284,7 +285,7 @@ public class PanelServidores extends FlatScrollPane {
     }
 
     private JPanel construirPanelContenedor(List<Server> servidores){
-        JPanel panelContenedor = new JPanel();
+        JPanel panelContenedor = new ServerListPanel();
         panelContenedor.setOpaque(true);
         panelContenedor.setBackground(bgLista);
         panelContenedor.setLayout(new BoxLayout(panelContenedor, BoxLayout.Y_AXIS));
@@ -345,8 +346,8 @@ public class PanelServidores extends FlatScrollPane {
 
         // En BoxLayout (Y_AXIS), el ancho se puede estirar si el maxWidth es grande.
         // Dejamos altura fija y ancho flexible para que se adapte al tamaño de la ventana/scroll.
-        fila.setPreferredSize(new Dimension(0, ALTURA_FILA));
-        fila.setMinimumSize(new Dimension(0, ALTURA_FILA));
+        fila.setPreferredSize(new Dimension(MIN_SIZE.width, ALTURA_FILA));
+        fila.setMinimumSize(new Dimension(MIN_SIZE.width, ALTURA_FILA));
         fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, ALTURA_FILA));
         fila.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -1241,6 +1242,33 @@ public class PanelServidores extends FlatScrollPane {
 
         panelContenedor.repaint();
         repaint();
+    }
+
+    private static final class ServerListPanel extends JPanel implements Scrollable {
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return 24;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return Math.max(80, visibleRect.height - 24);
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
     }
 
 }

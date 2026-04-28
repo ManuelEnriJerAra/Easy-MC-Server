@@ -1359,7 +1359,7 @@ public class GestorServidores {
         if (server.getVersion() == null || server.getVersion().isBlank()) {
             server.setVersion(DetectorVersionServidor.detectarVersionVanilla(server));
         }
-        server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), true));
+        server.setDisplayName(construirNombreServidorImportado(server.getVersion(), server.getServerDir(), false));
 
         guardarServidor(server);
         GestorMundos.sincronizarMundosServidor(server);
@@ -1569,7 +1569,7 @@ public class GestorServidores {
             server.appendConsoleLinea("[ERROR] No se ha podido resolver el .jar del servidor: " + e.getMessage());
             return;
         }
-        if (jar == null) {
+        if (jar == null && adapter.requiresExecutableJarForStart()) {
             server.appendConsoleLinea("[ERROR] No se ha podido encontrar el .jar del servidor.");
             return;
         }
@@ -1595,7 +1595,13 @@ public class GestorServidores {
             server.appendConsoleLinea("[ERROR] No se ha podido escribir el puerto en server.properties: " + e.getMessage());
         }
 
-        ProcessBuilder pb = adapter.buildStartProcess(server, jar);
+        ProcessBuilder pb;
+        try {
+            pb = adapter.buildStartProcess(server, jar);
+        } catch (RuntimeException e) {
+            server.appendConsoleLinea("[ERROR] No se ha podido preparar el arranque del servidor: " + e.getMessage());
+            return;
+        }
         server.appendConsoleLinea("[INFO] Iniciando servidor con "+serverConfig.getRamInit()+"M y "+serverConfig.getRamMax()+"M de RAM.");
 
         try{
