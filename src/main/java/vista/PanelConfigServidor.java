@@ -317,7 +317,13 @@ public class PanelConfigServidor extends JPanel {
                 return false;
             }
         }
-        Properties out = new Properties();
+        Properties out;
+        try{
+            out = Utilidades.cargarPropertiesUtf8(propertiesPath);
+        } catch (IOException ex){
+            JOptionPane.showMessageDialog(this, tr("panel.config.save.error", "Error guardando: ") + ex.getMessage(), tr("panel.config.dialog.title", "CONFIG"), JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
         for(Map.Entry<String, String> entry : currentValues.entrySet()){
             out.setProperty(entry.getKey(), entry.getValue());
         }
@@ -345,6 +351,8 @@ public class PanelConfigServidor extends JPanel {
             config.setRamInit(xms);
             config.setPuerto(serverPort);
             gestorServidores.guardarServidor(server);
+            gestorServidores.notificarConfiguracionServidor(server);
+            gestorServidores.notificarEstadoServidor(server);
         }
 
         markCurrentStateAsPersisted();

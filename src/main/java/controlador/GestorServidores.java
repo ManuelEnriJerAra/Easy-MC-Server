@@ -774,6 +774,10 @@ public class GestorServidores {
         pcs.firePropertyChange("estadoServidor", null, server);
     }
 
+    public void notificarConfiguracionServidor(Server server){
+        pcs.firePropertyChange("configuracionServidor", null, server);
+    }
+
     // ===== FUNCIONES Y MÉTODOS =====
 
     public Server crearServidor(){
@@ -1879,8 +1883,14 @@ public class GestorServidores {
         root.add(message, BorderLayout.NORTH);
 
         ButtonGroup group = new ButtonGroup();
-        JRadioButton defaultRadio = new JRadioButton("Puerto por defecto", puertoDefectoDisponible);
-        JRadioButton recommendedRadio = new JRadioButton("Siguiente puerto disponible (recomendado)", !puertoDefectoDisponible);
+        JRadioButton defaultRadio = new JRadioButton(
+                puertoDefectoDisponible ? "Puerto por defecto (recomendado)" : "Puerto por defecto",
+                puertoDefectoDisponible
+        );
+        JRadioButton recommendedRadio = new JRadioButton(
+                puertoDefectoDisponible ? "Siguiente puerto disponible" : "Siguiente puerto disponible (recomendado)",
+                !puertoDefectoDisponible
+        );
         JRadioButton customRadio = new JRadioButton("Puerto personalizado");
         defaultRadio.setEnabled(puertoDefectoDisponible);
         group.add(defaultRadio);

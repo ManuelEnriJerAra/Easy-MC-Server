@@ -32,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 import javax.imageio.ImageIO;
 import javax.swing.AbstractButton;
@@ -317,7 +318,7 @@ public class PanelPrevisualizacion extends JPanel {
                 SwingUtilities.invokeLater(ajustarInfoServidor);
                 return;
             }
-            int puerto = (server == null || server.getServerConfig() == null) ? 0 : server.getServerConfig().getPuerto();
+            int puerto = resolveCurrentServerPort();
             String texto = puerto > 0 ? (ip + ":" + puerto) : (ip + ":(sin puerto)");
             ipServidor.putClientProperty("fullText", texto);
             ipServidor.putClientProperty("copyText", puerto > 0 ? (ip + ":" + puerto) : ip);
@@ -329,16 +330,24 @@ public class PanelPrevisualizacion extends JPanel {
             actualizarTextoIp.run();
         });
 
+        Timer refreshPuertoTimer = new Timer(500, e -> actualizarTextoIp.run());
+        refreshPuertoTimer.setRepeats(true);
+        refreshPuertoTimer.start();
+
         PropertyChangeListener listenerEstado = null;
         if(server != null){
             listenerEstado = evt -> {
-                if(!"estadoServidor".equals(evt.getPropertyName())) return;
-                Object v = evt.getNewValue();
-                if(!(v instanceof Server s)) return;
-                if(!s.getId().equals(server.getId())) return;
+                String propertyName = evt.getPropertyName();
+                if(!"estadoServidor".equals(propertyName) && !"listaServidores".equals(propertyName) && !"configuracionServidor".equals(propertyName)) return;
+                if("estadoServidor".equals(propertyName) || "configuracionServidor".equals(propertyName)){
+                    Object v = evt.getNewValue();
+                    if(!(v instanceof Server s)) return;
+                    Server current = resolveCurrentServer();
+                    if(current == null || current.getId() == null || s.getId() == null || !s.getId().equals(current.getId())) return;
+                }
                 SwingUtilities.invokeLater(actualizarTextoIp);
             };
-            gestorServidores.addPropertyChangeListener("estadoServidor", listenerEstado);
+            gestorServidores.addPropertyChangeListener(listenerEstado);
         }
 
         ipServidor.addMouseListener(new MouseAdapter() {
@@ -400,11 +409,63 @@ public class PanelPrevisualizacion extends JPanel {
         });
 
         PropertyChangeListener finalListenerEstado = listenerEstado;
+        final boolean[] wasDisplayable = {false};
         this.addHierarchyListener(e -> {
-            if(!isDisplayable() && finalListenerEstado != null){
-                gestorServidores.removePropertyChangeListener("estadoServidor", finalListenerEstado);
+            if(isDisplayable()){
+                wasDisplayable[0] = true;
+                if(!refreshPuertoTimer.isRunning()){
+                    refreshPuertoTimer.start();
+                }
+                return;
+            }
+            if(wasDisplayable[0]){
+                refreshPuertoTimer.stop();
+                if(finalListenerEstado != null){
+                    gestorServidores.removePropertyChangeListener(finalListenerEstado);
+                }
             }
         });
+    }
+
+    private int resolveCurrentServerPort() {
+        Server current = resolveCurrentServer();
+        if(current != null && current.getServerDir() != null && !current.getServerDir().isBlank()){
+            try{
+                Properties properties = Utilidades.cargarPropertiesUtf8(Path.of(current.getServerDir()).resolve("server.properties"));
+                String value = properties.getProperty("server-port");
+                if(value != null && !value.isBlank()){
+                    int parsed = Integer.parseInt(value.strip());
+                    if(parsed > 0 && parsed <= 65535){
+                        return parsed;
+                    }
+                }
+            } catch (IOException | RuntimeException ex){
+                // Fall back to the in-memory config below.
+            }
+        }
+        int configPort = current == null || current.getServerConfig() == null ? 0 : current.getServerConfig().getPuerto();
+        return configPort > 0 && configPort <= 65535 ? configPort : 0;
+    }
+
+    private Server resolveCurrentServer() {
+        if(gestorServidores == null){
+            return server;
+        }
+        Server selected = gestorServidores.getServidorSeleccionado();
+        if(server == null){
+            server = selected;
+            return selected;
+        }
+        if(selected != null && server.getId() != null && server.getId().equals(selected.getId())){
+            server = selected;
+            return selected;
+        }
+        Server byId = server.getId() == null ? null : gestorServidores.getServerById(server.getId());
+        if(byId != null){
+            server = byId;
+            return byId;
+        }
+        return server;
     }
 
     private void cambiarIconoServidor(GestorServidores gestorServidores, Server server, ImagenRedondaLabel iconoRedondo){
