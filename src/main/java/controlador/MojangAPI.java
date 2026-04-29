@@ -67,6 +67,16 @@ public class MojangAPI {
         }
     }
 
+    public record MinecraftVersionInfo(String id, String type) {
+        public boolean isRelease() {
+            return "release".equalsIgnoreCase(type);
+        }
+
+        public boolean isSnapshot() {
+            return "snapshot".equalsIgnoreCase(type);
+        }
+    }
+
     public static void runBackgroundRequest(Runnable task) {
         if (task == null) {
             return;
@@ -85,12 +95,26 @@ public class MojangAPI {
 
     public List<String> obtenerListaVersiones(){
         try{
+            return obtenerListaVersionesConTipo().stream()
+                    .filter(MinecraftVersionInfo::isRelease)
+                    .map(MinecraftVersionInfo::id)
+                    .toList();
+        } catch(Exception e){
+            throw new  RuntimeException(e);
+        }
+    }
+
+    public List<MinecraftVersionInfo> obtenerListaVersionesConTipo(){
+        try{
             JsonNode manifest = getManifest();
-            List<String> listaVersiones = new ArrayList<>();
+            List<MinecraftVersionInfo> listaVersiones = new ArrayList<>();
 
             for(JsonNode node : manifest.get("versions")){
-                if(node.get("type").asString().equals("release"))
-                    listaVersiones.add(node.get("id").asString());
+                String id = node.get("id").asString();
+                String type = node.get("type").asString();
+                if(id == null || id.isBlank() || type == null || type.isBlank()) continue;
+                if(!"release".equalsIgnoreCase(type) && !"snapshot".equalsIgnoreCase(type)) continue;
+                listaVersiones.add(new MinecraftVersionInfo(id, type));
             }
 
             return listaVersiones;
@@ -119,7 +143,10 @@ public class MojangAPI {
 
             JsonNode versionJson = readJsonFromUrl(versionJsonUrl);
 
-            JsonNode serverNode = versionJson.get("downloads").get("server");
+            JsonNode downloadsNode = versionJson.get("downloads");
+            if (downloadsNode == null) return null;
+            JsonNode serverNode = downloadsNode.get("server");
+            if (serverNode == null || serverNode.get("url") == null) return null;
 
             return serverNode.get("url").asString();
 

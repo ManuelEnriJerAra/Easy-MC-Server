@@ -43,6 +43,24 @@ class GestorServidoresTest {
     Path tempDir;
 
     @Test
+    void validarNombreCarpetaServidor_debeAceptarSoloNombresPortables() {
+        assertThat(GestorServidores.validarNombreCarpetaServidor("server-1.20.1")).isNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("Forge_Server")).isNull();
+
+        assertThat(GestorServidores.validarNombreCarpetaServidor("")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor(" server")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("server ")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor(".")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("..")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("server.")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("server/name")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("server\\name")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("server:name")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("CON")).isNotNull();
+        assertThat(GestorServidores.validarNombreCarpetaServidor("com1.txt")).isNotNull();
+    }
+
+    @Test
     void guardarServidor_debeCompletarMetadatosYPersistirEnJsonAislado() throws Exception {
         Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());

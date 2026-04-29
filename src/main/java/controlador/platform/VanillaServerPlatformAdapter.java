@@ -51,13 +51,14 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
 
     @Override
     public java.util.List<ServerCreationOption> listCreationOptions() {
-        return mojangApi.obtenerListaVersiones().stream()
+        return mojangApi.obtenerListaVersionesConTipo().stream()
                 .map(version -> new ServerCreationOption(
                         ServerPlatform.VANILLA,
-                        version,
-                        version,
-                        "Minecraft " + version,
-                        version + "_server"
+                        version.id(),
+                        version.id(),
+                        "Minecraft " + version.id() + (version.isSnapshot() ? " (snapshot)" : ""),
+                        version.id() + "_server",
+                        version.type()
                 ))
                 .toList();
     }

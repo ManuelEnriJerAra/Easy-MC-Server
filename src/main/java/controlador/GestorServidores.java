@@ -36,6 +36,8 @@ import modelo.extensions.ServerExtension;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import vista.AppTheme;
+import vista.SvgIconFactory;
 
 import javax.swing.*;
 import java.awt.*;
@@ -46,6 +48,7 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -781,6 +784,17 @@ public class GestorServidores {
     // ===== FUNCIONES Y MÉTODOS =====
 
     public Server crearServidor(){
+        ServerCreationWizardResult wizardResult = mostrarAsistenteCreacionServidor();
+        if (wizardResult == null) return null;
+        return crearServidorAutomatizado(
+                wizardResult.adapter(),
+                wizardResult.option(),
+                wizardResult.targetDirectory().toPath()
+        );
+    }
+
+    /*
+    private Server crearServidorLegacyDialogos(){
         ServerPlatformAdapter adapter = seleccionarAdaptadorCreacion();
         if (adapter == null) return null;
 
@@ -806,22 +820,37 @@ public class GestorServidores {
             return null;
         }
 
-        int eula = JOptionPane.showConfirmDialog(null, "¿Aceptas el EULA de Mojang (https://aka.ms/MinecraftEULA)?", "EULA",  JOptionPane.YES_NO_OPTION);
-        if(eula != JOptionPane.YES_OPTION){
-            return null;
-        }
-
         File carpetaSeleccionada = chooser.getSelectedFile();
         if(!carpetaSeleccionada.isDirectory()){
             carpetaSeleccionada = carpetaSeleccionada.getParentFile();
         }
 
-        File targetFolder = resolverDirectorioServidorDisponible(
-                carpetaSeleccionada.getAbsoluteFile(),
+        File carpetaPadre = carpetaSeleccionada.getAbsoluteFile();
+        File targetFolderSugerido = resolverDirectorioServidorDisponible(
+                carpetaPadre,
                 selectedOption.directoryName()
         );
+        String nombreCarpeta = solicitarNombreCarpetaServidor(
+                carpetaPadre,
+                targetFolderSugerido.getName()
+        );
+        if (nombreCarpeta == null) {
+            return null;
+        }
+
+        File targetFolder = new File(
+                carpetaPadre,
+                nombreCarpeta
+        );
+
+        int eula = JOptionPane.showConfirmDialog(null, "¿Aceptas el EULA de Mojang (https://aka.ms/MinecraftEULA)?", "EULA",  JOptionPane.YES_NO_OPTION);
+        if(eula != JOptionPane.YES_OPTION){
+            return null;
+        }
+
         return crearServidorAutomatizado(adapter, selectedOption, targetFolder.toPath());
     }
+    */
 
     public Server convertirServidorAPlataformaCompatible(Server server) {
         if (server == null) return null;
@@ -1061,6 +1090,221 @@ public class GestorServidores {
             return null;
         }
         return (ServerCreationOption) versionBox.getSelectedItem();
+    }
+
+    private String solicitarNombreCarpetaServidor(File carpetaPadre, String nombreSugerido) {
+        if (GraphicsEnvironment.isHeadless()) {
+            String nombre = normalizarNombreCarpeta(nombreSugerido);
+            return validarNombreCarpetaServidor(nombre) == null ? nombre : null;
+        }
+
+        Window owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+        JDialog dialog = new JDialog(owner, "Nombre de la carpeta", Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+
+        JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setBorder(BorderFactory.createEmptyBorder(18, 18, 14, 18));
+
+        JTextField nameField = new JTextField(normalizarNombreCarpeta(nombreSugerido), 24);
+        String defaultFolderName = nameField.getText();
+        JLabel parentLabel = new JLabel(formatearPrefijoCarpetaPadre(carpetaPadre));
+        Font pathFont = new Font(Font.MONOSPACED, Font.PLAIN, 16);
+        parentLabel.setFont(pathFont);
+        nameField.setFont(pathFont);
+
+        JButton resetButton = new JButton();
+        AppTheme.applyHeaderIconButtonStyle(resetButton);
+        resetButton.setToolTipText("Restablecer nombre");
+        resetButton.setPreferredSize(new Dimension(40, 40));
+        resetButton.setMinimumSize(new Dimension(40, 40));
+        resetButton.setMaximumSize(new Dimension(40, 40));
+        SvgIconFactory.RotatingIcon resetIcon = SvgIconFactory.createRotating(
+                "easymcicons/reset.svg",
+                26,
+                26,
+                AppTheme::getForeground
+        );
+        resetButton.setIcon(resetIcon);
+
+        JPanel pathPanel = new JPanel(new BorderLayout(0, 0));
+        Color folderNameBorderColor = UIManager.getColor("Component.borderColor") == null
+                ? Color.GRAY
+                : UIManager.getColor("Component.borderColor");
+        pathPanel.setBorder(AppTheme.createRoundedBorder(new Insets(6, 8, 6, 6), folderNameBorderColor, 1f));
+        pathPanel.setBackground(UIManager.getColor("TextField.background"));
+        pathPanel.setOpaque(true);
+        parentLabel.setOpaque(false);
+        nameField.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        nameField.setOpaque(false);
+        pathPanel.add(parentLabel, BorderLayout.WEST);
+        pathPanel.add(nameField, BorderLayout.CENTER);
+        pathPanel.add(resetButton, BorderLayout.EAST);
+
+        JLabel statusLabel = new JLabel(" ");
+        JPanel form = new JPanel(new BorderLayout(0, 6));
+        form.add(pathPanel, BorderLayout.CENTER);
+        form.add(statusLabel, BorderLayout.SOUTH);
+        root.add(form, BorderLayout.CENTER);
+
+        JButton cancelButton = new JButton("Cancelar");
+        JButton continueButton = new JButton("Continuar");
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttons.add(cancelButton);
+        buttons.add(continueButton);
+        root.add(buttons, BorderLayout.SOUTH);
+
+        AtomicReference<String> resultado = new AtomicReference<>();
+        Runnable validar = () -> {
+            String nombre = nameField.getText();
+            String error = validarNombreCarpetaServidor(nombre);
+            if (error == null && existeCarpetaConNombreNoPortable(carpetaPadre, nombre)) {
+                error = "Ya existe una carpeta con ese nombre.";
+            }
+            statusLabel.setText(error == null ? " " : error);
+            statusLabel.setForeground(error == null ? UIManager.getColor("Label.foreground") : Color.RED);
+            continueButton.setEnabled(error == null);
+        };
+        nameField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                validar.run();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                validar.run();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                validar.run();
+            }
+        });
+        resetButton.addActionListener(e -> {
+            nameField.setText(defaultFolderName);
+            nameField.requestFocusInWindow();
+            nameField.selectAll();
+            animarIconoReset(resetIcon, resetButton);
+        });
+        cancelButton.addActionListener(e -> {
+            resultado.set(null);
+            dialog.dispose();
+        });
+        continueButton.addActionListener(e -> {
+            String nombre = nameField.getText();
+            if (validarNombreCarpetaServidor(nombre) != null || existeCarpetaConNombreNoPortable(carpetaPadre, nombre)) {
+                validar.run();
+                return;
+            }
+            resultado.set(normalizarNombreCarpeta(nombre));
+            dialog.dispose();
+        });
+
+        dialog.setContentPane(root);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(640, dialog.getHeight()));
+        dialog.setLocationRelativeTo(null);
+        SwingUtilities.invokeLater(() -> {
+            nameField.requestFocusInWindow();
+            nameField.selectAll();
+        });
+        validar.run();
+        dialog.setVisible(true);
+        return resultado.get();
+    }
+
+    private static String formatearPrefijoCarpetaPadre(File carpetaPadre) {
+        if (carpetaPadre == null) {
+            return "";
+        }
+        String path = carpetaPadre.getAbsolutePath();
+        return path.endsWith(File.separator) ? path : path + File.separator;
+    }
+
+    private static void animarIconoReset(SvgIconFactory.RotatingIcon icon, AbstractButton button) {
+        if (icon == null || button == null) {
+            return;
+        }
+        Timer timer = new Timer(16, null);
+        final int frames = 18;
+        final int[] frame = {0};
+        timer.addActionListener(e -> {
+            frame[0]++;
+            double progress = Math.min(1d, frame[0] / (double) frames);
+            icon.setAngleRadians(-progress * Math.PI * 2d);
+            button.repaint();
+            if (frame[0] >= frames) {
+                icon.setAngleRadians(0d);
+                button.repaint();
+                ((Timer) e.getSource()).stop();
+            }
+        });
+        timer.start();
+    }
+
+    static String validarNombreCarpetaServidor(String nombre) {
+        if (nombre == null || nombre.isBlank()) {
+            return "El nombre de la carpeta no puede estar vacio.";
+        }
+        if (!Objects.equals(nombre, nombre.trim())) {
+            return "El nombre no puede empezar ni terminar con espacios.";
+        }
+        if (nombre.equals(".") || nombre.equals("..")) {
+            return "Ese nombre esta reservado.";
+        }
+        if (nombre.endsWith(".")) {
+            return "El nombre no puede terminar en punto.";
+        }
+        if (nombre.getBytes(StandardCharsets.UTF_8).length > 255) {
+            return "El nombre es demasiado largo.";
+        }
+        for (int i = 0; i < nombre.length(); i++) {
+            char c = nombre.charAt(i);
+            if (c < 32 || c == 127) {
+                return "El nombre no puede contener caracteres de control.";
+            }
+            if ("<>:\"/\\|?*".indexOf(c) >= 0) {
+                return "El nombre contiene caracteres no validos para una carpeta.";
+            }
+        }
+        String baseName = nombre;
+        int dotIndex = baseName.indexOf('.');
+        if (dotIndex >= 0) {
+            baseName = baseName.substring(0, dotIndex);
+        }
+        String upperBaseName = baseName.toUpperCase();
+        Set<String> reservedWindowsNames = Set.of(
+                "CON", "PRN", "AUX", "NUL",
+                "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        );
+        if (reservedWindowsNames.contains(upperBaseName)) {
+            return "Ese nombre esta reservado por Windows.";
+        }
+        return null;
+    }
+
+    private static String normalizarNombreCarpeta(String nombre) {
+        return nombre == null ? "" : nombre.trim();
+    }
+
+    private static boolean existeCarpetaConNombreNoPortable(File carpetaPadre, String nombre) {
+        if (carpetaPadre == null || nombre == null || nombre.isBlank()) {
+            return false;
+        }
+        if (new File(carpetaPadre, nombre).exists()) {
+            return true;
+        }
+        String[] siblings = carpetaPadre.list();
+        if (siblings == null) {
+            return false;
+        }
+        for (String sibling : siblings) {
+            if (nombre.equalsIgnoreCase(sibling)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     Server crearServidorAutomatizado(ServerPlatformAdapter adapter, ServerCreationOption option, Path targetDirectory) {
@@ -1826,6 +2070,782 @@ public class GestorServidores {
         } catch (IOException | RuntimeException e) {
             return false;
         }
+    }
+
+    private ServerCreationWizardResult mostrarAsistenteCreacionServidor() {
+        List<ServerPlatformAdapter> adapters = ServerPlatformAdapters.creatable();
+        if (adapters.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No hay plataformas disponibles para crear servidores.",
+                    "Crear servidor",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return null;
+        }
+        if (GraphicsEnvironment.isHeadless()) {
+            return null;
+        }
+
+        ServerCreationWizardState state = new ServerCreationWizardState();
+        Window owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+        JDialog dialog = new JDialog(owner, "Crear servidor", Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+
+        CardLayout cardLayout = new CardLayout();
+        JPanel cards = new JPanel(cardLayout);
+        JLabel statusLabel = new JLabel(" ");
+        statusLabel.setForeground(Color.RED);
+
+        JComboBox<ServerPlatformAdapter> platformBox = new JComboBox<>(adapters.toArray(ServerPlatformAdapter[]::new));
+        platformBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> createWizardComboLabel(
+                list,
+                value == null ? "" : value.getCreationDisplayName(),
+                isSelected
+        ));
+        cards.add(createWizardStepPanel("Plataforma", platformBox), "platform");
+
+        DefaultListModel<ServerCreationOption> versionListModel = new DefaultListModel<>();
+        JList<ServerCreationOption> versionList = new JList<>(versionListModel);
+        versionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        versionList.setVisibleRowCount(12);
+        versionList.setCellRenderer((list, value, index, isSelected, cellHasFocus) -> createWizardComboLabel(
+                list,
+                value == null ? "" : value.displayName(),
+                isSelected
+        ));
+        JScrollPane versionScroll = new JScrollPane(versionList);
+        versionScroll.setPreferredSize(new Dimension(620, 320));
+        JCheckBox includeSnapshotsCheck = new JCheckBox("Snapshots", false);
+        JCheckBox includeReleasesCheck = new JCheckBox("Releases", true);
+        JCheckBox eulaCheck = new JCheckBox();
+        JPanel versionFilters = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        versionFilters.add(new JLabel("Incluir:"));
+        versionFilters.add(includeSnapshotsCheck);
+        versionFilters.add(includeReleasesCheck);
+        JPanel eulaPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JLabel eulaLabel = new JLabel("Acepto el EULA de Mojang (https://aka.ms/MinecraftEULA)");
+        Font eulaFont = eulaLabel.getFont();
+        eulaLabel.setFont(eulaFont.deriveFont(Font.BOLD));
+        eulaPanel.add(eulaLabel);
+        eulaPanel.add(eulaCheck);
+        JPanel versionControls = new JPanel(new BorderLayout(0, 0));
+        versionControls.add(versionFilters, BorderLayout.WEST);
+        versionControls.add(new JSeparator(SwingConstants.VERTICAL), BorderLayout.CENTER);
+        versionControls.add(eulaPanel, BorderLayout.EAST);
+        JPanel versionStep = new JPanel(new BorderLayout(0, 8));
+        versionStep.add(versionScroll, BorderLayout.CENTER);
+        versionStep.add(versionControls, BorderLayout.SOUTH);
+        cards.add(createWizardStepPanel("Version", versionStep), "version");
+
+        JTextField parentField = new JTextField(32);
+        JFileChooser parentChooser = new JFileChooser();
+        parentChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        parentChooser.setAcceptAllFileFilterUsed(false);
+        parentChooser.setControlButtonsAreShown(false);
+        parentChooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
+            @Override
+            public boolean accept(File f) {
+                return f != null && f.isDirectory();
+            }
+
+            @Override
+            public String getDescription() {
+                return "Carpetas";
+            }
+        });
+        parentChooser.setPreferredSize(new Dimension(620, 320));
+        File initialParentDirectory = parentChooser.getCurrentDirectory();
+        if (initialParentDirectory != null) {
+            parentField.setText(initialParentDirectory.getAbsolutePath());
+        }
+        JLabel parentHint = new JLabel("Se creará una nueva carpeta dentro de la carpeta seleccionada.");
+        JPanel parentStep = new JPanel(new BorderLayout(0, 8));
+        parentStep.add(parentHint, BorderLayout.NORTH);
+        parentStep.add(parentChooser, BorderLayout.CENTER);
+        cards.add(createWizardStepPanel("Carpeta de destino", parentStep), "parent");
+
+        JTextField folderNameField = new JTextField(24);
+        JLabel parentPrefixLabel = new JLabel();
+        JButton resetFolderButton = new JButton();
+        AppTheme.applyHeaderIconButtonStyle(resetFolderButton);
+        resetFolderButton.setToolTipText("Restablecer nombre");
+        resetFolderButton.setPreferredSize(new Dimension(40, 40));
+        SvgIconFactory.RotatingIcon resetIcon = SvgIconFactory.createRotating(
+                "easymcicons/reset.svg",
+                26,
+                26,
+                AppTheme::getForeground
+        );
+        resetFolderButton.setIcon(resetIcon);
+        Font pathFont = new Font(Font.MONOSPACED, Font.PLAIN, 16);
+        parentPrefixLabel.setFont(pathFont);
+        folderNameField.setFont(pathFont);
+        JPanel folderPathPanel = new JPanel(new BorderLayout(0, 0));
+        Color folderNameBorderColor = UIManager.getColor("Component.borderColor") == null
+                ? Color.GRAY
+                : UIManager.getColor("Component.borderColor");
+        folderPathPanel.setBorder(AppTheme.createRoundedBorder(new Insets(6, 8, 6, 6), folderNameBorderColor, 1f));
+        folderPathPanel.setBackground(UIManager.getColor("TextField.background"));
+        folderPathPanel.setOpaque(true);
+        folderNameField.setOpaque(false);
+        folderNameField.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        folderPathPanel.add(parentPrefixLabel, BorderLayout.WEST);
+        folderPathPanel.add(folderNameField, BorderLayout.CENTER);
+        folderPathPanel.add(resetFolderButton, BorderLayout.EAST);
+        folderPathPanel.setPreferredSize(new Dimension(620, 42));
+        JPanel folderNameWrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        folderNameWrap.add(folderPathPanel);
+        cards.add(createWizardStepPanel("Nombre de carpeta", folderNameWrap), "folderName");
+
+        JButton backButton = new JButton();
+        JButton nextButton = new JButton();
+        AppTheme.applyHeaderIconButtonStyle(backButton);
+        AppTheme.applyHeaderIconButtonStyle(nextButton);
+        backButton.setIcon(SvgIconFactory.create("easymcicons/arrow-left.svg", 28, 28, AppTheme::getForeground));
+        nextButton.setIcon(SvgIconFactory.create("easymcicons/arrow-right.svg", 28, 28, AppTheme::getForeground));
+        backButton.setToolTipText("Anterior");
+        nextButton.setToolTipText("Siguiente");
+        Dimension arrowButtonSize = new Dimension(44, 44);
+        backButton.setPreferredSize(arrowButtonSize);
+        nextButton.setPreferredSize(arrowButtonSize);
+
+        JPanel footer = new JPanel(new BorderLayout(8, 0));
+        JPanel nav = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        nav.add(backButton);
+        nav.add(nextButton);
+        footer.add(statusLabel, BorderLayout.CENTER);
+        footer.add(nav, BorderLayout.EAST);
+
+        JPanel root = new JPanel(new BorderLayout(0, 12));
+        root.setBorder(BorderFactory.createEmptyBorder(18, 18, 14, 18));
+        root.add(cards, BorderLayout.CENTER);
+        root.add(footer, BorderLayout.SOUTH);
+        dialog.setContentPane(root);
+
+        String[] stepNames = {"platform", "version", "parent", "folderName"};
+        int[] stepIndex = {0};
+        AtomicReference<ServerCreationWizardResult> result = new AtomicReference<>();
+        AtomicInteger versionDownloadCheckGeneration = new AtomicInteger();
+        Runnable[] refreshNextState = new Runnable[1];
+        Runnable[] checkSelectedVersionDownload = new Runnable[1];
+        java.util.function.Consumer<AbstractButton>[] refreshVersionFilters = new java.util.function.Consumer[1];
+        Runnable refreshEulaState = () -> {
+            boolean accepted = eulaCheck.isSelected();
+            eulaLabel.setFont(eulaFont.deriveFont(accepted ? Font.PLAIN : Font.BOLD));
+            if (refreshNextState[0] != null) {
+                refreshNextState[0].run();
+            }
+        };
+        refreshNextState[0] = () -> nextButton.setEnabled(puedeAvanzarPasoCreacionServidor(
+                stepIndex[0],
+                state,
+                platformBox,
+                versionList,
+                parentField,
+                folderNameField,
+                eulaCheck
+        ));
+        Runnable refreshNav = () -> {
+            backButton.setEnabled(stepIndex[0] > 0);
+            nextButton.setToolTipText(stepIndex[0] == stepNames.length - 1 ? "Crear servidor" : "Siguiente");
+            statusLabel.setText(" ");
+            cardLayout.show(cards, stepNames[stepIndex[0]]);
+            refreshEulaState.run();
+            if (stepIndex[0] == 3) {
+                actualizarVistaNombreCarpeta(state, parentPrefixLabel, folderNameField);
+            }
+            refreshNextState[0].run();
+        };
+        checkSelectedVersionDownload[0] = () -> {
+            ServerCreationOption selected = state.option;
+            if (state.adapter == null
+                    || state.adapter.getPlatform() != modelo.extensions.ServerPlatform.VANILLA
+                    || selected == null
+                    || selected.minecraftVersion() == null
+                    || state.serverJarAvailableVersions.contains(selected.minecraftVersion())
+                    || state.serverJarUnavailableVersions.contains(selected.minecraftVersion())) {
+                state.pendingServerJarVersion = null;
+                refreshNextState[0].run();
+                return;
+            }
+
+            String versionId = selected.minecraftVersion();
+            if (Objects.equals(state.pendingServerJarVersion, versionId)) {
+                refreshNextState[0].run();
+                return;
+            }
+            state.pendingServerJarVersion = versionId;
+            int generation = versionDownloadCheckGeneration.incrementAndGet();
+            refreshNextState[0].run();
+            MojangAPI.runBackgroundRequest(() -> {
+                boolean available;
+                try {
+                    String url = MOJANG_API.obtenerUrlServerJar(versionId);
+                    available = url != null && !url.isBlank();
+                } catch (RuntimeException ex) {
+                    available = false;
+                }
+                boolean finalAvailable = available;
+                SwingUtilities.invokeLater(() -> {
+                    if (generation != versionDownloadCheckGeneration.get()) {
+                        return;
+                    }
+                    if (finalAvailable) {
+                        state.serverJarAvailableVersions.add(versionId);
+                    } else {
+                        state.serverJarUnavailableVersions.add(versionId);
+                    }
+                    if (Objects.equals(state.pendingServerJarVersion, versionId)) {
+                        state.pendingServerJarVersion = null;
+                    }
+                    refreshNextState[0].run();
+                });
+            });
+        };
+
+        platformBox.addActionListener(e -> {
+            ServerPlatformAdapter selected = (ServerPlatformAdapter) platformBox.getSelectedItem();
+            if (selected != state.adapter) {
+                state.adapter = selected;
+                state.options = null;
+                state.option = null;
+                versionListModel.clear();
+                boolean snapshotsDisponibles = soportaSnapshotsCreacion(selected);
+                includeSnapshotsCheck.setEnabled(snapshotsDisponibles);
+                if (!snapshotsDisponibles) {
+                    includeSnapshotsCheck.setSelected(false);
+                }
+                state.includeSnapshots = snapshotsDisponibles && includeSnapshotsCheck.isSelected();
+                state.includeReleases = includeReleasesCheck.isSelected();
+                actualizarSugerenciaNombreCarpeta(state, folderNameField, true);
+                refreshNextState[0].run();
+            }
+        });
+        versionList.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting() || state.updatingVersionList) {
+                return;
+            }
+            ServerCreationOption selected = versionList.getSelectedValue();
+            if (!Objects.equals(selected, state.option)) {
+                state.option = selected;
+                SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
+            }
+            refreshNextState[0].run();
+        });
+        refreshVersionFilters[0] = changedCheck -> {
+            if (state.updatingVersionFilters) {
+                return;
+            }
+            state.updatingVersionFilters = true;
+            try {
+                if (!includeSnapshotsCheck.isSelected() && !includeReleasesCheck.isSelected()) {
+                    changedCheck.setSelected(true);
+                }
+                state.includeSnapshots = includeSnapshotsCheck.isEnabled() && includeSnapshotsCheck.isSelected();
+                state.includeReleases = includeReleasesCheck.isSelected();
+                actualizarListadoVersiones(state, versionListModel, versionList);
+            } finally {
+                state.updatingVersionFilters = false;
+            }
+            refreshNextState[0].run();
+            SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
+        };
+        includeSnapshotsCheck.addActionListener(e -> refreshVersionFilters[0].accept(includeSnapshotsCheck));
+        includeReleasesCheck.addActionListener(e -> refreshVersionFilters[0].accept(includeReleasesCheck));
+        parentField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                actualizarPadre();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                actualizarPadre();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                actualizarPadre();
+            }
+
+            private void actualizarPadre() {
+                state.parentDirectory = parentField.getText() == null || parentField.getText().isBlank()
+                        ? null
+                        : new File(parentField.getText().trim());
+                actualizarSugerenciaNombreCarpeta(state, folderNameField, false);
+                refreshNextState[0].run();
+            }
+        });
+        folderNameField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                state.folderName = folderNameField.getText();
+                state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
+                refreshNextState[0].run();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                state.folderName = folderNameField.getText();
+                state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
+                refreshNextState[0].run();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                state.folderName = folderNameField.getText();
+                state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
+                refreshNextState[0].run();
+            }
+        });
+        parentChooser.addPropertyChangeListener(evt -> {
+            File selected = null;
+            if (JFileChooser.SELECTED_FILE_CHANGED_PROPERTY.equals(evt.getPropertyName())
+                    && evt.getNewValue() instanceof File selectedFile) {
+                selected = selectedFile;
+            } else if (JFileChooser.DIRECTORY_CHANGED_PROPERTY.equals(evt.getPropertyName())
+                    && evt.getNewValue() instanceof File currentDirectory) {
+                selected = currentDirectory;
+            }
+            if (selected == null) return;
+            if (!selected.isDirectory()) {
+                selected = selected.getParentFile();
+            }
+            if (selected != null && !Objects.equals(parentField.getText(), selected.getAbsolutePath())) {
+                parentField.setText(selected.getAbsolutePath());
+            }
+        });
+        resetFolderButton.addActionListener(e -> {
+            folderNameField.setText(state.suggestedFolderName == null ? "" : state.suggestedFolderName);
+            folderNameField.requestFocusInWindow();
+            folderNameField.selectAll();
+            animarIconoReset(resetIcon, resetFolderButton);
+        });
+        eulaCheck.addActionListener(e -> {
+            state.eulaAccepted = eulaCheck.isSelected();
+            refreshEulaState.run();
+        });
+
+        backButton.addActionListener(e -> {
+            if (stepIndex[0] <= 0) return;
+            stepIndex[0]--;
+            refreshNav.run();
+        });
+        nextButton.addActionListener(e -> {
+            String error = validarPasoCreacionServidor(
+                    stepIndex[0],
+                    state,
+                    platformBox,
+                    versionList,
+                    parentField,
+                    folderNameField,
+                    eulaCheck
+            );
+            if (error != null) {
+                statusLabel.setText(" ");
+                refreshNextState[0].run();
+                return;
+            }
+            if (stepIndex[0] == 1 && !esOpcionCreacionDescargable(state)) {
+                SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
+                statusLabel.setText(" ");
+                refreshNextState[0].run();
+                return;
+            }
+            if (stepIndex[0] == 0 && !cargarOpcionesCreacionWizard(dialog, state, versionListModel, versionList)) {
+                statusLabel.setText(" ");
+                refreshNextState[0].run();
+                return;
+            }
+            if (stepIndex[0] == 0) {
+                SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
+            }
+            if (stepIndex[0] == stepNames.length - 1) {
+                result.set(new ServerCreationWizardResult(
+                        state.adapter,
+                        state.option,
+                        new File(state.parentDirectory, normalizarNombreCarpeta(state.folderName))
+                ));
+                dialog.dispose();
+                return;
+            }
+            stepIndex[0]++;
+            refreshNav.run();
+        });
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                if (confirmarCancelacionAsistenteCreacion(dialog)) {
+                    result.set(null);
+                    dialog.dispose();
+                }
+            }
+        });
+
+        state.adapter = adapters.getFirst();
+        includeSnapshotsCheck.setEnabled(soportaSnapshotsCreacion(state.adapter));
+        state.includeSnapshots = includeSnapshotsCheck.isSelected();
+        state.includeReleases = includeReleasesCheck.isSelected();
+        state.parentDirectory = initialParentDirectory == null ? null : initialParentDirectory.getAbsoluteFile();
+        platformBox.setSelectedItem(state.adapter);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(760, Math.max(520, dialog.getHeight())));
+        dialog.setLocationRelativeTo(null);
+        refreshNav.run();
+        dialog.setVisible(true);
+        return result.get();
+    }
+
+    private JLabel createWizardComboLabel(JList<?> list, String text, boolean isSelected) {
+        JLabel label = new JLabel(text == null ? "" : text);
+        label.setOpaque(true);
+        label.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        if (isSelected) {
+            label.setBackground(list.getSelectionBackground());
+            label.setForeground(list.getSelectionForeground());
+        } else {
+            label.setBackground(list.getBackground());
+            label.setForeground(list.getForeground());
+        }
+        return label;
+    }
+
+    private JPanel createWizardStepPanel(String title, JComponent content) {
+        JPanel panel = new JPanel(new BorderLayout(0, 12));
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 18f));
+        panel.add(titleLabel, BorderLayout.NORTH);
+        panel.add(content, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private boolean cargarOpcionesCreacionWizard(Component parent,
+                                                 ServerCreationWizardState state,
+                                                 DefaultListModel<ServerCreationOption> versionListModel,
+                                                 JList<ServerCreationOption> versionList) {
+        if (state == null || state.adapter == null) {
+            return false;
+        }
+        if (state.options != null && !state.options.isEmpty()) {
+            actualizarListadoVersiones(state, versionListModel, versionList);
+            return true;
+        }
+        List<ServerCreationOption> options = cargarOpcionesCreacion(state.adapter);
+        if (options == null || options.isEmpty()) {
+            return false;
+        }
+        state.options = options;
+        actualizarListadoVersiones(state, versionListModel, versionList);
+        return !versionListModel.isEmpty();
+    }
+
+    private void actualizarListadoVersiones(ServerCreationWizardState state,
+                                            DefaultListModel<ServerCreationOption> versionListModel,
+                                            JList<ServerCreationOption> versionList) {
+        if (state == null || versionListModel == null || versionList == null) {
+            return;
+        }
+        ServerCreationOption previousSelection = state.option;
+        state.updatingVersionList = true;
+        try {
+            versionList.setValueIsAdjusting(true);
+            if (state.options == null || state.options.isEmpty()) {
+                versionListModel.clear();
+                state.option = null;
+                return;
+            }
+            List<ServerCreationOption> filteredOptions = state.options.stream()
+                    .filter(option -> debeMostrarOpcionCreacion(option, state.includeSnapshots, state.includeReleases))
+                    .toList();
+            versionListModel.clear();
+            versionListModel.addAll(filteredOptions);
+            if (filteredOptions.isEmpty()) {
+                state.option = null;
+                return;
+            }
+            int selectedIndex = -1;
+            if (previousSelection != null) {
+                for (int i = 0; i < filteredOptions.size(); i++) {
+                    if (Objects.equals(filteredOptions.get(i), previousSelection)) {
+                        selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            if (selectedIndex < 0) {
+                selectedIndex = 0;
+            }
+            versionList.setSelectedIndex(selectedIndex);
+            versionList.ensureIndexIsVisible(selectedIndex);
+            state.option = filteredOptions.get(selectedIndex);
+        } finally {
+            versionList.setValueIsAdjusting(false);
+            state.updatingVersionList = false;
+        }
+    }
+
+    private boolean debeMostrarOpcionCreacion(ServerCreationOption option, boolean includeSnapshots, boolean includeReleases) {
+        if (option == null) {
+            return false;
+        }
+        boolean snapshot = esSnapshot(option);
+        return snapshot ? includeSnapshots : includeReleases;
+    }
+
+    private void asegurarAlMenosUnFiltroVersionActivo(JCheckBox snapshotsCheck,
+                                                      JCheckBox releasesCheck,
+                                                      JCheckBox changedCheck) {
+        if (snapshotsCheck == null || releasesCheck == null) {
+            return;
+        }
+        if (snapshotsCheck.isSelected() || releasesCheck.isSelected()) {
+            return;
+        }
+        if (changedCheck != null && changedCheck.isEnabled()) {
+            changedCheck.setSelected(true);
+            return;
+        }
+        releasesCheck.setSelected(true);
+    }
+
+    private boolean soportaSnapshotsCreacion(ServerPlatformAdapter adapter) {
+        return adapter != null && adapter.getPlatform() == modelo.extensions.ServerPlatform.VANILLA;
+    }
+
+    private String validarOpcionCreacionDescargable(ServerCreationWizardState state,
+                                                    DefaultListModel<ServerCreationOption> versionListModel,
+                                                    JList<ServerCreationOption> versionList) {
+        if (state == null || state.option == null || state.adapter == null) {
+            return "Selecciona una version.";
+        }
+        if (state.adapter.getPlatform() != modelo.extensions.ServerPlatform.VANILLA) {
+            return null;
+        }
+        String versionId = state.option.minecraftVersion();
+        if (state.serverJarAvailableVersions.contains(versionId)) {
+            return null;
+        }
+        String url;
+        try {
+            url = MOJANG_API.obtenerUrlServerJar(versionId);
+        } catch (RuntimeException e) {
+            url = null;
+        }
+        if (url != null && !url.isBlank()) {
+            state.serverJarAvailableVersions.add(versionId);
+            return null;
+        }
+        if (state.options != null) {
+            state.options = state.options.stream()
+                    .filter(option -> !Objects.equals(option, state.option))
+                    .toList();
+        }
+        state.option = null;
+        actualizarListadoVersiones(state, versionListModel, versionList);
+        return "Esa version no tiene descarga de servidor disponible. Se ha retirado de la lista.";
+    }
+
+    private boolean puedeAvanzarPasoCreacionServidor(int stepIndex,
+                                                     ServerCreationWizardState state,
+                                                     JComboBox<ServerPlatformAdapter> platformBox,
+                                                     JList<ServerCreationOption> versionList,
+                                                     JTextField parentField,
+                                                     JTextField folderNameField,
+                                                     JCheckBox eulaCheck) {
+        if (state == null) {
+            return false;
+        }
+        return switch (stepIndex) {
+            case 0 -> platformBox.getSelectedItem() instanceof ServerPlatformAdapter;
+            case 1 -> {
+                ServerCreationOption selected = versionList.getSelectedValue();
+                boolean hasEnabledFilter = state.includeSnapshots || state.includeReleases;
+                boolean downloadable = selected != null
+                        && Objects.equals(selected, state.option)
+                        && esOpcionCreacionDescargable(state);
+                yield hasEnabledFilter
+                        && versionList.getModel().getSize() > 0
+                        && selected != null
+                        && eulaCheck.isSelected()
+                        && downloadable;
+            }
+            case 2 -> {
+                String parentText = parentField.getText();
+                yield parentText != null && !parentText.isBlank() && new File(parentText.trim()).isDirectory();
+            }
+            case 3 -> {
+                String folderName = folderNameField.getText();
+                yield validarNombreCarpetaServidor(folderName) == null
+                        && state.parentDirectory != null
+                        && !existeCarpetaConNombreNoPortable(state.parentDirectory, folderName);
+            }
+            default -> false;
+        };
+    }
+
+    private boolean esOpcionCreacionDescargable(ServerCreationWizardState state) {
+        if (state == null || state.option == null || state.adapter == null) {
+            return false;
+        }
+        if (state.adapter.getPlatform() != modelo.extensions.ServerPlatform.VANILLA) {
+            return true;
+        }
+        String versionId = state.option.minecraftVersion();
+        if (versionId == null || versionId.isBlank()) {
+            return false;
+        }
+        if (Objects.equals(state.pendingServerJarVersion, versionId)) {
+            return false;
+        }
+        return state.serverJarAvailableVersions.contains(versionId);
+    }
+
+    private boolean esSnapshot(ServerCreationOption option) {
+        if (option == null) {
+            return false;
+        }
+        if (option.versionType() != null && !option.versionType().isBlank()) {
+            return option.isSnapshot();
+        }
+        if (option.minecraftVersion() == null) {
+            return false;
+        }
+        String version = option.minecraftVersion().toLowerCase();
+        return version.contains("snapshot")
+                || version.contains("pre")
+                || version.contains("rc")
+                || version.matches("\\d{2}w\\d{2}[a-z]");
+    }
+
+    private String validarPasoCreacionServidor(int stepIndex,
+                                               ServerCreationWizardState state,
+                                               JComboBox<ServerPlatformAdapter> platformBox,
+                                               JList<ServerCreationOption> versionList,
+                                               JTextField parentField,
+                                               JTextField folderNameField,
+                                               JCheckBox eulaCheck) {
+        if (state == null) {
+            return "No se ha podido preparar la creacion.";
+        }
+        return switch (stepIndex) {
+            case 0 -> {
+                state.adapter = (ServerPlatformAdapter) platformBox.getSelectedItem();
+                yield state.adapter == null ? "Selecciona una plataforma." : null;
+            }
+            case 1 -> {
+                if (!state.includeSnapshots && !state.includeReleases) {
+                    yield "Selecciona al menos un tipo de version.";
+                }
+                if (versionList.getModel().getSize() <= 0) {
+                    yield "No hay versiones disponibles con los filtros seleccionados.";
+                }
+                state.option = versionList.getSelectedValue();
+                if (state.option == null) {
+                    yield "Selecciona una version.";
+                }
+                state.eulaAccepted = eulaCheck.isSelected();
+                yield state.eulaAccepted ? null : "Debes aceptar el EULA para crear el servidor.";
+            }
+            case 2 -> {
+                String parentText = parentField.getText();
+                if (parentText == null || parentText.isBlank()) {
+                    yield "Selecciona una carpeta de destino.";
+                }
+                File parent = new File(parentText.trim());
+                if (!parent.isDirectory()) {
+                    yield "La carpeta de destino no existe.";
+                }
+                state.parentDirectory = parent.getAbsoluteFile();
+                yield null;
+            }
+            case 3 -> {
+                String folderName = folderNameField.getText();
+                String error = validarNombreCarpetaServidor(folderName);
+                if (error != null) {
+                    yield error;
+                }
+                if (existeCarpetaConNombreNoPortable(state.parentDirectory, folderName)) {
+                    yield "Ya existe una carpeta con ese nombre.";
+                }
+                state.folderName = normalizarNombreCarpeta(folderName);
+                yield null;
+            }
+            default -> null;
+        };
+    }
+
+    private void actualizarVistaNombreCarpeta(ServerCreationWizardState state,
+                                              JLabel parentPrefixLabel,
+                                              JTextField folderNameField) {
+        if (state == null) {
+            return;
+        }
+        parentPrefixLabel.setText(formatearPrefijoCarpetaPadre(state.parentDirectory));
+        actualizarSugerenciaNombreCarpeta(state, folderNameField, false);
+    }
+
+    private void actualizarSugerenciaNombreCarpeta(ServerCreationWizardState state,
+                                                   JTextField folderNameField,
+                                                   boolean forceReplace) {
+        if (state == null || state.option == null || state.parentDirectory == null) {
+            return;
+        }
+        File suggestedFolder = resolverDirectorioServidorDisponible(
+                state.parentDirectory.getAbsoluteFile(),
+                state.option.directoryName()
+        );
+        String previousSuggestion = state.suggestedFolderName;
+        state.suggestedFolderName = suggestedFolder.getName();
+        boolean shouldReplace = forceReplace
+                || !state.folderNameEdited
+                || state.folderName == null
+                || state.folderName.isBlank()
+                || Objects.equals(normalizarNombreCarpeta(state.folderName), previousSuggestion);
+        if (!shouldReplace) {
+            return;
+        }
+        state.folderName = state.suggestedFolderName;
+        state.folderNameEdited = false;
+        if (folderNameField != null && !Objects.equals(folderNameField.getText(), state.folderName)) {
+            folderNameField.setText(state.folderName);
+        }
+    }
+
+    private boolean confirmarCancelacionAsistenteCreacion(Component parent) {
+        int option = JOptionPane.showConfirmDialog(
+                parent,
+                "¿Quieres cancelar la creación del servidor?",
+                "Cancelar creación",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        return option == JOptionPane.YES_OPTION;
+    }
+
+    private static final class ServerCreationWizardState {
+        private ServerPlatformAdapter adapter;
+        private List<ServerCreationOption> options;
+        private ServerCreationOption option;
+        private File parentDirectory;
+        private String suggestedFolderName;
+        private String folderName;
+        private boolean folderNameEdited;
+        private boolean includeSnapshots;
+        private boolean includeReleases = true;
+        private boolean eulaAccepted;
+        private boolean updatingVersionList;
+        private boolean updatingVersionFilters;
+        private String pendingServerJarVersion;
+        private final Set<String> serverJarAvailableVersions = new HashSet<>();
+        private final Set<String> serverJarUnavailableVersions = new HashSet<>();
+    }
+
+    private record ServerCreationWizardResult(
+            ServerPlatformAdapter adapter,
+            ServerCreationOption option,
+            File targetDirectory
+    ) {
     }
 
     // Usar siguiente puerto
