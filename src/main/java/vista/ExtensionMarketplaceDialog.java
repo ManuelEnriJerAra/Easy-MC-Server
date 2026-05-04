@@ -9,7 +9,6 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.Window;
 import java.time.Instant;
@@ -46,6 +45,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
@@ -97,6 +97,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private final JButton queueButton = new FlatButton();
     private final JButton processQueueButton = new FlatButton();
     private final JButton clearFinishedButton = new FlatButton();
+    private final JButton loadMoreButton = new FlatButton();
     private final DefaultComboBoxModel<VersionOption> versionModel = new DefaultComboBoxModel<>();
     private final JComboBox<VersionOption> versionCombo = new JComboBox<>(versionModel);
 
@@ -135,6 +136,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private boolean suppressResultSelectionEvents;
     private boolean suppressVersionSelectionEvents;
     private MarketplaceSearchSpec lastExecutedSearchSpec;
+    private int searchLimit = 25;
     private final Map<String, String> providerLabelsById = new HashMap<>();
 
     static void showDialog(Component parent,
@@ -179,7 +181,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         CardPanel marketplaceCard = new CardPanel("Marketplace");
         marketplaceCard.setBorder(BorderFactory.createEmptyBorder());
         marketplaceCard.getContentPanel().setLayout(new BorderLayout(0, 12));
-        marketplaceCard.getContentPanel().add(buildFiltersPanel(), BorderLayout.NORTH);
+        marketplaceCard.getContentPanel().add(buildCatalogToolbar(), BorderLayout.NORTH);
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildResultsCard(), buildDetailsCard());
         splitPane.setOpaque(false);
@@ -193,14 +195,19 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return marketplaceCard;
     }
 
-    private JComponent buildFiltersPanel() {
-        JPanel filters = new JPanel(new BorderLayout());
-        filters.setOpaque(false);
+    private JComponent buildCatalogToolbar() {
+        JPanel toolbar = new JPanel(new BorderLayout(0, 10));
+        toolbar.setOpaque(false);
+        toolbar.add(buildSearchBar(), BorderLayout.NORTH);
+        toolbar.add(buildFiltersPanel(), BorderLayout.CENTER);
+        return toolbar;
+    }
 
-        JPanel fields = new JPanel(new GridBagLayout());
-        fields.setOpaque(false);
-        searchField.setMinimumSize(new Dimension(260, 38));
-        searchField.setPreferredSize(new Dimension(360, 38));
+    private JComponent buildFiltersPanel() {
+        JPanel filters = new JPanel(new GridBagLayout());
+        filters.setOpaque(true);
+        filters.setBackground(AppTheme.getSurfaceBackground());
+        filters.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), AppTheme.withAlpha(AppTheme.getBorderColor(), 160), 1f));
         providerCombo.setMinimumSize(new Dimension(170, 38));
         providerCombo.setPreferredSize(new Dimension(190, 38));
         loaderCombo.setMinimumSize(new Dimension(165, 38));
@@ -212,25 +219,20 @@ final class ExtensionMarketplaceDialog extends JDialog {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridy = 0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(0, 0, 0, 8);
-        gbc.weightx = 1d;
-        fields.add(buildSearchFilter(), gbc);
+        gbc.insets = new Insets(0, 0, 0, 10);
+        gbc.weightx = 0d;
+        filters.add(buildInlineFilter("Proveedor", providerCombo), gbc);
 
         gbc.gridx = 1;
-        gbc.weightx = 0d;
-        fields.add(buildInlineFilter("Proveedor", providerCombo), gbc);
+        filters.add(buildInlineFilter("Plataforma", loaderCombo), gbc);
 
         gbc.gridx = 2;
-        fields.add(buildInlineFilter("Plataforma", loaderCombo), gbc);
+        filters.add(buildInlineFilter("Version", versionField), gbc);
 
         gbc.gridx = 3;
-        fields.add(buildInlineFilter("Version", versionField), gbc);
-
-        gbc.gridx = 4;
         gbc.insets = new Insets(0, 0, 0, 0);
-        fields.add(buildToggleFilter("Compatibilidad", compatibilityOnlyCheck), gbc);
+        filters.add(buildToggleFilter("Compatibilidad", compatibilityOnlyCheck), gbc);
 
-        filters.add(fields, BorderLayout.CENTER);
         return filters;
     }
 
@@ -255,7 +257,21 @@ final class ExtensionMarketplaceDialog extends JDialog {
         scrollPane.getViewport().setBackground(AppTheme.getPanelBackground());
         scrollPane.setBackground(AppTheme.getPanelBackground());
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.getVerticalScrollBar().addAdjustmentListener(e -> {
+            if (!e.getValueIsAdjusting()
+                    && searchState.state() != ViewState.LOADING
+                    && e.getAdjustable().getMaximum() - e.getAdjustable().getVisibleAmount() - e.getValue() < 48) {
+                loadMoreResults();
+            }
+        });
         content.add(scrollPane, BorderLayout.CENTER);
+
+        loadMoreButton.setText("Cargar mas");
+        AppTheme.applyActionButtonStyle(loadMoreButton);
+        loadMoreButton.setVisible(false);
+        loadMoreButton.addActionListener(e -> loadMoreResults());
+        content.add(loadMoreButton, BorderLayout.SOUTH);
         return card;
     }
 
@@ -292,18 +308,16 @@ final class ExtensionMarketplaceDialog extends JDialog {
         titleBlock.add(detailSubtitleLabel);
         header.add(titleBlock, BorderLayout.CENTER);
 
-        styleDetailStatusBadge();
-        header.add(detailStatusBadgeLabel, BorderLayout.EAST);
         content.add(header, BorderLayout.NORTH);
 
         JPanel body = new JPanel();
         body.setOpaque(false);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.add(buildMetaGrid());
-        body.add(Box.createVerticalStrut(12));
         body.add(buildVersionSelectionPanel());
         body.add(Box.createVerticalStrut(12));
         body.add(buildDescriptionPanel());
+        body.add(Box.createVerticalStrut(12));
+        body.add(buildProjectLicensePanel());
 
         detailDescriptionArea.setEditable(false);
         detailDescriptionArea.setOpaque(false);
@@ -320,6 +334,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         bodyScroll.getViewport().setOpaque(false);
         bodyScroll.getViewport().setBackground(AppTheme.getPanelBackground());
         bodyScroll.setOpaque(false);
+        bodyScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         bodyScroll.getVerticalScrollBar().setUnitIncrement(16);
         content.add(bodyScroll, BorderLayout.CENTER);
 
@@ -338,16 +353,14 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return card;
     }
 
-    private JPanel buildMetaGrid() {
-        JPanel metaGrid = new JPanel(new GridLayout(3, 2, 10, 10));
-        metaGrid.setOpaque(false);
-        metaGrid.add(createDetailMetaCard("Proveedor", detailProviderLabel));
-        metaGrid.add(createDetailMetaCard("Compatibilidad", detailCompatibilityLabel));
-        metaGrid.add(createDetailMetaCard("Licencia", detailLicenseLabel));
-        metaGrid.add(createDetailMetaCard("Version elegida", detailVersionLabel));
-        metaGrid.add(createDetailMetaCard("Archivo", detailFileLabel));
-        metaGrid.add(createDetailMetaCard("Proyecto", detailProjectUrlLabel));
-        return metaGrid;
+    private JPanel buildProjectLicensePanel() {
+        JPanel panel = new JPanel();
+        panel.setOpaque(false);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.add(buildInfoRow("Proyecto", detailProjectUrlLabel));
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(buildInfoRow("Licencia", detailLicenseLabel));
+        return panel;
     }
 
     private JPanel buildVersionSelectionPanel() {
@@ -451,12 +464,27 @@ final class ExtensionMarketplaceDialog extends JDialog {
         versionField.setNextFocusableComponent(compatibilityOnlyCheck);
         searchField.addActionListener(e -> runSearch(true));
         versionField.addActionListener(e -> runSearch(true));
-        providerCombo.addActionListener(e -> restartDebounce());
-        loaderCombo.addActionListener(e -> restartDebounce());
-        compatibilityOnlyCheck.addActionListener(e -> restartDebounce());
+        providerCombo.addActionListener(e -> {
+            searchLimit = 25;
+            restartDebounce();
+        });
+        loaderCombo.addActionListener(e -> {
+            searchLimit = 25;
+            restartDebounce();
+        });
+        compatibilityOnlyCheck.addActionListener(e -> {
+            searchLimit = 25;
+            restartDebounce();
+        });
 
-        searchField.getDocument().addDocumentListener(SimpleDocumentListener.of(this::restartDebounce));
-        versionField.getDocument().addDocumentListener(SimpleDocumentListener.of(this::restartDebounce));
+        searchField.getDocument().addDocumentListener(SimpleDocumentListener.of(() -> {
+            searchLimit = 25;
+            restartDebounce();
+        }));
+        versionField.getDocument().addDocumentListener(SimpleDocumentListener.of(() -> {
+            searchLimit = 25;
+            restartDebounce();
+        }));
     }
 
     private void configureResultsList() {
@@ -616,6 +644,14 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }.execute();
     }
 
+    private void loadMoreResults() {
+        if (searchState.state() == ViewState.LOADING || resultsModel.getSize() < searchLimit) {
+            return;
+        }
+        searchLimit += 25;
+        runSearch(true);
+    }
+
     private void restoreResults(List<MarketplaceEntryViewModel> entries) {
         replaceResultsModel(entries);
         restoreResultSelection(currentSelectedResultKey(), true);
@@ -665,7 +701,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         detailLicenseLabel.setText("Sin licencia declarada");
         detailVersionLabel.setText(entry.version() == null ? "-" : entry.version());
         detailFileLabel.setText("Pendiente de resolver");
-        detailBaseDescription = entry.description() == null ? "Sin descripcion." : entry.description();
+        detailBaseDescription = cleanDisplayText(entry.description() == null ? "Sin descripcion." : entry.description());
         detailDescriptionArea.setText(detailBaseDescription);
         refreshSelectionActionState();
 
@@ -740,7 +776,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 VersionOption fallback = new VersionOption(
                         defaultString(entry.versionId(), ""),
                         defaultString(entry.version(), "Version por defecto"),
-                        "Sin historial de versiones detallado"
+                        "Sin historial de versiones detallado",
+                        assessEntryCompatibility(entry).status() == ExtensionCompatibilityStatus.COMPATIBLE
                 );
                 versionModel.addElement(fallback);
                 versionCombo.setEnabled(true);
@@ -750,14 +787,17 @@ final class ExtensionMarketplaceDialog extends JDialog {
             }
 
             for (ExtensionCatalogVersion version : versions) {
+                MarketplaceCompatibilityAssessment versionCompatibility = assessVersionCompatibility(version);
                 versionModel.addElement(new VersionOption(
                         version.versionId(),
                         defaultString(version.versionNumber(), defaultString(version.displayName(), "Version")),
-                        describeVersionMeta(version)
+                        describeVersionMeta(version),
+                        versionCompatibility.status() == ExtensionCompatibilityStatus.COMPATIBLE
                 ));
             }
             versionCombo.setEnabled(true);
             versionCombo.setSelectedIndex(0);
+            detailSubtitleLabel.setText(buildDetailSubtitle(entry.author(), entry.providerId()) + "  |  " + buildAvailableVersionsPreview(versions));
             previewInstallPlan(entry, ((VersionOption) versionCombo.getSelectedItem()).versionId());
         } finally {
             suppressVersionSelectionEvents = false;
@@ -1131,24 +1171,27 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private void updateFilterState() {
-        boolean enabled = searchState.state() != ViewState.LOADING;
-        providerCombo.setEnabled(enabled);
-        loaderCombo.setEnabled(enabled);
-        versionField.setEnabled(enabled);
-        searchField.setEnabled(enabled);
-        compatibilityOnlyCheck.setEnabled(enabled);
+        providerCombo.setEnabled(true);
+        loaderCombo.setEnabled(true);
+        versionField.setEnabled(true);
+        searchField.setEnabled(true);
+        compatibilityOnlyCheck.setEnabled(true);
+        loadMoreButton.setEnabled(searchState.state() != ViewState.LOADING && resultsModel.getSize() >= searchLimit);
     }
 
     private void updateCatalogStatusLabel() {
         if (searchState.state() == ViewState.READY && resultsModel.getSize() > 0) {
             catalogStatusLabel.setText(searchState.message() + "  |  " + iconState.message());
+            loadMoreButton.setVisible(resultsModel.getSize() >= searchLimit);
             return;
         }
         if (searchState.state() == ViewState.ERROR && !resultsModel.isEmpty()) {
             catalogStatusLabel.setText(searchState.message() + "  |  Puedes seguir revisando los resultados ya cargados.");
+            loadMoreButton.setVisible(resultsModel.getSize() >= searchLimit);
             return;
         }
         catalogStatusLabel.setText(searchState.message());
+        loadMoreButton.setVisible(false);
     }
 
     private void refreshSelectionActionState() {
@@ -1568,23 +1611,32 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return panel;
     }
 
-    private JComponent buildSearchFilter() {
+    private JComponent buildSearchBar() {
         JPanel panel = new JPanel(new BorderLayout(8, 0));
         panel.setOpaque(true);
         panel.setBackground(AppTheme.getSurfaceBackground());
-        panel.setBorder(AppTheme.createRoundedBorder(new Insets(8, 10, 8, 10), AppTheme.withAlpha(AppTheme.getBorderColor(), 160), 1f));
+        panel.setBorder(AppTheme.createRoundedBorder(new Insets(8, 12, 8, 10), AppTheme.withAlpha(AppTheme.getBorderColor(), 160), 1f));
 
-        JLabel label = createFilterCaption("Buscar");
-        panel.add(label, BorderLayout.WEST);
+        searchField.setMinimumSize(new Dimension(260, 38));
+        searchField.setPreferredSize(new Dimension(360, 38));
+        searchField.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        searchField.setOpaque(false);
         panel.add(searchField, BorderLayout.CENTER);
+
+        JButton searchButton = new JButton();
+        AppTheme.applyHeaderIconButtonStyle(searchButton);
+        searchButton.setIcon(SvgIconFactory.create("easymcicons/magnifier.svg", 24, 24, AppTheme::getForeground));
+        searchButton.setToolTipText("Buscar");
+        searchButton.setPreferredSize(new Dimension(36, 36));
+        searchButton.addActionListener(e -> runSearch(true));
+        panel.add(searchButton, BorderLayout.EAST);
         return panel;
     }
 
     private JComponent buildInlineFilter(String title, JComponent component) {
         JPanel panel = new JPanel(new BorderLayout(8, 0));
-        panel.setOpaque(true);
-        panel.setBackground(AppTheme.getSurfaceBackground());
-        panel.setBorder(AppTheme.createRoundedBorder(new Insets(8, 10, 8, 10), AppTheme.withAlpha(AppTheme.getBorderColor(), 160), 1f));
+        panel.setOpaque(false);
+        panel.setBorder(BorderFactory.createEmptyBorder());
         panel.add(createFilterCaption(title), BorderLayout.WEST);
         panel.add(component, BorderLayout.CENTER);
         return panel;
@@ -1592,9 +1644,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
     private JComponent buildToggleFilter(String title, JCheckBox checkBox) {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        panel.setOpaque(true);
-        panel.setBackground(AppTheme.getSurfaceBackground());
-        panel.setBorder(AppTheme.createRoundedBorder(new Insets(8, 10, 8, 10), AppTheme.withAlpha(AppTheme.getBorderColor(), 160), 1f));
+        panel.setOpaque(false);
+        panel.setBorder(BorderFactory.createEmptyBorder());
         panel.add(createFilterCaption(title));
         panel.add(checkBox);
         return panel;
@@ -1760,14 +1811,15 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
     private ExtensionCatalogQuery buildSearchQuery() {
         PlatformFilterOption platformOption = (PlatformFilterOption) loaderCombo.getSelectedItem();
-        ServerPlatform platform = platformOption == null ? ServerPlatform.UNKNOWN : platformOption.platform();
-        String version = normalized(versionField.getText());
+        boolean compatibleOnly = compatibilityOnlyCheck.isSelected();
+        ServerPlatform platform = compatibleOnly && platformOption != null ? platformOption.platform() : ServerPlatform.UNKNOWN;
+        String version = compatibleOnly ? normalized(versionField.getText()) : null;
         return new ExtensionCatalogQuery(
                 normalized(searchField.getText()),
                 platform,
                 resolveServerExtensionType(),
                 version,
-                48
+                searchLimit
         );
     }
 
@@ -1925,9 +1977,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private String buildDetailsDescription(ExtensionCatalogEntry entry, ExtensionCatalogDetails details) {
         StringBuilder sb = new StringBuilder();
         if (details != null && details.summary() != null && !details.summary().isBlank()) {
-            sb.append(details.summary().trim());
+            sb.append(cleanDisplayText(details.summary()));
         } else if (entry.description() != null && !entry.description().isBlank()) {
-            sb.append(entry.description().trim());
+            sb.append(cleanDisplayText(entry.description()));
         } else {
             sb.append("Sin descripcion disponible.");
         }
@@ -1946,6 +1998,23 @@ final class ExtensionMarketplaceDialog extends JDialog {
             }
         }
         return sb.toString();
+    }
+
+    private String buildAvailableVersionsPreview(List<ExtensionCatalogVersion> versions) {
+        if (versions == null || versions.isEmpty()) {
+            return "Sin versiones declaradas";
+        }
+        List<String> compatible = versions.stream()
+                .filter(version -> assessVersionCompatibility(version).status() == ExtensionCompatibilityStatus.COMPATIBLE)
+                .map(version -> defaultString(version.versionNumber(), version.displayName()))
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .limit(3)
+                .toList();
+        if (!compatible.isEmpty()) {
+            return "Compatible: " + String.join(", ", compatible);
+        }
+        return "Sin build compatible marcada";
     }
 
     private String describeVersionMeta(ExtensionCatalogVersion version) {
@@ -2144,20 +2213,21 @@ final class ExtensionMarketplaceDialog extends JDialog {
         private final DefaultListCellRenderer fallback = new DefaultListCellRenderer();
         private final JPanel iconWell = new JPanel(new BorderLayout());
         private final JLabel iconLabel = new JLabel();
+        private final JPanel titleRow = new JPanel(new BorderLayout(8, 0));
         private final JLabel nameLabel = new JLabel();
         private final JLabel metaLabel = new JLabel();
         private final JLabel descriptionLabel = new JLabel();
         private final JPanel badgesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
 
         private SearchResultRenderer() {
-            super(new BorderLayout(12, 0));
+            super(new BorderLayout(8, 0));
             setOpaque(true);
 
             JPanel iconPanel = new JPanel(new BorderLayout());
             iconPanel.setOpaque(false);
-            iconPanel.setPreferredSize(new Dimension(52, 52));
+            iconPanel.setPreferredSize(new Dimension(42, 42));
             iconWell.setOpaque(true);
-            iconWell.setBorder(AppTheme.createRoundedBorder(new Insets(8, 8, 8, 8), AppTheme.withAlpha(AppTheme.getBorderColor(), 160), 1f));
+            iconWell.setBorder(AppTheme.createRoundedBorder(new Insets(4, 4, 4, 4), AppTheme.withAlpha(AppTheme.getBorderColor(), 140), 1f));
             iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
             iconLabel.setVerticalAlignment(SwingConstants.CENTER);
             iconWell.add(iconLabel, BorderLayout.CENTER);
@@ -2171,16 +2241,17 @@ final class ExtensionMarketplaceDialog extends JDialog {
             nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 15.5f));
             metaLabel.setFont(metaLabel.getFont().deriveFont(Font.PLAIN, 12.5f));
             metaLabel.setForeground(AppTheme.getMutedForeground());
-            metaLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 1, 0));
+            metaLabel.setHorizontalAlignment(SwingConstants.RIGHT);
             descriptionLabel.setFont(descriptionLabel.getFont().deriveFont(13.25f));
             descriptionLabel.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 210));
             descriptionLabel.setVerticalAlignment(SwingConstants.TOP);
 
             badgesPanel.setOpaque(false);
+            titleRow.setOpaque(false);
+            titleRow.add(nameLabel, BorderLayout.CENTER);
+            titleRow.add(metaLabel, BorderLayout.EAST);
 
-            textPanel.add(nameLabel);
-            textPanel.add(Box.createVerticalStrut(2));
-            textPanel.add(metaLabel);
+            textPanel.add(titleRow);
             textPanel.add(Box.createVerticalStrut(6));
             textPanel.add(descriptionLabel);
             textPanel.add(Box.createVerticalStrut(6));
@@ -2201,17 +2272,17 @@ final class ExtensionMarketplaceDialog extends JDialog {
             ExtensionCatalogEntry entry = value.entry();
             setBackground(isSelected ? AppTheme.getSoftSelectionBackground() : AppTheme.getPanelBackground());
             setBorder(AppTheme.createRoundedBorder(
-                    new Insets(12, 12, 12, 12),
+                    new Insets(8, 8, 8, 8),
                     isSelected ? AppTheme.getMainAccent() : AppTheme.getBorderColor(),
                     1f
             ));
             iconWell.setBackground(isSelected
                     ? AppTheme.withAlpha(AppTheme.getMainAccent(), 18)
                     : AppTheme.withAlpha(AppTheme.getForeground(), 12));
-            iconLabel.setIcon(ExtensionIconLoader.getIcon(entry.iconUrl(), 36, list::repaint));
+            iconLabel.setIcon(ExtensionIconLoader.getIcon(entry.iconUrl(), 32, list::repaint));
             nameLabel.setText(defaultString(entry.displayName(), "Extension"));
             metaLabel.setText(defaultString(entry.author(), "Autor desconocido") + "  |  " + defaultString(value.providerLabel(), describeProvider(entry.providerId())));
-            int textWidth = Math.max(320, list.getWidth() - 210);
+            int textWidth = Math.max(320, list.getWidth() - 122);
             descriptionLabel.setText("<html><body style='width:" + textWidth + "px'>" + escapeHtml(defaultString(value.descriptionPreview(), "Sin descripcion.")) + "</body></html>");
 
             badgesPanel.removeAll();
@@ -2229,7 +2300,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
                                                       boolean cellHasFocus) {
             VersionOption option = (VersionOption) value;
             String text = option == null ? "-" : option.displayName + "  |  " + option.meta;
-            return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
+            JLabel label = (JLabel) super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
+            if (option != null && option.compatible()) {
+                label.setFont(label.getFont().deriveFont(Font.BOLD));
+            }
+            return label;
         }
     }
 
@@ -2320,32 +2395,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (badges == null || viewModel == null || viewModel.entry() == null) {
             return;
         }
-        ExtensionInstallResolution resolution = viewModel.installResolution();
-        if (resolution != null && resolution.exactVersionInstalled()) {
-            badges.add(createBadge(
-                    "Instalada",
-                    AppTheme.withAlpha(AppTheme.getMainAccent(), 34),
-                    AppTheme.getMainAccent()
-            ));
-        } else if (resolution != null && resolution.updateAvailable()) {
-            badges.add(createBadge(
-                    "Actualizacion disponible",
-                    AppTheme.withAlpha(AppTheme.getWarningColor(), 26),
-                    AppTheme.getWarningColor()
-            ));
-        } else if (resolution != null && resolution.incompleteMetadataMatch()) {
-            badges.add(createBadge(
-                    "Instalada manual",
-                    AppTheme.withAlpha(AppTheme.getWarningColor(), 26),
-                    AppTheme.getWarningColor()
-            ));
-        } else if (resolution != null && resolution.fileNameConflict()) {
-            badges.add(createBadge(
-                    "Conflicto de nombre",
-                    AppTheme.withAlpha(AppTheme.getDangerColor(), 26),
-                    AppTheme.getDangerColor()
-            ));
-        } else if (viewModel.queueStateText() != null) {
+        if (viewModel.queueStateText() != null) {
             badges.add(createBadge(
                     viewModel.queueStateText(),
                     AppTheme.withAlpha(AppTheme.getWarningColor(), 26),
@@ -2360,23 +2410,6 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 )),
                 compatibilityBadgeBackground(viewModel.compatibilityStatus()),
                 compatibilityBadgeForeground(viewModel.compatibilityStatus())
-        ));
-        if (viewModel.entry().version() != null && !viewModel.entry().version().isBlank()) {
-            badges.add(createBadge(
-                    "Version: " + trimToLength(viewModel.entry().version(), 24),
-                    AppTheme.withAlpha(AppTheme.getForeground(), 12),
-                    AppTheme.withAlpha(AppTheme.getForeground(), 185)
-            ));
-        }
-        badges.add(createBadge(
-                viewModel.platformsSummary(),
-                AppTheme.withAlpha(AppTheme.getMainAccent(), 28),
-                AppTheme.withAlpha(AppTheme.getForeground(), 205)
-        ));
-        badges.add(createBadge(
-                viewModel.versionsSummary(),
-                AppTheme.withAlpha(AppTheme.getForeground(), 18),
-                AppTheme.withAlpha(AppTheme.getForeground(), 190)
         ));
     }
 
@@ -2473,11 +2506,42 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (text == null || text.isBlank()) {
             return "";
         }
-        return text.replace('\r', ' ')
+        return cleanDisplayText(text).replace('\r', ' ')
                 .replace('\n', ' ')
                 .replace('\t', ' ')
                 .replaceAll("\\s+", " ")
                 .trim();
+    }
+
+    private String cleanDisplayText(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String cleaned = text
+                .replaceAll("(?i)<\\s*br\\s*/?\\s*>", "\n")
+                .replaceAll("(?i)</\\s*p\\s*>", "\n\n")
+                .replaceAll("(?i)</\\s*li\\s*>", "\n")
+                .replaceAll("(?i)<\\s*li[^>]*>", "- ")
+                .replaceAll("<[^>]+>", "");
+        return decodeBasicHtmlEntities(cleaned)
+                .replace('\u00a0', ' ')
+                .replaceAll("[ \\t\\x0B\\f\\r]+", " ")
+                .replaceAll(" *\\n *", "\n")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+    }
+
+    private String decodeBasicHtmlEntities(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        return text.replace("&nbsp;", " ")
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&apos;", "'");
     }
 
     private String trimToLength(String text, int maxLength) {
@@ -2557,7 +2621,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
     }
 
-    private record VersionOption(String versionId, String displayName, String meta) {
+    private record VersionOption(String versionId, String displayName, String meta, boolean compatible) {
         @Override
         public String toString() {
             return displayName;

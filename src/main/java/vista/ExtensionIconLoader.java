@@ -16,7 +16,9 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,8 +52,8 @@ final class ExtensionIconLoader {
     private static final Map<Component, AtomicBoolean> REPAINT_SCHEDULED = Collections.synchronizedMap(new WeakHashMap<>());
     private static final AtomicLong SEQUENCE = new AtomicLong();
     private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(
-            1,
-            1,
+            3,
+            3,
             30L,
             TimeUnit.SECONDS,
             new PriorityBlockingQueue<>(),
@@ -66,6 +68,8 @@ final class ExtensionIconLoader {
     private static final Duration FAILURE_BASE_BACKOFF = Duration.ofSeconds(30);
     private static final int MAX_FAILURE_ATTEMPTS = 3;
     private static final int MAX_REMOTE_ATTEMPTS = 2;
+    private static final int CONNECT_TIMEOUT_MILLIS = 6000;
+    private static final int READ_TIMEOUT_MILLIS = 10000;
     private static final AtomicBoolean CACHE_READY = new AtomicBoolean();
 
     private ExtensionIconLoader() {
@@ -242,7 +246,19 @@ final class ExtensionIconLoader {
 
     private static BufferedImage readRemoteImage(String iconUrl) throws IOException {
         URI uri = URI.create(iconUrl);
-        try (InputStream in = uri.toURL().openStream()) {
+        URLConnection connection = uri.toURL().openConnection();
+        connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
+        connection.setReadTimeout(READ_TIMEOUT_MILLIS);
+        connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://modrinth.com)");
+        connection.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/jpeg,image/svg+xml,*/*;q=0.8");
+        if (connection instanceof HttpURLConnection http) {
+            http.setInstanceFollowRedirects(true);
+            int status = http.getResponseCode();
+            if (status < 200 || status >= 300) {
+                throw new IOException("HTTP " + status + " al descargar icono.");
+            }
+        }
+        try (InputStream in = connection.getInputStream()) {
             byte[] bytes = in.readAllBytes();
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
             if (image != null) {
