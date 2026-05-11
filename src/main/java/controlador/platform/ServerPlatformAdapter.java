@@ -40,6 +40,12 @@ public interface ServerPlatformAdapter {
         return getPlatform().getLegacyTypeName();
     }
 
+    default String getCreationUnavailableReason() {
+        return supportsAutomatedCreation()
+                ? ""
+                : "La instalacion automatica para esta plataforma no esta disponible.";
+    }
+
     default List<ServerCreationOption> listCreationOptions() throws IOException {
         return List.of();
     }

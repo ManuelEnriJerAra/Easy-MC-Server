@@ -10,5 +10,7 @@ public enum ServerLoader {
     PAPER,
     SPIGOT,
     BUKKIT,
+    PURPUR,
+    PUFFERFISH,
     UNKNOWN
 }

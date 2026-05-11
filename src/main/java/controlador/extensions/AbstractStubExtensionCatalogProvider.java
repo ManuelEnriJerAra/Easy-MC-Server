@@ -9,6 +9,7 @@ import modelo.extensions.ServerPlatform;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -101,6 +102,7 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
 
         ExtensionCatalogVersion targetVersion = details.get().versions().stream()
                 .filter(version -> versionId == null || versionId.isBlank() || versionId.equalsIgnoreCase(version.versionId()))
+                .sorted(defaultVersionSelectionComparator(versionId != null && !versionId.isBlank()))
                 .findFirst()
                 .orElse(details.get().versions().isEmpty() ? null : details.get().versions().getFirst());
 
@@ -117,16 +119,28 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
                 providerId,
                 projectId,
                 targetVersion.versionId(),
+                details.get().entry().displayName(),
+                details.get().entry().author(),
+                details.get().entry().description(),
                 targetVersion.versionNumber(),
                 details.get().entry().iconUrl(),
                 targetVersion.fileName(),
                 targetVersion.downloadUrl(),
+                details.get().entry().projectUrl(),
+                details.get().issuesUrl(),
+                details.get().websiteUrl(),
+                details.get().licenseName(),
+                details.get().entry().downloads(),
+                details.get().entry().clientSide(),
+                details.get().entry().serverSide(),
+                details.get().categories(),
                 sourceType,
                 details.get().entry().extensionType(),
                 inferPlatform(targetVersion.supportedPlatforms()),
                 joinVersions(targetVersion.supportedMinecraftVersions()),
                 true,
-                message
+                message,
+                targetVersion.dependencies()
         ));
     }
 
@@ -136,6 +150,15 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
 
     private String joinVersions(Set<String> versions) {
         return versions == null || versions.isEmpty() ? null : String.join(" || ", versions);
+    }
+
+    private Comparator<ExtensionCatalogVersion> defaultVersionSelectionComparator(boolean exactVersionRequested) {
+        Comparator<ExtensionCatalogVersion> newestFirst = Comparator.comparingLong(ExtensionCatalogVersion::publishedAtEpochMillis).reversed();
+        if (exactVersionRequested) {
+            return newestFirst;
+        }
+        return Comparator.comparing(ExtensionCatalogVersion::stableRelease).reversed()
+                .thenComparing(newestFirst);
     }
 
     @Override
@@ -208,7 +231,10 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
                 minecraftVersions,
                 null,
                 projectUrl,
-                projectUrl + "/download/" + fileName
+                projectUrl + "/download/" + fileName,
+                0L,
+                "unknown",
+                "required"
         );
         ExtensionCatalogVersion catalogVersion = new ExtensionCatalogVersion(
                 providerId,
@@ -221,7 +247,8 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
                 "Version de ejemplo preparada para el futuro cliente HTTP de " + displayName + ".",
                 fileName,
                 entry.downloadUrl(),
-                System.currentTimeMillis()
+                System.currentTimeMillis(),
+                List.of()
         );
         return new ExtensionCatalogDetails(
                 entry,

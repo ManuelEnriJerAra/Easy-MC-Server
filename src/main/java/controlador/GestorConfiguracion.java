@@ -19,6 +19,7 @@ public final class GestorConfiguracion {
     private static final int DEFAULT_STATS_RECENT_WINDOW_SECONDS = 24 * 60 * 60;
     private static final int DEFAULT_STATS_HISTORICAL_RESOLUTION_SECONDS = 60;
     private static final boolean DEFAULT_PLAYER_LIST_COMPACT = false;
+    private static final boolean DEFAULT_EXTENSION_LIST_COMPACT = false;
     private static final boolean DEFAULT_CONSOLE_SIMPLE_VIEW = true;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -70,6 +71,9 @@ public final class GestorConfiguracion {
         }
         if (config.getJugadoresListaCompacta() == null) {
             config.setJugadoresListaCompacta(DEFAULT_PLAYER_LIST_COMPACT);
+        }
+        if (config.getExtensionesListaCompacta() == null) {
+            config.setExtensionesListaCompacta(DEFAULT_EXTENSION_LIST_COMPACT);
         }
         if (config.getConsolaVistaSimple() == null) {
             config.setConsolaVistaSimple(DEFAULT_CONSOLE_SIMPLE_VIEW);
@@ -148,6 +152,17 @@ public final class GestorConfiguracion {
     public static void guardarJugadoresListaCompacta(boolean compacta) {
         EasyMCConfig config = cargarConfiguracion();
         config.setJugadoresListaCompacta(compacta);
+        guardarConfiguracion(config);
+    }
+
+    public static boolean isExtensionesListaCompacta() {
+        Boolean compacta = cargarConfiguracion().getExtensionesListaCompacta();
+        return compacta == null ? DEFAULT_EXTENSION_LIST_COMPACT : compacta;
+    }
+
+    public static void guardarExtensionesListaCompacta(boolean compacta) {
+        EasyMCConfig config = cargarConfiguracion();
+        config.setExtensionesListaCompacta(compacta);
         guardarConfiguracion(config);
     }
 
@@ -247,6 +262,10 @@ public final class GestorConfiguracion {
         }
         if (config.getJugadoresListaCompacta() == null) {
             config.setJugadoresListaCompacta(DEFAULT_PLAYER_LIST_COMPACT);
+            changed = true;
+        }
+        if (config.getExtensionesListaCompacta() == null) {
+            config.setExtensionesListaCompacta(DEFAULT_EXTENSION_LIST_COMPACT);
             changed = true;
         }
         if (config.getConsolaVistaSimple() == null) {

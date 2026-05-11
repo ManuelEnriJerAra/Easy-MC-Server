@@ -47,10 +47,13 @@ final class ServerJarLocator {
         if (name.contains("server")) score += 20;
 
         switch (platform == null ? ServerPlatform.UNKNOWN : platform) {
-            case FORGE, NEOFORGE -> {
+            case FORGE -> {
                 if (name.contains("forge")) score += 50;
-                if (name.contains("neoforge")) score += 50;
                 if (MinecraftServerJarInspector.looksLikeForgeServerJar(jar)) score += 80;
+            }
+            case NEOFORGE -> {
+                if (name.contains("neoforge")) score += 70;
+                if (MinecraftServerJarInspector.looksLikeNeoForgeServerJar(jar)) score += 90;
             }
             case PAPER, SPIGOT, BUKKIT, PURPUR, PUFFERFISH -> {
                 if (name.contains("paper")) score += 50;
@@ -59,12 +62,18 @@ final class ServerJarLocator {
                 if (name.contains("purpur")) score += 40;
                 if (name.contains("pufferfish")) score += 40;
                 if (MinecraftServerJarInspector.looksLikePaperServerJar(jar)) score += 80;
+                if (MinecraftServerJarInspector.looksLikePurpurServerJar(jar)) score += 90;
+                if (MinecraftServerJarInspector.looksLikePufferfishServerJar(jar)) score += 90;
+                if (MinecraftServerJarInspector.looksLikeSpigotServerJar(jar)) score += 70;
+                if (MinecraftServerJarInspector.looksLikeBukkitServerJar(jar)) score += 60;
             }
             case FABRIC -> {
                 if (name.contains("fabric")) score += 50;
+                if (MinecraftServerJarInspector.looksLikeFabricServerJar(jar)) score += 80;
             }
             case QUILT -> {
                 if (name.contains("quilt")) score += 50;
+                if (MinecraftServerJarInspector.looksLikeQuiltServerJar(jar)) score += 80;
             }
             case VANILLA, UNKNOWN -> {
                 if (name.contains("minecraft")) score += 30;
@@ -83,6 +92,15 @@ final class ServerJarLocator {
             score += 20;
         }
         if (MinecraftServerJarInspector.looksLikePaperServerJar(jar)) {
+            score += 20;
+        }
+        if (MinecraftServerJarInspector.looksLikeNeoForgeServerJar(jar)
+                || MinecraftServerJarInspector.looksLikeFabricServerJar(jar)
+                || MinecraftServerJarInspector.looksLikeQuiltServerJar(jar)
+                || MinecraftServerJarInspector.looksLikePurpurServerJar(jar)
+                || MinecraftServerJarInspector.looksLikePufferfishServerJar(jar)
+                || MinecraftServerJarInspector.looksLikeSpigotServerJar(jar)
+                || MinecraftServerJarInspector.looksLikeBukkitServerJar(jar)) {
             score += 20;
         }
         return score;

@@ -15,18 +15,46 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class MinecraftServerJarInspector {
-    private static final Pattern VERSION_PATTERN = Pattern.compile("([0-9]{1,2}\\.[0-9]{1,2}(?:\\.[0-9]{1,2})?)");
+    private static final Pattern VERSION_PATTERN = Pattern.compile("(?<![\\d.])(1\\.(?:1[0-9]|2[0-9])(?:\\.\\d+)?)(?![\\d.])");
     private static final String[] FORGE_ENTRY_MARKERS = {
             "net/minecraftforge/server/ServerMain.class",
             "net/minecraftforge/common/MinecraftForge.class",
             "net/minecraftforge/fml/loading/FMLLoader.class",
             "cpw/mods/modlauncher/Launcher.class"
     };
+    private static final String[] NEOFORGE_ENTRY_MARKERS = {
+            "net/neoforged/",
+            "net/neoforged/neoforge/",
+            "META-INF/neoforge.mods.toml"
+    };
+    private static final String[] FABRIC_ENTRY_MARKERS = {
+            "fabric-server-launch.properties",
+            "net/fabricmc/loader/",
+            "net/fabricmc/loader/impl/launch/server/FabricServerLauncher.class",
+            "net/fabricmc/loader/launch/knot/KnotServer.class"
+    };
+    private static final String[] QUILT_ENTRY_MARKERS = {
+            "quilt-server-launch.properties",
+            "quilt_installer.json",
+            "org/quiltmc/loader/",
+            "org/quiltmc/loader/impl/launch/server/QuiltServerLauncher.class"
+    };
     private static final String[] PAPER_ENTRY_MARKERS = {
             "io/papermc/",
             "com/destroystokyo/paper/",
             "META-INF/services/io.papermc.paper.plugin.provider",
             "patch.properties"
+    };
+    private static final String[] PURPUR_ENTRY_MARKERS = {
+            "org/purpurmc/",
+            "META-INF/maven/org.purpurmc.purpur/"
+    };
+    private static final String[] PUFFERFISH_ENTRY_MARKERS = {
+            "gg/pufferfish/",
+            "META-INF/maven/gg.pufferfish/"
+    };
+    private static final String[] SPIGOT_ENTRY_MARKERS = {
+            "org/spigotmc/"
     };
 
     private MinecraftServerJarInspector() {
@@ -75,19 +103,49 @@ final class MinecraftServerJarInspector {
         return jarContainsAnyMarker(jarPath, FORGE_ENTRY_MARKERS);
     }
 
+    static boolean looksLikeNeoForgeServerJar(Path jarPath) {
+        return jarContainsAnyMarker(jarPath, NEOFORGE_ENTRY_MARKERS);
+    }
+
+    static boolean looksLikeFabricServerJar(Path jarPath) {
+        return jarContainsAnyMarker(jarPath, FABRIC_ENTRY_MARKERS);
+    }
+
+    static boolean looksLikeQuiltServerJar(Path jarPath) {
+        return jarContainsAnyMarker(jarPath, QUILT_ENTRY_MARKERS);
+    }
+
     static boolean looksLikePaperServerJar(Path jarPath) {
-        return jarContainsAnyMarker(jarPath, PAPER_ENTRY_MARKERS)
-                || jarContainsExactEntry(jarPath, "org/bukkit/craftbukkit/Main.class");
+        return jarContainsAnyMarker(jarPath, PAPER_ENTRY_MARKERS);
+    }
+
+    static boolean looksLikePurpurServerJar(Path jarPath) {
+        return jarContainsAnyMarker(jarPath, PURPUR_ENTRY_MARKERS);
+    }
+
+    static boolean looksLikePufferfishServerJar(Path jarPath) {
+        return jarContainsAnyMarker(jarPath, PUFFERFISH_ENTRY_MARKERS);
+    }
+
+    static boolean looksLikeSpigotServerJar(Path jarPath) {
+        return jarContainsAnyMarker(jarPath, SPIGOT_ENTRY_MARKERS);
+    }
+
+    static boolean looksLikeBukkitServerJar(Path jarPath) {
+        return jarContainsExactEntry(jarPath, "org/bukkit/craftbukkit/Main.class");
     }
 
     private static String readVersionJson(InputStream in) {
         try {
             JsonObject json = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
             if (json.has("name")) {
-                return json.get("name").getAsString();
+                String version = extractMinecraftVersion(json.get("name").getAsString());
+                if (version != null) {
+                    return version;
+                }
             }
             if (json.has("id")) {
-                return json.get("id").getAsString();
+                return extractMinecraftVersion(json.get("id").getAsString());
             }
             return null;
         } catch (Exception e) {
@@ -98,6 +156,14 @@ final class MinecraftServerJarInspector {
     private static String readVersionClass(InputStream in) throws IOException {
         String text = new String(in.readAllBytes(), StandardCharsets.ISO_8859_1);
         Matcher matcher = VERSION_PATTERN.matcher(text);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private static String extractMinecraftVersion(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        Matcher matcher = VERSION_PATTERN.matcher(value.trim());
         return matcher.find() ? matcher.group(1) : null;
     }
 

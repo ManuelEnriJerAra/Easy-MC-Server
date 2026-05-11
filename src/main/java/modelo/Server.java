@@ -165,6 +165,54 @@ public class Server {
         this.capabilities = EnumSet.copyOf(capabilities);
     }
 
+    @JsonIgnore
+    public boolean isVanillaServer() {
+        return resolvedPlatform().isVanillaPlatform();
+    }
+
+    @JsonIgnore
+    public boolean isModServer() {
+        return resolvedPlatform().isModPlatform();
+    }
+
+    @JsonIgnore
+    public boolean isPluginServer() {
+        return resolvedPlatform().isPluginPlatform();
+    }
+
+    @JsonIgnore
+    public boolean supportsExtensions() {
+        ServerPlatform resolved = resolvedPlatform();
+        if (resolved.isKnownPlatform()) {
+            return resolved.supportsExtensions();
+        }
+        ServerEcosystemType ecosystem = resolvedEcosystemType();
+        return ecosystem == ServerEcosystemType.MODS || ecosystem == ServerEcosystemType.PLUGINS;
+    }
+
+    @JsonIgnore
+    public boolean supportsModExtensions() {
+        ServerPlatform resolved = resolvedPlatform();
+        if (resolved.isKnownPlatform()) {
+            return resolved.isModPlatform();
+        }
+        return resolvedEcosystemType() == ServerEcosystemType.MODS;
+    }
+
+    @JsonIgnore
+    public boolean supportsPluginExtensions() {
+        ServerPlatform resolved = resolvedPlatform();
+        if (resolved.isKnownPlatform()) {
+            return resolved.isPluginPlatform();
+        }
+        return resolvedEcosystemType() == ServerEcosystemType.PLUGINS;
+    }
+
+    @JsonIgnore
+    public boolean hasCapability(ServerCapability capability) {
+        return capability != null && capabilities != null && capabilities.contains(capability);
+    }
+
     public boolean migrarModeloLegacy() {
         boolean cambios = false;
 
@@ -194,7 +242,7 @@ public class Server {
             cambios = true;
         }
         if (capabilities == null) {
-            capabilities = EnumSet.copyOf(platform.defaultCapabilities());
+            capabilities = EnumSet.noneOf(ServerCapability.class);
             cambios = true;
         } else if (!(capabilities instanceof EnumSet<?>)) {
             capabilities = capabilities.isEmpty()
@@ -238,16 +286,26 @@ public class Server {
         }
 
         Set<ServerCapability> targetCapabilities = resolvedPlatform.defaultCapabilities();
-        if (!soloSiFalta || capabilities == null || capabilities.isEmpty()) {
-            if (capabilities == null || !capabilities.equals(targetCapabilities)) {
-                capabilities = targetCapabilities.isEmpty()
-                        ? EnumSet.noneOf(ServerCapability.class)
-                        : EnumSet.copyOf(targetCapabilities);
-                cambios = true;
-            }
+        if (capabilities == null) {
+            capabilities = EnumSet.noneOf(ServerCapability.class);
+            cambios = true;
+        }
+        if (!capabilities.equals(targetCapabilities)) {
+            capabilities = targetCapabilities.isEmpty()
+                    ? EnumSet.noneOf(ServerCapability.class)
+                    : EnumSet.copyOf(targetCapabilities);
+            cambios = true;
         }
 
         return cambios;
+    }
+
+    private ServerPlatform resolvedPlatform() {
+        return platform == null ? ServerPlatform.UNKNOWN : platform;
+    }
+
+    private ServerEcosystemType resolvedEcosystemType() {
+        return ecosystemType == null ? resolvedPlatform().getDefaultEcosystemType() : ecosystemType;
     }
 
     private boolean normalizarExtensiones() {
@@ -290,6 +348,14 @@ public class Server {
                 }
                 if (extension.getLocalMetadata().getUpdateState() == null) {
                     extension.getLocalMetadata().setUpdateState(modelo.extensions.ExtensionUpdateState.UNKNOWN);
+                    cambios = true;
+                }
+                if (extension.getLocalMetadata().getCategories() == null) {
+                    extension.getLocalMetadata().setCategories(new ArrayList<>());
+                    cambios = true;
+                }
+                if (extension.getLocalMetadata().getDependencies() == null) {
+                    extension.getLocalMetadata().setDependencies(new ArrayList<>());
                     cambios = true;
                 }
             }

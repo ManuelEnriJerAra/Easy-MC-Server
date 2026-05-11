@@ -25,7 +25,7 @@ import controlador.Main;
 
 public final class AppTheme {
     private static final int REFRESH_ROTATION_TIMER_MS = 16;
-    private static final double REFRESH_ROTATION_STEP_RADIANS = -Math.toRadians(6);
+    private static final double REFRESH_ROTATION_STEP_RADIANS = Math.toRadians(6);
     private static final String PROP_REFRESH_TIMER = "easy-mc-server.refreshTimer";
     private static final String PROP_REFRESH_ICON = "easy-mc-server.refreshIcon";
     private static final String PROP_REFRESH_HOVER = "easy-mc-server.refreshHover";

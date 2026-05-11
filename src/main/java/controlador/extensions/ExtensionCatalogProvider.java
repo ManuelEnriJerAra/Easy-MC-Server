@@ -26,17 +26,53 @@ public interface ExtensionCatalogProvider {
         return Set.of();
     }
 
+    default Set<ServerExtensionType> getSupportedExtensionTypes() {
+        return Set.of();
+    }
+
+    default Set<ServerPlatform> getSupportedPlatforms() {
+        return Set.of();
+    }
+
+    default String getLimitations() {
+        return null;
+    }
+
     default ExtensionCatalogProviderDescriptor describeProvider() {
         return new ExtensionCatalogProviderDescriptor(
                 getProviderId(),
                 getDisplayName(),
                 getSourceType(),
-                getCapabilities()
+                getCapabilities(),
+                getSupportedExtensionTypes(),
+                getSupportedPlatforms(),
+                getLimitations()
         );
     }
 
     default boolean supportsSearch() {
         return getCapabilities().contains(ExtensionCatalogCapability.SEARCH);
+    }
+
+    default boolean supportsQuery(ExtensionCatalogQuery query) {
+        if (!supportsSearch()) {
+            return false;
+        }
+        if (query == null) {
+            return true;
+        }
+        Set<ServerExtensionType> supportedTypes = getSupportedExtensionTypes();
+        if (query.extensionType() != null
+                && query.extensionType() != ServerExtensionType.UNKNOWN
+                && !supportedTypes.isEmpty()
+                && !supportedTypes.contains(query.extensionType())) {
+            return false;
+        }
+        Set<ServerPlatform> supportedPlatforms = getSupportedPlatforms();
+        return query.platform() == null
+                || query.platform() == ServerPlatform.UNKNOWN
+                || supportedPlatforms.isEmpty()
+                || supportedPlatforms.contains(query.platform());
     }
 
     default List<ExtensionCatalogEntry> search(ExtensionCatalogQuery query) throws IOException {

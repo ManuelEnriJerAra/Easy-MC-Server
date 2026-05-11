@@ -14,8 +14,8 @@ public enum ServerPlatform {
     PAPER("PAPER", ServerLoader.PAPER, ServerEcosystemType.PLUGINS),
     SPIGOT("SPIGOT", ServerLoader.SPIGOT, ServerEcosystemType.PLUGINS),
     BUKKIT("BUKKIT", ServerLoader.BUKKIT, ServerEcosystemType.PLUGINS),
-    PURPUR("PURPUR", ServerLoader.PAPER, ServerEcosystemType.PLUGINS),
-    PUFFERFISH("PUFFERFISH", ServerLoader.PAPER, ServerEcosystemType.PLUGINS);
+    PURPUR("PURPUR", ServerLoader.PURPUR, ServerEcosystemType.PLUGINS),
+    PUFFERFISH("PUFFERFISH", ServerLoader.PUFFERFISH, ServerEcosystemType.PLUGINS);
 
     private final String legacyTypeName;
     private final ServerLoader defaultLoader;
@@ -39,6 +39,26 @@ public enum ServerPlatform {
         return defaultEcosystemType;
     }
 
+    public boolean isVanillaPlatform() {
+        return this == VANILLA;
+    }
+
+    public boolean isModPlatform() {
+        return defaultEcosystemType == ServerEcosystemType.MODS;
+    }
+
+    public boolean isPluginPlatform() {
+        return defaultEcosystemType == ServerEcosystemType.PLUGINS;
+    }
+
+    public boolean supportsExtensions() {
+        return isModPlatform() || isPluginPlatform();
+    }
+
+    public boolean isKnownPlatform() {
+        return this != UNKNOWN;
+    }
+
     public Set<ServerCapability> defaultCapabilities() {
         EnumSet<ServerCapability> capabilities = EnumSet.of(
                 ServerCapability.CORE_SERVER,
@@ -48,13 +68,13 @@ public enum ServerPlatform {
                 ServerCapability.CONSOLE_ACCESS,
                 ServerCapability.PERFORMANCE_MONITORING
         );
-        if (defaultEcosystemType == ServerEcosystemType.MODS || defaultEcosystemType == ServerEcosystemType.PLUGINS) {
+        if (supportsExtensions()) {
             capabilities.add(ServerCapability.EXTENSIONS);
         }
-        if (defaultEcosystemType == ServerEcosystemType.MODS) {
+        if (isModPlatform()) {
             capabilities.add(ServerCapability.MOD_EXTENSIONS);
         }
-        if (defaultEcosystemType == ServerEcosystemType.PLUGINS) {
+        if (isPluginPlatform()) {
             capabilities.add(ServerCapability.PLUGIN_EXTENSIONS);
         }
         return capabilities;
@@ -71,9 +91,9 @@ public enum ServerPlatform {
             case "NEOFORGE" -> NEOFORGE;
             case "FABRIC" -> FABRIC;
             case "QUILT" -> QUILT;
-            case "PAPER" -> PAPER;
+            case "PAPER", "PAPERMC" -> PAPER;
             case "SPIGOT" -> SPIGOT;
-            case "BUKKIT" -> BUKKIT;
+            case "BUKKIT", "CRAFTBUKKIT" -> BUKKIT;
             case "PURPUR" -> PURPUR;
             case "PUFFERFISH" -> PUFFERFISH;
             default -> UNKNOWN;

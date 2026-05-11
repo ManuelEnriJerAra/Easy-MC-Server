@@ -17,6 +17,7 @@ import controlador.platform.ForgeServerPlatformAdapter;
 import controlador.platform.ServerCreationOption;
 import controlador.platform.ServerInstallationRequest;
 import controlador.platform.ServerPlatformAdapter;
+import controlador.platform.ServerPlatformAdapters;
 import controlador.platform.ServerPlatformProfile;
 import controlador.platform.ServerValidationResult;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.Comparator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -653,7 +655,7 @@ class GestorServidoresTest {
     }
 
     @Test
-    void puedeConvertirseAPlataformaCompatible_soloDebeAceptarServidoresVanillaDetectables() throws Exception {
+    void puedeConvertirseAPlataformaCompatible_debeAceptarServidoresConPlataformaConvertible() throws Exception {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
 
         Path vanillaDir = tempDir.resolve("convertible-vanilla");
@@ -675,7 +677,21 @@ class GestorServidoresTest {
 
         assertThat(gestor.puedeConvertirseAPlataformaCompatible(vanilla)).isTrue();
         assertThat(vanilla.getPlatform()).isEqualTo(ServerPlatform.VANILLA);
-        assertThat(gestor.puedeConvertirseAPlataformaCompatible(paper)).isFalse();
+        assertThat(gestor.puedeConvertirseAPlataformaCompatible(paper)).isTrue();
+        assertThat(paper.getPlatform()).isEqualTo(ServerPlatform.PAPER);
+    }
+
+    @Test
+    void construirAvisoConversion_debeMarcarCambioDeEcosistemaComoRiesgoso() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+
+        GestorServidores.ConversionWarning warning = gestor.construirAvisoConversion(ServerPlatform.FORGE, ServerPlatform.PAPER);
+        GestorServidores.ConversionWarning sameEcosystemWarning = gestor.construirAvisoConversion(ServerPlatform.SPIGOT, ServerPlatform.PAPER);
+
+        assertThat(warning.crossEcosystem()).isTrue();
+        assertThat(warning.message()).contains("ecosistemas distintos").contains("no se migraran");
+        assertThat(sameEcosystemWarning.crossEcosystem()).isFalse();
+        assertThat(sameEcosystemWarning.message()).contains("plataforma de plugins");
     }
 
     @Test
@@ -701,6 +717,11 @@ class GestorServidoresTest {
             @Override
             public ServerPlatform getPlatform() {
                 return ServerPlatform.FORGE;
+            }
+
+            @Override
+            public boolean supportsAutomatedCreation() {
+                return true;
             }
 
             @Override
@@ -766,6 +787,265 @@ class GestorServidoresTest {
     }
 
     @Test
+    void convertirServidorExistente_deModsAPluginsDebePreservarModsYReiniciarCache() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path serverDir = tempDir.resolve("forge-to-paper");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "forge-runtime.jar",
+                "{\"id\":\"1.20.1\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(serverDir.resolve("libraries"));
+        Files.createDirectories(serverDir.resolve("mods"));
+        TestWorldFixtures.createJar(
+                serverDir.resolve("mods").resolve("example-mod.jar"),
+                Map.of("mods.toml", "modLoader=\"javafml\"\nmodId=\"example\"")
+        );
+
+        ServerExtension installedMod = new ServerExtension();
+        installedMod.setDisplayName("Example Mod");
+        installedMod.setFileName("example-mod.jar");
+        installedMod.setExtensionType(ServerExtensionType.MOD);
+        installedMod.setPlatform(ServerPlatform.FORGE);
+        installedMod.setInstallState(ExtensionInstallState.INSTALLED);
+        modelo.extensions.ExtensionLocalMetadata installedModMetadata = new modelo.extensions.ExtensionLocalMetadata();
+        installedModMetadata.setRelativePath("mods/example-mod.jar");
+        installedModMetadata.setFileName("example-mod.jar");
+        installedMod.setLocalMetadata(installedModMetadata);
+
+        Server server = new Server();
+        server.setServerDir(serverDir.toString());
+        server.setDisplayName("Forge Server");
+        server.setVersion("1.20.1");
+        server.setPlatform(ServerPlatform.FORGE);
+        server.setExtensions(List.of(installedMod));
+        gestor.guardarServidor(server);
+
+        ServerPlatformAdapter paperInstaller = new ServerPlatformAdapter() {
+            @Override
+            public ServerPlatform getPlatform() {
+                return ServerPlatform.PAPER;
+            }
+
+            @Override
+            public boolean supportsAutomatedCreation() {
+                return true;
+            }
+
+            @Override
+            public ServerPlatformProfile detect(Path serverDir) {
+                return null;
+            }
+
+            @Override
+            public ServerValidationResult validate(Path serverDir) {
+                return ServerValidationResult.ok();
+            }
+
+            @Override
+            public void install(Server transientServer, ServerInstallationRequest request) throws java.io.IOException {
+                deleteDirectoryIfExists(request.targetDirectory().resolve("mods"));
+                TestWorldFixtures.createValidServerJar(
+                        request.targetDirectory(),
+                        "paper-runtime.jar",
+                        "{\"id\":\"1.20.1\"}",
+                        "io/papermc/paper/PaperBootstrap.class",
+                        "org/bukkit/craftbukkit/Main.class"
+                );
+                Files.createDirectories(request.targetDirectory().resolve("plugins"));
+            }
+
+            @Override
+            public ProcessBuilder buildStartProcess(Server server, Path executableJar) {
+                return new ProcessBuilder("java", "-jar", executableJar.toString());
+            }
+
+            @Override
+            public Path resolveExecutableJar(Path serverDir) {
+                return serverDir.resolve("paper-runtime.jar");
+            }
+
+            @Override
+            public List<Path> getExtensionDirectories(Path serverDir) {
+                return List.of(serverDir.resolve("plugins"));
+            }
+        };
+
+        Server converted = gestor.convertirServidorExistente(
+                server,
+                paperInstaller,
+                new ServerCreationOption(ServerPlatform.PAPER, "1.20.1", "42", "Paper 1.20.1", "ignored"),
+                (url, destination) -> {}
+        );
+
+        assertThat(converted).isNotNull();
+        assertThat(converted.getPlatform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(converted.getEcosystemType()).isEqualTo(ServerEcosystemType.PLUGINS);
+        assertThat(converted.getCapabilities()).contains(ServerCapability.PLUGIN_EXTENSIONS);
+        assertThat(Files.exists(serverDir.resolve("plugins"))).isTrue();
+        assertThat(Files.exists(serverDir.resolve("mods").resolve("example-mod.jar"))).isTrue();
+        assertThat(converted.getExtensions())
+                .anySatisfy(extension -> {
+                    assertThat(extension.getExtensionType()).isEqualTo(ServerExtensionType.MOD);
+                    assertThat(extension.getLocalMetadata().getRelativePath()).isEqualTo("mods/example-mod.jar");
+                    assertThat(gestor.evaluarEstadoExtensionInstalada(converted, extension).severity())
+                            .isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
+                });
+        assertThat(Files.readString(serverDir.resolve("easy-mc-extensions.json"))).contains("example-mod.jar");
+
+        try (var backups = Files.list(tempDir)) {
+            assertThat(backups.map(path -> path.getFileName().toString())
+                    .filter(name -> name.contains("backup_before_paper"))
+                    .toList()).isNotEmpty();
+        }
+    }
+
+    @Test
+    void convertirServidorExistente_dePluginsAModsDebePreservarPluginsYReiniciarCache() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path serverDir = tempDir.resolve("paper-to-fabric");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "paper-runtime.jar",
+                "{\"id\":\"1.20.1\"}",
+                "io/papermc/paper/PaperBootstrap.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Files.createDirectories(serverDir.resolve("plugins"));
+        TestWorldFixtures.createJar(
+                serverDir.resolve("plugins").resolve("welcome-plugin.jar"),
+                Map.of("plugin.yml", """
+                        name: WelcomePlugin
+                        main: test.WelcomePlugin
+                        version: 1.0.0
+                        api-version: '1.20'
+                        """)
+        );
+
+        ServerExtension installedPlugin = new ServerExtension();
+        installedPlugin.setDisplayName("Welcome Plugin");
+        installedPlugin.setFileName("welcome-plugin.jar");
+        installedPlugin.setExtensionType(ServerExtensionType.PLUGIN);
+        installedPlugin.setPlatform(ServerPlatform.PAPER);
+        installedPlugin.setInstallState(ExtensionInstallState.INSTALLED);
+        modelo.extensions.ExtensionLocalMetadata installedPluginMetadata = new modelo.extensions.ExtensionLocalMetadata();
+        installedPluginMetadata.setRelativePath("plugins/welcome-plugin.jar");
+        installedPluginMetadata.setFileName("welcome-plugin.jar");
+        installedPlugin.setLocalMetadata(installedPluginMetadata);
+
+        Server server = new Server();
+        server.setServerDir(serverDir.toString());
+        server.setDisplayName("Paper Server");
+        server.setVersion("1.20.1");
+        server.setPlatform(ServerPlatform.PAPER);
+        server.setExtensions(List.of(installedPlugin));
+        gestor.guardarServidor(server);
+
+        ServerPlatformAdapter fabricInstaller = new ServerPlatformAdapter() {
+            @Override
+            public ServerPlatform getPlatform() {
+                return ServerPlatform.FABRIC;
+            }
+
+            @Override
+            public boolean supportsAutomatedCreation() {
+                return true;
+            }
+
+            @Override
+            public ServerPlatformProfile detect(Path serverDir) {
+                return null;
+            }
+
+            @Override
+            public ServerValidationResult validate(Path serverDir) {
+                return ServerValidationResult.ok();
+            }
+
+            @Override
+            public void install(Server transientServer, ServerInstallationRequest request) throws java.io.IOException {
+                deleteDirectoryIfExists(request.targetDirectory().resolve("plugins"));
+                TestWorldFixtures.createValidServerJar(
+                        request.targetDirectory(),
+                        "fabric-runtime.jar",
+                        "{\"id\":\"1.20.1\"}",
+                        "net/fabricmc/loader/impl/launch/server/FabricServerLauncher.class"
+                );
+                Files.createDirectories(request.targetDirectory().resolve("mods"));
+            }
+
+            @Override
+            public ProcessBuilder buildStartProcess(Server server, Path executableJar) {
+                return new ProcessBuilder("java", "-jar", executableJar.toString());
+            }
+
+            @Override
+            public Path resolveExecutableJar(Path serverDir) {
+                return serverDir.resolve("fabric-runtime.jar");
+            }
+
+            @Override
+            public List<Path> getExtensionDirectories(Path serverDir) {
+                return List.of(serverDir.resolve("mods"));
+            }
+        };
+
+        Server converted = gestor.convertirServidorExistente(
+                server,
+                fabricInstaller,
+                new ServerCreationOption(ServerPlatform.FABRIC, "1.20.1", "0.15.11", "Fabric 1.20.1", "ignored"),
+                (url, destination) -> {}
+        );
+
+        assertThat(converted).isNotNull();
+        assertThat(converted.getPlatform()).isEqualTo(ServerPlatform.FABRIC);
+        assertThat(converted.getEcosystemType()).isEqualTo(ServerEcosystemType.MODS);
+        assertThat(converted.getCapabilities()).contains(ServerCapability.MOD_EXTENSIONS);
+        assertThat(Files.exists(serverDir.resolve("mods"))).isTrue();
+        assertThat(Files.exists(serverDir.resolve("plugins").resolve("welcome-plugin.jar"))).isTrue();
+        assertThat(converted.getExtensions())
+                .anySatisfy(extension -> {
+                    assertThat(extension.getExtensionType()).isEqualTo(ServerExtensionType.PLUGIN);
+                    assertThat(extension.getLocalMetadata().getRelativePath()).isEqualTo("plugins/welcome-plugin.jar");
+                    assertThat(gestor.evaluarEstadoExtensionInstalada(converted, extension).severity())
+                            .isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
+                });
+        assertThat(Files.readString(serverDir.resolve("easy-mc-extensions.json"))).contains("welcome-plugin.jar");
+
+        try (var backups = Files.list(tempDir)) {
+            assertThat(backups.map(path -> path.getFileName().toString())
+                    .filter(name -> name.contains("backup_before_fabric"))
+                    .toList()).isNotEmpty();
+        }
+    }
+
+    @Test
+    void convertirServidorExistente_debeRechazarAdaptadorNoAutomatizableSinBackup() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path serverDir = tempDir.resolve("vanilla-to-spigot");
+        TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"1.20.1\"}");
+        Server server = new Server();
+        server.setServerDir(serverDir.toString());
+        server.setVersion("1.20.1");
+        server.setPlatform(ServerPlatform.VANILLA);
+
+        Server converted = gestor.convertirServidorExistente(
+                server,
+                ServerPlatformAdapters.forPlatform(ServerPlatform.SPIGOT),
+                new ServerCreationOption(ServerPlatform.SPIGOT, "1.20.1", "latest", "Spigot 1.20.1", "ignored"),
+                (url, destination) -> {}
+        );
+
+        assertThat(converted).isNull();
+        try (var backups = Files.list(tempDir)) {
+            assertThat(backups.map(path -> path.getFileName().toString())
+                    .filter(name -> name.contains("backup_before_spigot"))
+                    .toList()).isEmpty();
+        }
+    }
+
+    @Test
     void establecerFavoritoYReordenarServidores_debenMantenerOrdenVisualEstable() {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
         Server alpha = new Server();
@@ -822,6 +1102,17 @@ class GestorServidoresTest {
 
         assertThat(deleted).isFalse();
         assertThat(gestor.getListaServidores()).extracting(Server::getId).contains(server.getId());
+    }
+
+    private static void deleteDirectoryIfExists(Path directory) throws java.io.IOException {
+        if (directory == null || !Files.exists(directory)) {
+            return;
+        }
+        try (var paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
     }
 
     private static final class FakeProcess extends Process {

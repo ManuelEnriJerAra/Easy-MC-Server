@@ -18,12 +18,14 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
     private static final String API_BASE_URL = "https://hangar.papermc.io/api/v1";
     private static final String SITE_BASE_URL = "https://hangar.papermc.io";
+    private static final String MODRINTH_API_BASE_URL = "https://api.modrinth.com/v2";
     private static final String PLATFORM_KEY = "PAPER";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -63,29 +65,52 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
     }
 
     @Override
+    public Set<ServerExtensionType> getSupportedExtensionTypes() {
+        return Set.of(ServerExtensionType.PLUGIN);
+    }
+
+    @Override
+    public Set<ServerPlatform> getSupportedPlatforms() {
+        return Set.of(ServerPlatform.PAPER, ServerPlatform.PURPUR, ServerPlatform.PUFFERFISH);
+    }
+
+    @Override
     public List<ExtensionCatalogEntry> search(ExtensionCatalogQuery query) throws IOException {
         ExtensionCatalogQuery normalized = normalizeQuery(query);
         if (!supportsQuery(normalized)) {
             return List.of();
         }
 
-        URI uri = URI.create(API_BASE_URL + "/projects?" + buildSearchQueryString(normalized));
-        JsonNode root = OBJECT_MAPPER.readTree(httpClient.get(uri, null));
-        JsonNode results = root == null ? null : root.path("result");
-        if (results == null || !results.isArray()) {
-            return List.of();
-        }
-
         List<ExtensionCatalogEntry> entries = new ArrayList<>();
-        for (JsonNode projectNode : results) {
-            ExtensionCatalogEntry entry = toSearchEntry(projectNode, normalized);
-            if (entry == null) {
-                continue;
+        int requestedLimit = Math.max(1, normalized.limit());
+        int offset = 0;
+        while (entries.size() < requestedLimit) {
+            int pageLimit = Math.min(25, requestedLimit - entries.size());
+            URI uri = URI.create(API_BASE_URL + "/projects?" + buildSearchQueryString(normalized, pageLimit, offset));
+            JsonNode root = OBJECT_MAPPER.readTree(httpClient.get(uri, null));
+            JsonNode results = root == null ? null : root.path("result");
+            if (results == null || !results.isArray() || results.isEmpty()) {
+                break;
             }
-            if (!matchesPlatform(normalized, entry) || !matchesMinecraftVersion(normalized, entry)) {
-                continue;
+            int pageMatches = 0;
+            for (JsonNode projectNode : results) {
+                ExtensionCatalogEntry entry = toSearchEntry(projectNode, normalized);
+                if (entry == null) {
+                    continue;
+                }
+                if (!matchesPlatform(normalized, entry) || !matchesMinecraftVersion(normalized, entry)) {
+                    continue;
+                }
+                entries.add(entry);
+                pageMatches++;
+                if (entries.size() >= requestedLimit) {
+                    break;
+                }
             }
-            entries.add(entry);
+            offset += results.size();
+            if (results.size() < pageLimit || pageMatches == 0 && offset >= requestedLimit * 3) {
+                break;
+            }
         }
         return entries.stream()
                 .limit(normalized.limit())
@@ -111,9 +136,14 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
 
         List<ExtensionCatalogVersion> versions = fetchVersions(projectNode, normalized);
         ExtensionCatalogEntry entry = toProjectEntry(projectNode, versions);
+        String detailedDescription = firstNonBlank(
+                readMainPageContent(text(projectNode, "id")),
+                text(projectNode, "mainPageContent"),
+                text(projectNode, "description")
+        );
         return Optional.of(new ExtensionCatalogDetails(
                 entry,
-                firstNonBlank(text(projectNode, "mainPageContent"), text(projectNode, "description")),
+                detailedDescription,
                 buildProjectUrl(projectNode),
                 findLink(projectNode, "issues"),
                 nestedText(projectNode, "settings", "license", "name"),
@@ -141,30 +171,52 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         }
 
         List<ExtensionCatalogVersion> versions = fetchVersions(projectNode, query);
+        boolean exactVersionRequested = versionId != null && !versionId.isBlank();
         ExtensionCatalogVersion target = versions.stream()
-                .filter(version -> versionId != null && !versionId.isBlank()
+                .filter(version -> exactVersionRequested
                         ? versionId.equalsIgnoreCase(version.versionId())
                         : true)
+                .sorted(defaultVersionSelectionComparator(exactVersionRequested))
                 .findFirst()
-                .orElse(versions.isEmpty() ? null : versions.getFirst());
+                .orElse(exactVersionRequested || versions.isEmpty() ? null : versions.getFirst());
         if (target == null) {
             return Optional.empty();
         }
+        if (target.downloadUrl() == null || target.downloadUrl().isBlank()) {
+            return Optional.empty();
+        }
 
+        String detailedDescription = firstNonBlank(
+                readMainPageContent(text(projectNode, "id")),
+                text(projectNode, "mainPageContent"),
+                text(projectNode, "description")
+        );
         return Optional.of(new ExtensionDownloadPlan(
                 getProviderId(),
                 projectId,
                 target.versionId(),
+                text(projectNode, "name"),
+                nestedText(projectNode, "namespace", "owner"),
+                detailedDescription,
                 target.versionNumber(),
                 text(projectNode, "avatarUrl"),
                 target.fileName(),
                 target.downloadUrl(),
+                buildProjectUrl(projectNode),
+                findLink(projectNode, "issues"),
+                buildProjectUrl(projectNode),
+                nestedText(projectNode, "settings", "license", "name"),
+                hangarDownloads(projectNode),
+                "unsupported",
+                "required",
+                extractCategories(projectNode),
                 getSourceType(),
                 ServerExtensionType.PLUGIN,
                 ServerPlatform.PAPER,
                 joinVersions(target.supportedMinecraftVersions()),
                 true,
-                "Descarga resuelta desde Hangar para un servidor compatible con Paper."
+                "Descarga resuelta desde Hangar para un servidor compatible con Paper.",
+                target.dependencies()
         ));
     }
 
@@ -226,6 +278,18 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         return OBJECT_MAPPER.readTree(httpClient.get(uri, null));
     }
 
+    private String readMainPageContent(String projectId) {
+        if (projectId == null || projectId.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(API_BASE_URL + "/pages/main/" + encodePath(projectId));
+            return httpClient.get(uri, Map.of("Accept", "text/plain"));
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
     private List<ExtensionCatalogVersion> fetchVersions(JsonNode projectNode,
                                                         ExtensionCatalogQuery query) throws IOException {
         Namespace namespace = namespace(projectNode);
@@ -252,7 +316,7 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
             }
         }
         return versions.stream()
-                .sorted(Comparator.comparingLong(ExtensionCatalogVersion::publishedAtEpochMillis).reversed())
+                .sorted(versionDisplayComparator())
                 .toList();
     }
 
@@ -286,7 +350,10 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
                 versions,
                 text(projectNode, "avatarUrl"),
                 buildProjectUrl(projectNode),
-                null
+                null,
+                hangarDownloads(projectNode),
+                "unsupported",
+                "required"
         );
     }
 
@@ -306,7 +373,10 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
                 latest == null ? extractSupportedMinecraftVersions(projectNode.path("supportedPlatforms")) : latest.supportedMinecraftVersions(),
                 text(projectNode, "avatarUrl"),
                 buildProjectUrl(projectNode),
-                latest == null ? null : latest.downloadUrl()
+                latest == null ? null : latest.downloadUrl(),
+                hangarDownloads(projectNode),
+                "unsupported",
+                "required"
         );
     }
 
@@ -325,10 +395,20 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         }
 
         String versionName = text(versionNode, "name");
+        String externalUrl = text(downloadNode, "externalUrl");
+        ExternalDownload externalDownload = resolveExternalDownload(externalUrl, versionName, query);
         String downloadUrl = firstNonBlank(
                 text(downloadNode, "downloadUrl"),
-                buildDownloadEndpoint(namespace, versionName)
+                externalDownload == null ? null : externalDownload.downloadUrl(),
+                externalUrl == null ? buildDownloadEndpoint(namespace, versionName) : null
         );
+        String fileName = firstNonBlank(
+                nestedText(downloadNode, "fileInfo", "name"),
+                externalDownload == null ? null : externalDownload.fileName()
+        );
+        if (downloadUrl == null || downloadUrl.isBlank()) {
+            return null;
+        }
         return new ExtensionCatalogVersion(
                 getProviderId(),
                 projectId,
@@ -338,13 +418,140 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
                 Set.of(ServerPlatform.PAPER),
                 supportedMinecraftVersions,
                 text(versionNode, "description"),
-                nestedText(downloadNode, "fileInfo", "name"),
+                fileName,
                 downloadUrl,
-                parseInstant(text(versionNode, "createdAt"))
+                parseInstant(text(versionNode, "createdAt")),
+                isStableRelease(versionName),
+                extractDependencies(versionNode)
         );
     }
 
+    private Comparator<ExtensionCatalogVersion> versionDisplayComparator() {
+        return Comparator.comparingLong(ExtensionCatalogVersion::publishedAtEpochMillis).reversed();
+    }
+
+    private Comparator<ExtensionCatalogVersion> defaultVersionSelectionComparator(boolean exactVersionRequested) {
+        Comparator<ExtensionCatalogVersion> newestFirst = versionDisplayComparator();
+        if (exactVersionRequested) {
+            return newestFirst;
+        }
+        return Comparator.comparing(ExtensionCatalogVersion::stableRelease).reversed()
+                .thenComparing(newestFirst);
+    }
+
+    private boolean isStableRelease(String value) {
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        return !(normalized.contains("snapshot")
+                || normalized.contains("alpha")
+                || normalized.contains("beta")
+                || normalized.contains("rc")
+                || normalized.contains("pre"));
+    }
+
+    private ExternalDownload resolveExternalDownload(String externalUrl,
+                                                     String versionName,
+                                                     ExtensionCatalogQuery query) {
+        String modrinthProject = modrinthProjectId(externalUrl);
+        if (modrinthProject == null) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(MODRINTH_API_BASE_URL + "/project/" + encodePath(modrinthProject) + "/version?"
+                    + buildModrinthVersionsQueryString(query));
+            JsonNode root = OBJECT_MAPPER.readTree(httpClient.get(uri, null));
+            if (root == null || !root.isArray()) {
+                return null;
+            }
+            ExternalDownload fallback = null;
+            for (JsonNode versionNode : root) {
+                ExternalDownload candidate = toModrinthExternalDownload(versionNode);
+                if (candidate == null) {
+                    continue;
+                }
+                if (fallback == null) {
+                    fallback = candidate;
+                }
+                String modrinthVersionNumber = text(versionNode, "version_number");
+                String modrinthVersionName = text(versionNode, "name");
+                if (versionName != null
+                        && (versionName.equalsIgnoreCase(firstNonBlank(modrinthVersionNumber, ""))
+                        || versionName.equalsIgnoreCase(firstNonBlank(modrinthVersionName, "")))) {
+                    return candidate;
+                }
+            }
+            return fallback;
+        } catch (IOException | RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private String buildModrinthVersionsQueryString(ExtensionCatalogQuery query) {
+        List<String> params = new ArrayList<>();
+        params.add("loaders=" + encode("[\"paper\"]"));
+        if (query != null && query.minecraftVersion() != null && !query.minecraftVersion().isBlank()) {
+            params.add("game_versions=" + encode("[\"" + query.minecraftVersion().trim() + "\"]"));
+        }
+        params.add("include_changelog=false");
+        return String.join("&", params);
+    }
+
+    private ExternalDownload toModrinthExternalDownload(JsonNode versionNode) {
+        JsonNode files = versionNode == null ? null : versionNode.path("files");
+        if (files == null || !files.isArray() || files.isEmpty()) {
+            return null;
+        }
+        JsonNode selected = null;
+        for (JsonNode fileNode : files) {
+            if (fileNode.path("primary").asBoolean(false)) {
+                selected = fileNode;
+                break;
+            }
+        }
+        if (selected == null) {
+            selected = files.get(0);
+        }
+        String downloadUrl = text(selected, "url");
+        if (downloadUrl == null || downloadUrl.isBlank()) {
+            return null;
+        }
+        return new ExternalDownload(text(selected, "filename"), downloadUrl);
+    }
+
+    private String modrinthProjectId(String externalUrl) {
+        if (externalUrl == null || externalUrl.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(externalUrl.trim());
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            if (!host.equals("modrinth.com") && !host.endsWith(".modrinth.com")) {
+                return null;
+            }
+            String path = uri.getPath();
+            if (path == null || path.isBlank()) {
+                return null;
+            }
+            String[] parts = path.split("/");
+            for (int i = 0; i < parts.length - 1; i++) {
+                if ("plugin".equalsIgnoreCase(parts[i]) || "mod".equalsIgnoreCase(parts[i])) {
+                    String slug = parts[i + 1];
+                    return slug == null || slug.isBlank() ? null : slug;
+                }
+            }
+            return null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
     private String buildSearchQueryString(ExtensionCatalogQuery query) {
+        return buildSearchQueryString(query, query.limit(), 0);
+    }
+
+    private String buildSearchQueryString(ExtensionCatalogQuery query, int limit, int offset) {
         List<String> params = new ArrayList<>();
         if (query.queryText() != null && !query.queryText().isBlank()) {
             params.add("query=" + encode(query.queryText()));
@@ -353,10 +560,26 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         if (query.minecraftVersion() != null && !query.minecraftVersion().isBlank()) {
             params.add("version=" + encode(query.minecraftVersion().trim()));
         }
-        params.add("limit=" + Math.max(1, Math.min(query.limit(), 25)));
-        params.add("offset=0");
-        params.add("sort=stars");
+        params.add("limit=" + Math.max(1, Math.min(limit, 100)));
+        params.add("offset=" + Math.max(0, offset));
+        params.add("sort=" + encode(resolveProjectSort(query)));
         return String.join("&", params);
+    }
+
+    private String resolveProjectSort(ExtensionCatalogQuery query) {
+        String sort = query == null ? null : query.sortOrder();
+        if (sort == null || sort.isBlank()) {
+            return "-downloads";
+        }
+        return switch (sort.trim().toLowerCase(Locale.ROOT)) {
+            case "downloads" -> "-downloads";
+            case "updated", "actualizados" -> "-updated";
+            case "newest", "date_created" -> "-newest";
+            case "relevance", "relevancia" -> query != null && query.queryText() != null && !query.queryText().isBlank()
+                    ? "-stars"
+                    : "-downloads";
+            default -> "-downloads";
+        };
     }
 
     private String buildVersionsQueryString(ExtensionCatalogQuery query) {
@@ -389,7 +612,11 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
                 + PLATFORM_KEY + "/download";
     }
 
-    private boolean supportsQuery(ExtensionCatalogQuery query) {
+    @Override
+    public boolean supportsQuery(ExtensionCatalogQuery query) {
+        if (!supportsSearch()) {
+            return false;
+        }
         if (query == null) {
             return true;
         }
@@ -401,6 +628,108 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         return query.platform() == null
                 || query.platform() == ServerPlatform.UNKNOWN
                 || canonicalizePlatform(query.platform()) == ServerPlatform.PAPER;
+    }
+
+    private List<ExtensionDependency> extractDependencies(JsonNode versionNode) {
+        if (versionNode == null || versionNode.isMissingNode() || versionNode.isNull()) {
+            return List.of();
+        }
+        List<ExtensionDependency> dependencies = new ArrayList<>();
+        addDependencyArray(dependencies, versionNode.path("dependencies"), "required", true);
+        addDependencyArray(dependencies, versionNode.path("pluginDependencies"), "required", true);
+        addDependencyObject(dependencies, versionNode.path("dependencies"));
+        addDependencyObject(dependencies, versionNode.path("pluginDependencies"));
+        return dependencies;
+    }
+
+    private void addDependencyArray(List<ExtensionDependency> target,
+                                    JsonNode dependenciesNode,
+                                    String fallbackType,
+                                    boolean fallbackRequired) {
+        if (target == null || dependenciesNode == null || !dependenciesNode.isArray()) {
+            return;
+        }
+        for (JsonNode dependencyNode : dependenciesNode) {
+            ExtensionDependency dependency = toDependency(dependencyNode, null, fallbackType, fallbackRequired);
+            if (dependency != null) {
+                target.add(dependency);
+            }
+        }
+    }
+
+    private void addDependencyObject(List<ExtensionDependency> target, JsonNode dependenciesNode) {
+        if (target == null || dependenciesNode == null || !dependenciesNode.isObject()) {
+            return;
+        }
+        for (var entry : dependenciesNode.properties()) {
+            String dependencyType = entry.getKey();
+            JsonNode value = entry.getValue();
+            if (value != null && value.isArray()) {
+                addDependencyArray(target, value, dependencyType, isRequiredDependencyType(dependencyType));
+            } else {
+                ExtensionDependency dependency = toDependency(value, entry.getKey(), dependencyType, isRequiredDependencyType(dependencyType));
+                if (dependency != null) {
+                    target.add(dependency);
+                }
+            }
+        }
+    }
+
+    private ExtensionDependency toDependency(JsonNode dependencyNode,
+                                             String fallbackName,
+                                             String fallbackType,
+                                             boolean fallbackRequired) {
+        if (dependencyNode == null || dependencyNode.isMissingNode() || dependencyNode.isNull()) {
+            return null;
+        }
+        String projectId;
+        String versionId = null;
+        String displayName;
+        String dependencyType = fallbackType;
+        boolean required = fallbackRequired;
+        if (dependencyNode.isTextual()) {
+            projectId = dependencyNode.asText(null);
+            displayName = projectId;
+        } else {
+            projectId = firstNonBlank(
+                    text(dependencyNode, "projectId"),
+                    text(dependencyNode, "project_id"),
+                    text(dependencyNode, "slug"),
+                    text(dependencyNode, "name"),
+                    fallbackName
+            );
+            versionId = firstNonBlank(text(dependencyNode, "versionId"), text(dependencyNode, "version_id"));
+            displayName = firstNonBlank(text(dependencyNode, "displayName"), text(dependencyNode, "name"), projectId);
+            dependencyType = firstNonBlank(text(dependencyNode, "dependencyType"), text(dependencyNode, "type"), fallbackType);
+            JsonNode requiredNode = dependencyNode.path("required");
+            if (!requiredNode.isMissingNode() && !requiredNode.isNull()) {
+                required = requiredNode.asBoolean(required);
+            } else {
+                required = isRequiredDependencyType(dependencyType);
+            }
+        }
+        if (projectId == null || projectId.isBlank()) {
+            return null;
+        }
+        return new ExtensionDependency(
+                getProviderId(),
+                projectId,
+                versionId,
+                displayName,
+                dependencyType,
+                required
+        );
+    }
+
+    private boolean isRequiredDependencyType(String dependencyType) {
+        if (dependencyType == null || dependencyType.isBlank()) {
+            return true;
+        }
+        String normalized = dependencyType.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("required")
+                || normalized.equals("depends")
+                || normalized.equals("dependency")
+                || normalized.equals("server");
     }
 
     private boolean matchesPlatform(ExtensionCatalogQuery query, ExtensionCatalogEntry entry) {
@@ -564,6 +893,40 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         return text == null || text.isBlank() ? null : text.trim();
     }
 
+    private long hangarDownloads(JsonNode projectNode) {
+        if (projectNode == null) {
+            return 0L;
+        }
+        return Math.max(0L, firstNumericField(projectNode, Set.of("downloads", "totalDownloads")));
+    }
+
+    private long firstNumericField(JsonNode node, Set<String> fieldNames) {
+        if (node == null || node.isMissingNode() || node.isNull() || fieldNames == null || fieldNames.isEmpty()) {
+            return 0L;
+        }
+        if (node.isObject()) {
+            for (String fieldName : fieldNames) {
+                JsonNode value = node.path(fieldName);
+                if (value == null || value.isMissingNode() || value.isNull()) {
+                    continue;
+                }
+                if (value.isNumber() || value.isTextual()) {
+                    long parsed = value.asLong(0L);
+                    if (parsed > 0L) {
+                        return parsed;
+                    }
+                }
+            }
+            for (JsonNode child : node) {
+                long parsed = firstNumericField(child, fieldNames);
+                if (parsed > 0L) {
+                    return parsed;
+                }
+            }
+        }
+        return 0L;
+    }
+
     private String firstNonBlank(String... values) {
         if (values == null) {
             return null;
@@ -626,5 +989,8 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
     }
 
     private record Namespace(String owner, String slug) {
+    }
+
+    private record ExternalDownload(String fileName, String downloadUrl) {
     }
 }

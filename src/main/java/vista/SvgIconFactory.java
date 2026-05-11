@@ -5,9 +5,13 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 public final class SvgIconFactory {
+    private static final Map<String, FlatSVGIcon> ICON_CACHE = new ConcurrentHashMap<>();
+
     private SvgIconFactory() {
     }
 
@@ -24,17 +28,29 @@ public final class SvgIconFactory {
     }
 
     public static FlatSVGIcon create(String resourcePath, int width, int height, Supplier<Color> colorSupplier) {
-        FlatSVGIcon icon = new FlatSVGIcon(resourcePath, width, height);
         Supplier<Color> resolvedSupplier = colorSupplier != null ? colorSupplier : AppTheme::getForeground;
-        icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> {
-            Color themedColor = resolvedSupplier.get();
-            return themedColor != null ? themedColor : color;
-        }));
-        return icon;
+        Color resolvedColor = resolvedSupplier.get();
+        int colorRgb = resolvedColor == null ? 0 : resolvedColor.getRGB();
+        String key = resourcePath + "|" + width + "|" + height + "|" + colorRgb;
+        return ICON_CACHE.computeIfAbsent(key, ignored -> {
+            FlatSVGIcon icon = new FlatSVGIcon(resourcePath, width, height);
+            icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> resolvedColor != null ? resolvedColor : color));
+            return icon;
+        });
     }
 
     public static RotatingIcon createRotating(String resourcePath, int width, int height, Supplier<Color> colorSupplier) {
         return new RotatingIcon(create(resourcePath, width, height, colorSupplier));
+    }
+
+    public static RotatingIcon createSpinning(String resourcePath, int width, int height, Supplier<Color> colorSupplier) {
+        return createSpinning(resourcePath, width, height, colorSupplier, false);
+    }
+
+    public static RotatingIcon createSpinning(String resourcePath, int width, int height, Supplier<Color> colorSupplier, boolean clockwise) {
+        RotatingIcon icon = createRotating(resourcePath, width, height, colorSupplier);
+        icon.setClockwise(clockwise);
+        return icon;
     }
 
     public static void apply(AbstractButton button, String resourcePath, int width, int height, Supplier<Color> colorSupplier) {
@@ -78,6 +94,7 @@ public final class SvgIconFactory {
     public static final class RotatingIcon implements Icon {
         private final Icon delegate;
         private double angleRadians;
+        private boolean clockwise;
 
         private RotatingIcon(Icon delegate) {
             this.delegate = delegate;
@@ -85,6 +102,10 @@ public final class SvgIconFactory {
 
         public void setAngleRadians(double angleRadians) {
             this.angleRadians = angleRadians;
+        }
+
+        public void setClockwise(boolean clockwise) {
+            this.clockwise = clockwise;
         }
 
         @Override
@@ -98,7 +119,7 @@ public final class SvgIconFactory {
             double centerX = x + (width / 2.0d);
             double centerY = y + (height / 2.0d);
             AffineTransform oldTransform = g2.getTransform();
-            g2.rotate(angleRadians, centerX, centerY);
+            g2.rotate(clockwise ? angleRadians : -angleRadians, centerX, centerY);
             delegate.paintIcon(c, g2, x, y);
             g2.setTransform(oldTransform);
             g2.dispose();

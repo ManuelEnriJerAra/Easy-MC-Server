@@ -13,6 +13,10 @@ public class ExtensionSource {
     private String projectId;
     private String versionId;
     private String url;
+    private String projectUrl;
+    private String issuesUrl;
+    private String websiteUrl;
+    private String licenseName;
     private String author;
     private String iconUrl;
 

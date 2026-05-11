@@ -16,8 +16,11 @@ import controlador.extensions.ExtensionCatalogEntry;
 import controlador.extensions.ExtensionCatalogProviderDescriptor;
 import controlador.extensions.ExtensionCatalogQuery;
 import controlador.extensions.ExtensionCatalogService;
+import controlador.extensions.CurseForgeModpackService;
+import controlador.extensions.ExtensionArtifactDownloader;
 import controlador.extensions.ExtensionDownloadPlan;
 import controlador.extensions.ExtensionInstallResolution;
+import controlador.extensions.InstalledExtensionStatus;
 import controlador.extensions.ExtensionUpdateCandidate;
 import controlador.extensions.ServerExtensionsService;
 import modelo.Server;
@@ -33,6 +36,8 @@ import com.formdev.flatlaf.extras.components.FlatProgressBar;
 import lombok.Getter;
 import lombok.Setter;
 import modelo.extensions.ServerExtension;
+import modelo.extensions.ServerEcosystemType;
+import modelo.extensions.ServerPlatform;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -66,6 +71,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static controlador.Utilidades.copiarArchivo;
@@ -92,7 +98,9 @@ public class GestorServidores {
             "permissions.json",
             "usercache.json"
     );
+    private static final Set<String> DIRECTORIOS_EXTENSION_PRESERVABLES = Set.of("mods", "plugins", "config");
     private static final DateTimeFormatter BACKUP_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final Pattern MINECRAFT_VERSION_PATTERN = Pattern.compile("1\\.(?:1[0-9]|2[0-9])(?:\\.\\d+)?");
 
     // ===== ATRIBUTOS =====
     private static final MojangAPI MOJANG_API = new MojangAPI();
@@ -147,12 +155,8 @@ public class GestorServidores {
     private final File jsonFile;
     private final ServerExtensionsService serverExtensionsService = new ServerExtensionsService();
     private final ExtensionCatalogService extensionCatalogService = new ExtensionCatalogService();
-    private final FileDownloader extensionDownloader = (url, destination) -> {
-        java.net.URI uri = java.net.URI.create(url);
-        try (InputStream in = uri.toURL().openStream()) {
-            Files.copy(in, destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        }
-    };
+    private final CurseForgeModpackService curseForgeModpackService = new CurseForgeModpackService();
+    private final FileDownloader extensionDownloader = new ExtensionArtifactDownloader();
 
     private String avisoServidoresNoCargados;
 
@@ -513,7 +517,12 @@ public class GestorServidores {
             aplicarPerfilPlataforma(server, profile);
         }
 
-        return profile != null && profile.platform() == modelo.extensions.ServerPlatform.VANILLA;
+        ServerPlatform sourcePlatform = profile == null ? server.getPlatform() : profile.platform();
+        if (sourcePlatform == null || sourcePlatform == ServerPlatform.UNKNOWN) {
+            return false;
+        }
+        return plataformasObjetivoConversion(sourcePlatform).stream()
+                .anyMatch(ServerPlatformAdapter::supportsAutomatedCreation);
     }
 
     public boolean admiteGestionDeExtensiones(Server server) {
@@ -536,6 +545,7 @@ public class GestorServidores {
             return List.of();
         }
         sincronizarExtensionesServidor(server);
+        serverExtensionsService.persistInstalledExtensionCache(server);
         guardarServidor(server);
         return server.getExtensions() == null ? List.of() : List.copyOf(server.getExtensions());
     }
@@ -545,6 +555,7 @@ public class GestorServidores {
             throw new IOException("No se ha indicado el servidor.");
         }
         ServerExtension installed = serverExtensionsService.installManualJar(server, extensionJar);
+        serverExtensionsService.persistInstalledExtensionCache(server);
         guardarServidor(server);
         return installed;
     }
@@ -557,11 +568,28 @@ public class GestorServidores {
         return serverExtensionsService.validateCompatibility(server, extension);
     }
 
+    public InstalledExtensionStatus evaluarEstadoExtensionInstalada(Server server, ServerExtension extension) {
+        return serverExtensionsService.assessInstalledExtension(server, extension);
+    }
+
+    public void guardarMetadatosExtensionInstalada(Server server, ServerExtension extension) {
+        if (server == null || extension == null) {
+            return;
+        }
+        try {
+            serverExtensionsService.persistInstalledExtensionCache(server);
+            guardarServidor(server);
+        } catch (IOException ex) {
+            System.err.println("Error al guardar metadatos de extension: " + ex.getMessage());
+        }
+    }
+
     public boolean eliminarExtensionLocal(Server server, ServerExtension extension) throws IOException {
         if (server == null || extension == null) {
             return false;
         }
         boolean removed = serverExtensionsService.removeExtension(server, extension);
+        serverExtensionsService.persistInstalledExtensionCache(server);
         guardarServidor(server);
         return removed;
     }
@@ -604,6 +632,7 @@ public class GestorServidores {
     public List<ExtensionUpdateCandidate> buscarActualizacionesExtensiones(Server server) throws IOException {
         List<ExtensionUpdateCandidate> updates = extensionCatalogService.findUpdates(server);
         if (serverExtensionsService.applyUpdateMetadata(server, updates)) {
+            serverExtensionsService.persistInstalledExtensionCache(server);
             guardarServidor(server);
         }
         return updates;
@@ -621,6 +650,60 @@ public class GestorServidores {
             throw new IOException("No se ha podido resolver una descarga compatible para la extension externa.");
         }
         ServerExtension installed = serverExtensionsService.installCatalogDownload(server, downloadPlan, extensionDownloader);
+        serverExtensionsService.persistInstalledExtensionCache(server);
+        guardarServidor(server);
+        return installed;
+    }
+
+    public ServerExtension instalarExtensionExterna(Server server,
+                                                    ExtensionDownloadPlan downloadPlan) throws IOException {
+        if (server == null) {
+            throw new IOException("No se ha indicado el servidor.");
+        }
+        if (downloadPlan == null || !downloadPlan.ready()) {
+            throw new IOException("No se ha podido resolver una descarga compatible para la extension externa.");
+        }
+        ServerExtension installed = serverExtensionsService.installCatalogDownload(server, downloadPlan, extensionDownloader);
+        serverExtensionsService.persistInstalledExtensionCache(server);
+        guardarServidor(server);
+        return installed;
+    }
+
+    public CurseForgeModpackService.ExportResult exportarModpackCurseForge(Server server,
+                                                                           Path targetZip,
+                                                                           CurseForgeModpackService.ExportMode mode) throws IOException {
+        return curseForgeModpackService.exportServerPack(server, targetZip, mode);
+    }
+
+    public CurseForgeModpackService.ImportManifest leerManifestModpackCurseForge(Path sourceZip) throws IOException {
+        return curseForgeModpackService.readManifest(sourceZip);
+    }
+
+    public int importarModpackCurseForge(Server server,
+                                         Path sourceZip,
+                                         List<String> warnings) throws IOException {
+        if (server == null) {
+            throw new IOException("No se ha indicado el servidor.");
+        }
+        CurseForgeModpackService.ImportManifest manifest = curseForgeModpackService.readManifest(sourceZip);
+        int installed = 0;
+        if (warnings != null) {
+            String serverVersion = server.getVersion() == null ? null : server.getVersion().trim();
+            if (manifest.minecraftVersion() != null
+                    && serverVersion != null
+                    && !manifest.minecraftVersion().equalsIgnoreCase(serverVersion)) {
+                warnings.add("El manifest usa Minecraft " + manifest.minecraftVersion() + " y el servidor actual usa " + serverVersion + ".");
+            }
+        }
+        for (CurseForgeModpackService.ManifestFileRef fileRef : manifest.files()) {
+            if (fileRef == null || !fileRef.required()) {
+                continue;
+            }
+            ExtensionDownloadPlan plan = curseForgeModpackService.resolveDownloadPlan(fileRef.projectID(), fileRef.fileID(), server);
+            serverExtensionsService.installCatalogDownload(server, plan, extensionDownloader);
+            installed++;
+        }
+        serverExtensionsService.persistInstalledExtensionCache(server);
         guardarServidor(server);
         return installed;
     }
@@ -632,7 +715,8 @@ public class GestorServidores {
         server.setLoaderVersion(profile.loaderVersion());
         server.setEcosystemType(profile.ecosystemType());
         server.setCapabilities(profile.capabilities());
-        if (profile.minecraftVersion() != null && !profile.minecraftVersion().isBlank()) {
+        if (profile.minecraftVersion() != null
+                && MINECRAFT_VERSION_PATTERN.matcher(profile.minecraftVersion().trim()).matches()) {
             server.setVersion(profile.minecraftVersion());
         }
     }
@@ -864,61 +948,162 @@ public class GestorServidores {
             return null;
         }
 
-        ServerPlatformProfile sourceProfile = inspeccionarServidor(Path.of(server.getServerDir()));
-        if (sourceProfile == null || sourceProfile.platform() != modelo.extensions.ServerPlatform.VANILLA) {
+        ConversionSource source = resolverOrigenConversion(server);
+        if (source == null || source.platform() == null || source.platform() == ServerPlatform.UNKNOWN) {
             JOptionPane.showMessageDialog(
                     null,
-                    "En esta primera fase solo se admite la conversion de servidores Vanilla a Forge.",
+                    "No se ha podido detectar una plataforma de origen compatible para convertir este servidor.",
                     "Convertir servidor",
                     JOptionPane.WARNING_MESSAGE
             );
             return null;
         }
 
-        ServerPlatformAdapter forgeAdapter = ServerPlatformAdapters.forPlatform(modelo.extensions.ServerPlatform.FORGE);
-        List<ServerCreationOption> forgeOptions = cargarOpcionesConversionForge(server, forgeAdapter);
-        if (forgeOptions.isEmpty()) {
+        ServerPlatformAdapter targetAdapter = seleccionarAdaptadorConversion(source.platform());
+        if (targetAdapter == null) return null;
+        if (!targetAdapter.supportsAutomatedCreation()) {
             JOptionPane.showMessageDialog(
                     null,
-                    "No se ha encontrado una version de Forge compatible con Minecraft " + server.getVersion() + ".",
+                    targetAdapter.getCreationUnavailableReason(),
                     "Convertir servidor",
                     JOptionPane.WARNING_MESSAGE
             );
             return null;
         }
 
+        List<ServerCreationOption> conversionOptions = cargarOpcionesConversion(server, targetAdapter);
+        if (conversionOptions.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No se ha encontrado una version de " + targetAdapter.getCreationDisplayName()
+                            + " compatible con Minecraft " + textoODesconocido(server.getVersion()) + ".",
+                    "Convertir servidor",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return null;
+        }
         ServerCreationOption selectedOption = seleccionarOpcionConversion(
-                "Selecciona una version de Forge",
-                forgeOptions
+                "Selecciona una version de " + targetAdapter.getCreationDisplayName(),
+                conversionOptions
         );
         if (selectedOption == null) return null;
 
+        ConversionWarning warning = construirAvisoConversion(source, selectedOption.platform());
+        if (!confirmarConversion(warning, source, selectedOption)) {
+            return null;
+        }
+
+        Server converted = convertirServidorExistente(
+                server,
+                targetAdapter,
+                selectedOption,
+                (url, destination) -> MOJANG_API.descargar(url, destination, null)
+        );
+        if (converted != null && warning.crossEcosystem()) {
+            mostrarAvisoPostConversionEcosistema(server, source.ecosystemType(), selectedOption.platform().getDefaultEcosystemType());
+        }
+        return converted;
+    }
+
+    private ConversionSource resolverOrigenConversion(Server server) {
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            return null;
+        }
+        Path serverDir;
+        try {
+            serverDir = Path.of(server.getServerDir());
+        } catch (RuntimeException ex) {
+            return null;
+        }
+        ServerPlatformProfile sourceProfile = inspeccionarServidor(serverDir);
+        if (sourceProfile != null) {
+            aplicarPerfilPlataforma(server, sourceProfile);
+            return new ConversionSource(sourceProfile.platform(), sourceProfile.ecosystemType());
+        }
+        ServerPlatform platform = server.getPlatform() == null ? ServerPlatform.UNKNOWN : server.getPlatform();
+        ServerEcosystemType ecosystemType = server.getEcosystemType() == null ? platform.getDefaultEcosystemType() : server.getEcosystemType();
+        return platform == ServerPlatform.UNKNOWN ? null : new ConversionSource(platform, ecosystemType);
+    }
+
+    private ConversionWarning construirAvisoConversion(ConversionSource source, ServerPlatform targetPlatform) {
+        ServerEcosystemType sourceEcosystem = source == null ? ServerEcosystemType.UNKNOWN : source.ecosystemType();
+        ServerEcosystemType targetEcosystem = targetPlatform == null ? ServerEcosystemType.UNKNOWN : targetPlatform.getDefaultEcosystemType();
+        boolean crossEcosystem = sourceEcosystem != ServerEcosystemType.UNKNOWN
+                && targetEcosystem != ServerEcosystemType.UNKNOWN
+                && sourceEcosystem != targetEcosystem
+                && sourceEcosystem != ServerEcosystemType.NONE
+                && targetEcosystem != ServerEcosystemType.NONE;
+        String warningText;
+        if (crossEcosystem && sourceEcosystem == ServerEcosystemType.MODS && targetEcosystem == ServerEcosystemType.PLUGINS) {
+            warningText = "Mods y plugins son ecosistemas distintos. Los .jar de mods que ya existan se conservaran en la carpeta mods, pero no se migraran ni se trataran como plugins.";
+        } else if (crossEcosystem && sourceEcosystem == ServerEcosystemType.PLUGINS && targetEcosystem == ServerEcosystemType.MODS) {
+            warningText = "Plugins y mods son ecosistemas distintos. Los .jar de plugins que ya existan se conservaran en la carpeta plugins, pero no se migraran ni se trataran como mods.";
+        } else if (sourceEcosystem == ServerEcosystemType.MODS && targetEcosystem == ServerEcosystemType.MODS) {
+            warningText = "Vas a cambiar de cargador de mods. Los mods instalados se conservaran, pero pueden no ser compatibles con el nuevo loader.";
+        } else if (sourceEcosystem == ServerEcosystemType.PLUGINS && targetEcosystem == ServerEcosystemType.PLUGINS) {
+            warningText = "Vas a cambiar de plataforma de plugins. La mayoria de plugins Bukkit/Paper suelen ser compatibles, pero conviene revisar el resultado.";
+        } else {
+            warningText = "Easy-MC-Server instalara la plataforma seleccionada y creara la carpeta de extensiones correspondiente.";
+        }
+        return new ConversionWarning(warningText, crossEcosystem);
+    }
+
+    ConversionWarning construirAvisoConversion(ServerPlatform sourcePlatform, ServerPlatform targetPlatform) {
+        ServerPlatform resolvedSource = sourcePlatform == null ? ServerPlatform.UNKNOWN : sourcePlatform;
+        return construirAvisoConversion(
+                new ConversionSource(resolvedSource, resolvedSource.getDefaultEcosystemType()),
+                targetPlatform
+        );
+    }
+
+    private boolean confirmarConversion(ConversionWarning warning, ConversionSource source, ServerCreationOption option) {
+        String sourceName = source == null || source.platform() == null
+                ? "desconocida"
+                : source.platform().getLegacyTypeName();
+        String targetName = option == null || option.platform() == null
+                ? "desconocida"
+                : option.platform().getLegacyTypeName();
+        String warningText = warning == null ? "" : warning.message();
         int confirm = JOptionPane.showConfirmDialog(
                 null,
                 """
-                Se va a convertir el servidor seleccionado de Vanilla a Forge.
+                Se va a convertir el servidor seleccionado de %s a %s.
 
-                Riesgos:
-                - Algunos mods pueden requerir pasos manuales despues.
-                - La instalacion puede anadir o reemplazar archivos de arranque.
-                - Aunque se intentara preservar configuracion y mundos, conviene revisar el resultado.
+                %s
 
                 Easy-MC-Server creara un backup completo antes de continuar.
-                """,
+                Los mundos, server.properties, EULA, icono y carpetas de extensiones existentes se conservaran cuando sea posible.
+                """
+                        .formatted(sourceName, targetName, warningText),
                 "Convertir servidor",
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.WARNING_MESSAGE
         );
-        if (confirm != JOptionPane.OK_OPTION) {
-            return null;
-        }
+        return confirm == JOptionPane.OK_OPTION;
+    }
 
-        return convertirServidorExistente(
-                server,
-                forgeAdapter,
-                selectedOption,
-                (url, destination) -> MOJANG_API.descargar(url, destination, null)
+    private void mostrarAvisoPostConversionEcosistema(Server server,
+                                                      ServerEcosystemType sourceEcosystem,
+                                                      ServerEcosystemType targetEcosystem) {
+        if (GraphicsEnvironment.isHeadless() || server == null || server.getServerDir() == null) {
+            return;
+        }
+        String oldFolder = sourceEcosystem == ServerEcosystemType.MODS ? "mods" : "plugins";
+        String newFolder = targetEcosystem == ServerEcosystemType.MODS ? "mods" : "plugins";
+        JOptionPane.showMessageDialog(
+                null,
+                "La conversion cambio de ecosistema. Los archivos anteriores siguen en "
+                        + Path.of(server.getServerDir()).resolve(oldFolder)
+                        + ". Las nuevas extensiones deben instalarse en "
+                        + Path.of(server.getServerDir()).resolve(newFolder)
+                        + ". La cache local de extensiones se ha actualizado conservando los metadatos anteriores.",
+                "Conversion completada",
+                JOptionPane.INFORMATION_MESSAGE
         );
+    }
+
+    private String textoODesconocido(String value) {
+        return value == null || value.isBlank() ? "desconocida" : value;
     }
 
     // esta función descarga de una url a un destino dándole un nombre y mostrando una barra de carga
@@ -1047,13 +1232,59 @@ public class GestorServidores {
         }
     }
 
-    private List<ServerCreationOption> cargarOpcionesConversionForge(Server server, ServerPlatformAdapter adapter) {
+    private List<ServerCreationOption> cargarOpcionesConversion(Server server, ServerPlatformAdapter adapter) {
         List<ServerCreationOption> options = cargarOpcionesCreacion(adapter);
         if (server == null || server.getVersion() == null || server.getVersion().isBlank()) {
             return options;
         }
         return options.stream()
                 .filter(option -> Objects.equals(option.minecraftVersion(), server.getVersion()))
+                .toList();
+    }
+
+    private ServerPlatformAdapter seleccionarAdaptadorConversion(ServerPlatform sourcePlatform) {
+        List<ServerPlatformAdapter> targetAdapters = plataformasObjetivoConversion(sourcePlatform);
+        if (targetAdapters.isEmpty()) {
+            return null;
+        }
+        JComboBox<ServerPlatformAdapter> platformBox = new JComboBox<>(targetAdapters.toArray(ServerPlatformAdapter[]::new));
+        platformBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
+            String text = value == null ? "" : value.getCreationDisplayName();
+            if (value != null && !value.supportsAutomatedCreation()) {
+                text += " - no automatizable";
+            }
+            JLabel label = new JLabel(text);
+            label.setOpaque(true);
+            if (isSelected) {
+                label.setBackground(list.getSelectionBackground());
+                label.setForeground(list.getSelectionForeground());
+            } else {
+                label.setBackground(list.getBackground());
+                label.setForeground(list.getForeground());
+            }
+            return label;
+        });
+
+        int option = JOptionPane.showConfirmDialog(
+                null,
+                platformBox,
+                "Selecciona una plataforma destino",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+        if (option != JOptionPane.OK_OPTION) {
+            return null;
+        }
+        return (ServerPlatformAdapter) platformBox.getSelectedItem();
+    }
+
+    private List<ServerPlatformAdapter> plataformasObjetivoConversion(ServerPlatform sourcePlatform) {
+        ServerPlatform resolvedSource = sourcePlatform == null ? ServerPlatform.UNKNOWN : sourcePlatform;
+        return ServerPlatformAdapters.all().stream()
+                .filter(adapter -> adapter.getPlatform() != ServerPlatform.VANILLA)
+                .filter(adapter -> adapter.getPlatform() != ServerPlatform.UNKNOWN)
+                .filter(adapter -> adapter.getPlatform() != resolvedSource)
+                .filter(adapter -> adapter.getPlatform().isModPlatform() || adapter.getPlatform().isPluginPlatform())
                 .toList();
     }
 
@@ -1378,11 +1609,18 @@ public class GestorServidores {
         if (server == null || targetAdapter == null || option == null) return null;
         if (server.getServerDir() == null || server.getServerDir().isBlank()) return null;
         if (server.getServerProcess() != null && server.getServerProcess().isAlive()) return null;
+        if (!targetAdapter.supportsAutomatedCreation()) return null;
+        if (option.platform() != targetAdapter.getPlatform()) return null;
 
         Path serverDir = Path.of(server.getServerDir());
         if (!Files.isDirectory(serverDir)) return null;
 
         try {
+            ConversionSource source = resolverOrigenConversion(server);
+            ServerEcosystemType sourceEcosystem = source == null ? ServerEcosystemType.UNKNOWN : source.ecosystemType();
+            ServerEcosystemType targetEcosystem = option.platform() == null
+                    ? ServerEcosystemType.UNKNOWN
+                    : option.platform().getDefaultEcosystemType();
             Path backupDir = crearBackupConversion(serverDir, option.platform());
             Properties preservedProperties = cargarPropertiesSilenciosamente(serverDir.resolve("server.properties"));
 
@@ -1404,20 +1642,24 @@ public class GestorServidores {
             );
 
             restaurarDatosTrasConversion(backupDir, serverDir, preservedProperties);
+            for (Path extensionDirectory : targetAdapter.getExtensionDirectories(serverDir)) {
+                if (extensionDirectory != null) {
+                    Files.createDirectories(extensionDirectory);
+                }
+            }
             GestorMundos.sincronizarMundosServidor(server);
 
             ServerPlatformProfile targetProfile = inspeccionarServidor(serverDir);
-            if (targetProfile != null) {
+            if (targetProfile != null && targetProfile.platform() == option.platform()) {
                 aplicarPerfilPlataforma(server, targetProfile);
             } else {
-                server.setPlatform(option.platform());
-                server.setVersion(option.minecraftVersion());
+                aplicarMetadatosPlataformaDestino(server, targetAdapter, option);
             }
             if (server.getLoaderVersion() == null || server.getLoaderVersion().isBlank()) {
                 server.setLoaderVersion(option.platformVersion());
             }
 
-            sincronizarExtensionesServidor(server);
+            revisarCacheExtensionesTrasConversion(server, sourceEcosystem, targetEcosystem);
             guardarServidor(server);
             return server;
         } catch (IOException e) {
@@ -1429,6 +1671,41 @@ public class GestorServidores {
             );
             return null;
         }
+    }
+
+    private void aplicarMetadatosPlataformaDestino(Server server,
+                                                   ServerPlatformAdapter targetAdapter,
+                                                   ServerCreationOption option) {
+        if (server == null || targetAdapter == null || option == null) {
+            return;
+        }
+        server.setPlatform(option.platform());
+        server.setLoader(targetAdapter.getLoader());
+        server.setEcosystemType(targetAdapter.getEcosystemType());
+        server.setCapabilities(targetAdapter.getCapabilities());
+        server.setVersion(option.minecraftVersion());
+        server.setLoaderVersion(option.platformVersion());
+    }
+
+    private void revisarCacheExtensionesTrasConversion(Server server,
+                                                       ServerEcosystemType sourceEcosystem,
+                                                       ServerEcosystemType targetEcosystem) throws IOException {
+        if (server == null) {
+            return;
+        }
+        sincronizarExtensionesServidor(server);
+        serverExtensionsService.persistInstalledExtensionCache(server);
+    }
+
+    private boolean cambiaEcosistemaExtensiones(ServerEcosystemType sourceEcosystem, ServerEcosystemType targetEcosystem) {
+        if (sourceEcosystem == null || targetEcosystem == null) {
+            return false;
+        }
+        return sourceEcosystem != targetEcosystem
+                && sourceEcosystem != ServerEcosystemType.NONE
+                && targetEcosystem != ServerEcosystemType.NONE
+                && sourceEcosystem != ServerEcosystemType.UNKNOWN
+                && targetEcosystem != ServerEcosystemType.UNKNOWN;
     }
 
     private Path crearBackupConversion(Path serverDir, modelo.extensions.ServerPlatform targetPlatform) throws IOException {
@@ -1479,6 +1756,7 @@ public class GestorServidores {
 
     private boolean debePreservarseDirectorioEnConversion(Path backupChild, String name) {
         if (name == null || name.isBlank()) return false;
+        if (DIRECTORIOS_EXTENSION_PRESERVABLES.contains(name)) return true;
         if (GestorMundos.DIRECTORIO_MUNDOS.equals(name)) return true;
         if (Files.isRegularFile(backupChild.resolve("level.dat"))) return true;
         return name.endsWith("_nether") || name.endsWith("_the_end");
@@ -2821,6 +3099,12 @@ public class GestorServidores {
                 JOptionPane.WARNING_MESSAGE
         );
         return option == JOptionPane.YES_OPTION;
+    }
+
+    private record ConversionSource(ServerPlatform platform, ServerEcosystemType ecosystemType) {
+    }
+
+    record ConversionWarning(String message, boolean crossEcosystem) {
     }
 
     private static final class ServerCreationWizardState {

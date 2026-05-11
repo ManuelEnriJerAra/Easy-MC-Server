@@ -1,6 +1,8 @@
 package controlador.platform;
 
 import controlador.MojangAPI;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import modelo.Server;
 import modelo.ServerConfig;
 import modelo.extensions.ServerCapability;
@@ -15,13 +17,50 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ServerPlatformAdaptersTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void registry_debeExponerTodasLasPlataformasYCrearSoloLasAutomatizables() {
+        assertThat(ServerPlatformAdapters.all())
+                .extracting(ServerPlatformAdapter::getPlatform)
+                .containsExactlyInAnyOrder(
+                        ServerPlatform.VANILLA,
+                        ServerPlatform.FORGE,
+                        ServerPlatform.NEOFORGE,
+                        ServerPlatform.FABRIC,
+                        ServerPlatform.QUILT,
+                        ServerPlatform.PAPER,
+                        ServerPlatform.SPIGOT,
+                        ServerPlatform.BUKKIT,
+                        ServerPlatform.PURPUR,
+                        ServerPlatform.PUFFERFISH
+                );
+
+        assertThat(ServerPlatformAdapters.creatable())
+                .extracting(ServerPlatformAdapter::getPlatform)
+                .containsExactlyInAnyOrder(
+                        ServerPlatform.VANILLA,
+                        ServerPlatform.FORGE,
+                        ServerPlatform.NEOFORGE,
+                        ServerPlatform.FABRIC,
+                        ServerPlatform.QUILT,
+                        ServerPlatform.PAPER,
+                        ServerPlatform.PURPUR
+                );
+
+        assertThat(ServerPlatformAdapters.forPlatform(ServerPlatform.SPIGOT).getCreationUnavailableReason())
+                .contains("BuildTools");
+        assertThat(ServerPlatformAdapters.forPlatform(ServerPlatform.PUFFERFISH).getCreationUnavailableReason())
+                .contains("endpoint publico estable");
+    }
 
     @Test
     void detect_debeResolverForgeConCapacidadesYRutaDeMods() throws Exception {
@@ -42,6 +81,98 @@ class ServerPlatformAdaptersTest {
         assertThat(profile.extensionDirectories()).containsExactly(forgeDir.resolve("mods"));
         assertThat(profile.capabilities()).contains(ServerCapability.MOD_EXTENSIONS);
         assertThat(new ForgeServerPlatformAdapter().validate(forgeDir).valid()).isTrue();
+    }
+
+    @Test
+    void detect_debeResolverNeoForgeFabricQuiltYPlataformasDePlugins() throws Exception {
+        Path neoForgeDir = tempDir.resolve("neoforge-server");
+        TestWorldFixtures.createValidServerJar(
+                neoForgeDir,
+                "neoforge-runtime.jar",
+                "{\"id\":\"1.21.1\"}",
+                "net/neoforged/neoforge/NeoForge.class"
+        );
+        Files.createDirectories(neoForgeDir.resolve("mods"));
+
+        Path fabricDir = tempDir.resolve("fabric-server");
+        TestWorldFixtures.createValidServerJar(
+                fabricDir,
+                "fabric-server.jar",
+                "{\"id\":\"1.21.1\"}",
+                "net/fabricmc/loader/impl/launch/server/FabricServerLauncher.class"
+        );
+        Files.createDirectories(fabricDir.resolve("mods"));
+
+        Path quiltDir = tempDir.resolve("quilt-server");
+        TestWorldFixtures.createValidServerJar(
+                quiltDir,
+                "quilt-server-launch.jar",
+                "{\"id\":\"1.21.1\"}",
+                "org/quiltmc/loader/impl/launch/server/QuiltServerLauncher.class"
+        );
+        Files.createDirectories(quiltDir.resolve("mods"));
+
+        Path purpurDir = tempDir.resolve("purpur-server");
+        TestWorldFixtures.createValidServerJar(
+                purpurDir,
+                "purpur.jar",
+                "{\"id\":\"1.21.1\"}",
+                "org/purpurmc/purpur/PurpurConfig.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Files.writeString(purpurDir.resolve("purpur.yml"), "");
+
+        Path pufferfishDir = tempDir.resolve("pufferfish-server");
+        TestWorldFixtures.createValidServerJar(
+                pufferfishDir,
+                "pufferfish.jar",
+                "{\"id\":\"1.21.1\"}",
+                "gg/pufferfish/pufferfish/PufferfishConfig.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Files.writeString(pufferfishDir.resolve("pufferfish.yml"), "");
+
+        Path spigotDir = tempDir.resolve("spigot-server");
+        TestWorldFixtures.createValidServerJar(
+                spigotDir,
+                "spigot.jar",
+                "{\"id\":\"1.21.1\"}",
+                "org/spigotmc/SpigotConfig.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Files.writeString(spigotDir.resolve("spigot.yml"), "");
+
+        Path bukkitDir = tempDir.resolve("bukkit-server");
+        TestWorldFixtures.createValidServerJar(
+                bukkitDir,
+                "craftbukkit.jar",
+                "{\"id\":\"1.21.1\"}",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+        Files.createDirectories(bukkitDir.resolve("plugins"));
+
+        assertThat(ServerPlatformAdapters.detect(neoForgeDir).platform()).isEqualTo(ServerPlatform.NEOFORGE);
+        assertThat(ServerPlatformAdapters.detect(fabricDir).platform()).isEqualTo(ServerPlatform.FABRIC);
+        assertThat(ServerPlatformAdapters.detect(quiltDir).platform()).isEqualTo(ServerPlatform.QUILT);
+        assertThat(ServerPlatformAdapters.detect(purpurDir).platform()).isEqualTo(ServerPlatform.PURPUR);
+        assertThat(ServerPlatformAdapters.detect(pufferfishDir).platform()).isEqualTo(ServerPlatform.PUFFERFISH);
+        assertThat(ServerPlatformAdapters.detect(spigotDir).platform()).isEqualTo(ServerPlatform.SPIGOT);
+        assertThat(ServerPlatformAdapters.detect(bukkitDir).platform()).isEqualTo(ServerPlatform.BUKKIT);
+    }
+
+    @Test
+    void adapters_debenSeleccionarCarpetaDeExtensionesSegunEcosistema() {
+        Path serverDir = tempDir.resolve("server");
+
+        for (ServerPlatform platform : Set.of(ServerPlatform.FORGE, ServerPlatform.NEOFORGE, ServerPlatform.FABRIC, ServerPlatform.QUILT)) {
+            assertThat(ServerPlatformAdapters.forPlatform(platform).getExtensionDirectories(serverDir))
+                    .containsExactly(serverDir.resolve("mods"));
+        }
+        for (ServerPlatform platform : Set.of(ServerPlatform.PAPER, ServerPlatform.SPIGOT, ServerPlatform.BUKKIT, ServerPlatform.PURPUR, ServerPlatform.PUFFERFISH)) {
+            assertThat(ServerPlatformAdapters.forPlatform(platform).getExtensionDirectories(serverDir))
+                    .containsExactly(serverDir.resolve("plugins"));
+        }
+        assertThat(ServerPlatformAdapters.forPlatform(ServerPlatform.VANILLA).getExtensionDirectories(serverDir)).isEmpty();
     }
 
     @Test
@@ -153,6 +284,151 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
+    void install_neoforgeDebeUsarInstaladorYPrepararMods() throws Exception {
+        Path installDir = tempDir.resolve("neoforge-created");
+        Path fakeInstaller = tempDir.resolve("downloads").resolve("neoforge-installer.jar");
+        TestWorldFixtures.createValidServerJar(fakeInstaller.getParent(), fakeInstaller.getFileName().toString(), "{\"id\":\"installer\"}");
+        NeoForgeRepositoryClient repositoryClient = new NeoForgeRepositoryClient() {
+            @Override
+            String getInstallerUrl(String artifactVersion) {
+                return "https://maven.neoforged.net/fake/" + artifactVersion + "/installer.jar";
+            }
+        };
+        ForgeInstallerRunner installerRunner = (installerJar, targetDirectory) -> {
+            Files.createDirectories(targetDirectory.resolve("libraries"));
+            TestWorldFixtures.createValidServerJar(
+                    targetDirectory,
+                    "neoforge-runtime.jar",
+                    "{\"id\":\"1.21.1\"}",
+                    "net/neoforged/neoforge/NeoForge.class"
+            );
+        };
+
+        Server server = new Server();
+        NeoForgeServerPlatformAdapter adapter = new NeoForgeServerPlatformAdapter(repositoryClient, installerRunner);
+        adapter.install(server, new ServerInstallationRequest(
+                installDir,
+                "1.21.1",
+                "21.1.200",
+                true,
+                null,
+                null,
+                (url, destination) -> Files.copy(fakeInstaller, destination.toPath())
+        ));
+
+        assertThat(server.getPlatform()).isEqualTo(ServerPlatform.NEOFORGE);
+        assertThat(server.getLoaderVersion()).isEqualTo("21.1.200");
+        assertThat(Files.exists(installDir.resolve("mods"))).isTrue();
+        assertThat(Files.exists(installDir.resolve("config"))).isTrue();
+        assertThat(adapter.detect(installDir).platform()).isEqualTo(ServerPlatform.NEOFORGE);
+    }
+
+    @Test
+    void install_paperPurpurFabricYQuiltPreparanCarpetasCorrectas() throws Exception {
+        Path sourceJar = tempDir.resolve("downloads").resolve("runtime.jar");
+        TestWorldFixtures.createValidServerJar(sourceJar.getParent(), sourceJar.getFileName().toString(), "{\"id\":\"1.21.1\"}");
+
+        Server paperServer = new Server();
+        PaperServerPlatformAdapter paperAdapter = new PaperServerPlatformAdapter(new PaperDownloadsClient(new FakePlatformHttpClient(Map.of(
+                "https://fill.papermc.io/v3/projects/paper/versions/1.21.1/builds",
+                """
+                [
+                  {"id":"42","channel":"STABLE","downloads":{"server:default":{"url":"https://example.test/paper.jar"}}}
+                ]
+                """
+        ))));
+        paperAdapter.install(paperServer, request(tempDir.resolve("paper-created"), "1.21.1", "42", sourceJar));
+        assertThat(paperServer.getPlatform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(Files.exists(tempDir.resolve("paper-created").resolve("plugins"))).isTrue();
+
+        Server purpurServer = new Server();
+        PurpurServerPlatformAdapter purpurAdapter = new PurpurServerPlatformAdapter(new PurpurDownloadsClient(new FakePlatformHttpClient(Map.of())));
+        purpurAdapter.install(purpurServer, request(tempDir.resolve("purpur-created"), "1.21.1", "99", sourceJar));
+        assertThat(purpurServer.getPlatform()).isEqualTo(ServerPlatform.PURPUR);
+        assertThat(Files.exists(tempDir.resolve("purpur-created").resolve("plugins"))).isTrue();
+
+        Server fabricServer = new Server();
+        FabricServerPlatformAdapter fabricAdapter = new FabricServerPlatformAdapter(new FabricMetaClient(new FakePlatformHttpClient(Map.of())));
+        fabricAdapter.install(fabricServer, request(
+                tempDir.resolve("fabric-created"),
+                "1.21.1",
+                FabricMetaClient.encodePlatformVersion("0.19.2", "1.1.1"),
+                sourceJar
+        ));
+        assertThat(fabricServer.getPlatform()).isEqualTo(ServerPlatform.FABRIC);
+        assertThat(fabricServer.getLoaderVersion()).isEqualTo("0.19.2");
+        assertThat(Files.exists(tempDir.resolve("fabric-created").resolve("mods"))).isTrue();
+
+        Server quiltServer = new Server();
+        QuiltServerPlatformAdapter quiltAdapter = new QuiltServerPlatformAdapter(
+                new QuiltMetaClient(new FakePlatformHttpClient(Map.of(
+                        "https://meta.quiltmc.org/v3/versions/installer",
+                        """
+                        [
+                          {"version":"0.12.1","url":"https://example.test/quilt-installer.jar"}
+                        ]
+                        """
+                ))),
+                (installerJar, targetDirectory, installerArguments) -> TestWorldFixtures.createValidServerJar(
+                        targetDirectory,
+                        "quilt-server-launch.jar",
+                        "{\"id\":\"1.21.1\"}",
+                        "org/quiltmc/loader/impl/launch/server/QuiltServerLauncher.class"
+                )
+        );
+        quiltAdapter.install(quiltServer, request(
+                tempDir.resolve("quilt-created"),
+                "1.21.1",
+                QuiltMetaClient.encodePlatformVersion("0.29.2", "0.12.1"),
+                sourceJar
+        ));
+        assertThat(quiltServer.getPlatform()).isEqualTo(ServerPlatform.QUILT);
+        assertThat(quiltServer.getLoaderVersion()).isEqualTo("0.29.2");
+        assertThat(Files.exists(tempDir.resolve("quilt-created").resolve("mods"))).isTrue();
+    }
+
+    @Test
+    void creationClients_debenParsearOpcionesYDirectorios() throws Exception {
+        PaperDownloadsClient paperClient = new PaperDownloadsClient(new FakePlatformHttpClient(Map.of(
+                "https://fill.papermc.io/v3/projects/paper",
+                """
+                {"versions":{"1.21":["1.21.1","1.21.2"]}}
+                """,
+                "https://fill.papermc.io/v3/projects/paper/versions/1.21.2/builds",
+                """
+                [{"id":"55","channel":"STABLE","downloads":{"server:default":{"url":"https://example.test/paper-55.jar"}}}]
+                """,
+                "https://fill.papermc.io/v3/projects/paper/versions/1.21.1/builds",
+                """
+                [{"id":"44","channel":"EXPERIMENTAL"},{"id":"43","channel":"STABLE","downloads":{"server:default":{"url":"https://example.test/paper-43.jar"}}}]
+                """
+        )));
+        assertThat(paperClient.listCreationOptions())
+                .extracting(ServerCreationOption::directoryName)
+                .contains("paper-1.21.2-server", "paper-1.21.1-server");
+
+        FabricMetaClient fabricClient = new FabricMetaClient(new FakePlatformHttpClient(Map.of(
+                "https://meta.fabricmc.net/v2/versions/loader",
+                """
+                [{"version":"0.19.2","stable":true}]
+                """,
+                "https://meta.fabricmc.net/v2/versions/installer",
+                """
+                [{"version":"1.1.1","stable":true}]
+                """,
+                "https://meta.fabricmc.net/v2/versions/game",
+                """
+                [{"version":"1.21.2","stable":true},{"version":"1.21.1","stable":true},{"version":"25w01a","stable":false}]
+                """
+        )));
+        assertThat(fabricClient.listCreationOptions().getFirst().directoryName()).isEqualTo("fabric-1.21.2-server");
+        assertThat(fabricClient.listCreationOptions().getFirst().platformVersion()).isEqualTo("0.19.2|1.1.1");
+
+        assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("21.1.200")).isEqualTo("1.21.1");
+        assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("20.6.120")).isEqualTo("1.20.6");
+    }
+
+    @Test
     void forgeRepositoryClient_debeAgruparUltimaVersionPorMinecraft() throws Exception {
         String metadata = """
                 <metadata>
@@ -191,6 +467,24 @@ class ServerPlatformAdaptersTest {
         assertThat(profile.minecraftVersion()).isEqualTo("1.21.4");
     }
 
+    @Test
+    void detect_debeIgnorarVersionJsonQueNoSeaVersionMinecraft() throws Exception {
+        Path paperDir = tempDir.resolve("paper-invalid-version-json");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "bootstrap.jar",
+                "{\"id\":\"26.1.2\"}",
+                "io/papermc/paper/PaperBootstrap.class",
+                "org/bukkit/craftbukkit/Main.class"
+        );
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(paperDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(profile.minecraftVersion()).isNull();
+    }
+
     private static final class FakeMojangApi extends MojangAPI {
         private final Path sourceJar;
 
@@ -211,6 +505,35 @@ class ServerPlatformAdaptersTest {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private ServerInstallationRequest request(Path installDir, String minecraftVersion, String platformVersion, Path sourceJar) {
+        return new ServerInstallationRequest(
+                installDir,
+                minecraftVersion,
+                platformVersion,
+                true,
+                null,
+                null,
+                (url, destination) -> Files.copy(sourceJar, destination.toPath())
+        );
+    }
+
+    private static final class FakePlatformHttpClient implements PlatformHttpClient {
+        private final Map<String, String> responses;
+
+        private FakePlatformHttpClient(Map<String, String> responses) {
+            this.responses = responses == null ? Map.of() : responses;
+        }
+
+        @Override
+        public JsonElement getJson(String url) throws IOException {
+            String response = responses.get(url);
+            if (response == null) {
+                throw new IOException("No fixture for " + url);
+            }
+            return JsonParser.parseString(response);
         }
     }
 }

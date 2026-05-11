@@ -1,6 +1,9 @@
 package vista;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.spi.IIORegistry;
+import javax.imageio.spi.ImageReaderSpi;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JLabel;
@@ -19,6 +22,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLConnection;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +32,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
@@ -49,6 +54,7 @@ final class ExtensionIconLoader {
     private static final Map<String, Icon> MEMORY_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, PendingLoad> IN_FLIGHT = new ConcurrentHashMap<>();
     private static final Map<String, FailureInfo> FAILURES = new ConcurrentHashMap<>();
+    private static final Set<String> LOGGED_EVENTS = ConcurrentHashMap.newKeySet();
     private static final Map<Component, AtomicBoolean> REPAINT_SCHEDULED = Collections.synchronizedMap(new WeakHashMap<>());
     private static final AtomicLong SEQUENCE = new AtomicLong();
     private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(
@@ -71,6 +77,28 @@ final class ExtensionIconLoader {
     private static final int CONNECT_TIMEOUT_MILLIS = 6000;
     private static final int READ_TIMEOUT_MILLIS = 10000;
     private static final AtomicBoolean CACHE_READY = new AtomicBoolean();
+    private static final boolean CONSOLE_IMAGE_LOGGING = Boolean.parseBoolean(
+            System.getProperty("easy.mc.marketplace.imageLogging", "false")
+    );
+
+    static {
+        ImageIO.scanForPlugins();
+        registerImageReaderSpi("com.twelvemonkeys.imageio.plugins.webp.WebPImageReaderSpi");
+        registerImageReaderSpi("com.luciad.imageio.webp.WebPImageReaderSpi");
+        logIconEvent("imageio-webp-readers", "-", 0, Integer.toString(countWebpReaders()));
+    }
+
+    private static void registerImageReaderSpi(String className) {
+        try {
+            Class<?> type = Class.forName(className);
+            Object instance = type.getDeclaredConstructor().newInstance();
+            if (instance instanceof ImageReaderSpi spi) {
+                IIORegistry.getDefaultInstance().registerServiceProvider(spi, ImageReaderSpi.class);
+            }
+        } catch (ReflectiveOperationException | LinkageError ex) {
+            LOGGER.log(Level.FINE, "ImageIO reader SPI no disponible: " + className, ex);
+        }
+    }
 
     private ExtensionIconLoader() {
     }
@@ -85,6 +113,10 @@ final class ExtensionIconLoader {
         if (cached != null) {
             return cached;
         }
+        FailureInfo failure = FAILURES.get(cacheKey);
+        if (failure != null && !failure.canRetry()) {
+            return failurePlaceholder(size);
+        }
         enqueue(normalizedUrl, size, repaintCallback, 1);
         return placeholder(size);
     }
@@ -98,6 +130,10 @@ final class ExtensionIconLoader {
         Icon cached = MEMORY_CACHE.get(cacheKey);
         if (cached != null) {
             return cached;
+        }
+        FailureInfo failure = FAILURES.get(cacheKey);
+        if (failure != null && !failure.canRetry()) {
+            return failurePlaceholder(size);
         }
         enqueue(normalizedUrl, size, createRepaintCallback(repaintTarget), 0);
         return failurePlaceholder(size);
@@ -135,6 +171,7 @@ final class ExtensionIconLoader {
         PendingLoad existing = IN_FLIGHT.computeIfAbsent(cacheKey, ignored -> new PendingLoad());
         existing.addCallback(repaintCallback);
         if (existing.markQueued()) {
+            logIconEventOnce("queued", normalizedUrl, size, null);
             EXECUTOR.execute(new IconLoadTask(normalizedUrl, size, cacheKey, priority));
         }
     }
@@ -212,19 +249,29 @@ final class ExtensionIconLoader {
             Path cachedFile = resolveCacheFile(iconUrl);
             BufferedImage image = readCachedImage(cachedFile);
             if (image == null) {
+                logIconEventOnce("remote-request", iconUrl, size, null);
                 image = readRemoteImageWithRetry(iconUrl);
                 if (image != null) {
                     writeCachedImage(cachedFile, image);
                 }
+            } else {
+                logIconEventOnce("disk-hit", iconUrl, size, null);
             }
             if (image == null) {
+                logIconEventOnce("decode-empty", iconUrl, size, null);
                 return null;
             }
+            logIconEventOnce("loaded", iconUrl, size, image.getWidth() + "x" + image.getHeight());
             return new ImageIcon(scaleImage(image, size));
         } catch (RuntimeException | IOException ex) {
             LOGGER.log(Level.FINE, "No se ha podido cargar el icono remoto " + iconUrl, ex);
+            logIconEventOnce("failed", iconUrl, size, ex.getClass().getSimpleName() + ": " + ex.getMessage());
             return null;
         }
+    }
+
+    static int pendingLoadCount() {
+        return IN_FLIGHT.size();
     }
 
     private static BufferedImage readRemoteImageWithRetry(String iconUrl) throws IOException {
@@ -250,7 +297,7 @@ final class ExtensionIconLoader {
         connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
         connection.setReadTimeout(READ_TIMEOUT_MILLIS);
         connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://modrinth.com)");
-        connection.setRequestProperty("Accept", "image/avif,image/webp,image/png,image/jpeg,image/svg+xml,*/*;q=0.8");
+        connection.setRequestProperty("Accept", "image/png,image/jpeg,*/*;q=0.2");
         if (connection instanceof HttpURLConnection http) {
             http.setInstanceFollowRedirects(true);
             int status = http.getResponseCode();
@@ -262,10 +309,112 @@ final class ExtensionIconLoader {
             byte[] bytes = in.readAllBytes();
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
             if (image != null) {
+                logIconEventOnce("remote-decoded-imageio", iconUrl, 0, bytes.length + " bytes");
                 return image;
             }
-            return decodeWithToolkit(bytes);
+            String contentType = connection.getContentType();
+            int webpReaders = countWebpReaders();
+            logIconEventOnce("remote-imageio-null", iconUrl, 0,
+                    bytes.length + " bytes"
+                            + (contentType == null ? "" : " content-type=" + contentType)
+                            + " webp-readers=" + webpReaders
+                            + " magic=" + imageMagic(bytes));
+            if (isWebp(bytes) && webpReaders == 0) {
+                logIconEventOnce("runtime-missing-webp-reader", iconUrl, 0,
+                        "ImageIO no tiene lector WebP en este arranque");
+            }
+            BufferedImage toolkitImage = decodeWithToolkit(iconUrl, bytes);
+            if (toolkitImage != null) {
+                return toolkitImage;
+            }
+            if (isWebp(bytes) && webpReaders == 0) {
+                return readWebpAsPngThroughImageProxy(iconUrl);
+            }
+            return null;
         }
+    }
+
+    private static BufferedImage readWebpAsPngThroughImageProxy(String iconUrl) {
+        URI sourceUri;
+        try {
+            sourceUri = URI.create(iconUrl);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+        if (!"https".equalsIgnoreCase(sourceUri.getScheme()) || sourceUri.getHost() == null
+                || !sourceUri.getHost().endsWith("modrinth.com")) {
+            return null;
+        }
+        String source = sourceUri.getHost() + sourceUri.getRawPath()
+                + (sourceUri.getRawQuery() == null ? "" : "?" + sourceUri.getRawQuery());
+        String encodedSource = URLEncoder.encode(source, StandardCharsets.UTF_8);
+        URI proxyUri = URI.create("https://images.weserv.nl/?url=" + encodedSource + "&output=png");
+        logIconEventOnce("webp-proxy-request", iconUrl, 0, "png-fallback");
+        try {
+            URLConnection connection = proxyUri.toURL().openConnection();
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
+            connection.setReadTimeout(READ_TIMEOUT_MILLIS);
+            connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://modrinth.com)");
+            connection.setRequestProperty("Accept", "image/png,image/jpeg,*/*;q=0.2");
+            if (connection instanceof HttpURLConnection http) {
+                http.setInstanceFollowRedirects(true);
+                int status = http.getResponseCode();
+                if (status < 200 || status >= 300) {
+                    logIconEventOnce("webp-proxy-http", iconUrl, 0, Integer.toString(status));
+                    return null;
+                }
+            }
+            try (InputStream in = connection.getInputStream()) {
+                byte[] bytes = in.readAllBytes();
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+                if (image != null) {
+                    logIconEventOnce("webp-proxy-loaded", iconUrl, 0, image.getWidth() + "x" + image.getHeight());
+                    return image;
+                }
+                logIconEventOnce("webp-proxy-empty", iconUrl, 0,
+                        bytes.length + " bytes magic=" + imageMagic(bytes));
+            }
+        } catch (RuntimeException | IOException ex) {
+            LOGGER.log(Level.FINE, "No se ha podido convertir el icono WebP " + iconUrl, ex);
+            logIconEventOnce("webp-proxy-failed", iconUrl, 0, ex.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    private static int countWebpReaders() {
+        int count = 0;
+        Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("webp");
+        while (readers.hasNext()) {
+            readers.next();
+            count++;
+        }
+        return count;
+    }
+
+    private static void logIconEventOnce(String event, String iconUrl, int size, String detail) {
+        if (!CONSOLE_IMAGE_LOGGING) {
+            return;
+        }
+        String key = event + "|" + size + "|" + iconUrl;
+        if (LOGGED_EVENTS.add(key)) {
+            logIconEvent(event, iconUrl, size, detail);
+        }
+    }
+
+    private static void logIconEvent(String event, String iconUrl, int size, String detail) {
+        if (!CONSOLE_IMAGE_LOGGING) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder("[MarketplaceImages] ");
+        sb.append(event);
+        if (size > 0) {
+            sb.append(" size=").append(size);
+        }
+        if (detail != null && !detail.isBlank()) {
+            sb.append(" detail=").append(detail);
+        }
+        sb.append(" url=").append(iconUrl == null ? "-" : iconUrl);
+        System.out.println(sb);
     }
 
     private static BufferedImage readCachedImage(Path cachedFile) {
@@ -335,7 +484,36 @@ final class ExtensionIconLoader {
         return SvgIconFactory.create("easymcicons/box-unselected.svg", size, size);
     }
 
-    private static BufferedImage decodeWithToolkit(byte[] bytes) {
+    private static String imageMagic(byte[] bytes) {
+        if (bytes == null || bytes.length < 12) {
+            return "unknown";
+        }
+        if ((bytes[0] & 0xff) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4e && bytes[3] == 0x47) {
+            return "png";
+        }
+        if ((bytes[0] & 0xff) == 0xff && (bytes[1] & 0xff) == 0xd8) {
+            return "jpeg";
+        }
+        if (isWebp(bytes)) {
+            return "webp";
+        }
+        return "unknown";
+    }
+
+    private static boolean isWebp(byte[] bytes) {
+        return bytes != null
+                && bytes.length >= 12
+                && bytes[0] == 'R'
+                && bytes[1] == 'I'
+                && bytes[2] == 'F'
+                && bytes[3] == 'F'
+                && bytes[8] == 'W'
+                && bytes[9] == 'E'
+                && bytes[10] == 'B'
+                && bytes[11] == 'P';
+    }
+
+    private static BufferedImage decodeWithToolkit(String iconUrl, byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
@@ -351,6 +529,7 @@ final class ExtensionIconLoader {
         int width = image.getWidth(null);
         int height = image.getHeight(null);
         if (width <= 0 || height <= 0) {
+            logIconEventOnce("toolkit-decode-empty", iconUrl, 0, imageMagic(bytes));
             return null;
         }
         BufferedImage buffered = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -384,7 +563,7 @@ final class ExtensionIconLoader {
         private final AtomicBoolean queued = new AtomicBoolean();
 
         private void addCallback(Runnable callback) {
-            if (callback != null) {
+            if (callback != null && callbacks.size() < 8) {
                 callbacks.add(callback);
             }
         }

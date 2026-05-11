@@ -24,13 +24,46 @@ class ExtensionCatalogServiceTest {
 
         assertThat(providers).extracting(ExtensionCatalogProviderDescriptor::providerId)
                 .containsExactly("modrinth", "curseforge", "hangar");
-        assertThat(providers).allSatisfy(provider ->
-                assertThat(provider.capabilities()).contains(
-                        ExtensionCatalogCapability.SEARCH,
-                        ExtensionCatalogCapability.DETAILS,
-                        ExtensionCatalogCapability.DOWNLOAD,
-                        ExtensionCatalogCapability.UPDATES
-                ));
+        assertThat(providers)
+                .filteredOn(provider -> provider.providerId().equals("modrinth"))
+                .singleElement()
+                .satisfies(provider -> {
+                    assertThat(provider.capabilities()).contains(
+                            ExtensionCatalogCapability.SEARCH,
+                            ExtensionCatalogCapability.DETAILS,
+                            ExtensionCatalogCapability.DOWNLOAD,
+                            ExtensionCatalogCapability.UPDATES
+                    );
+                    assertThat(provider.supportedExtensionTypes()).contains(ServerExtensionType.MOD, ServerExtensionType.PLUGIN);
+                    assertThat(provider.supportedPlatforms()).contains(ServerPlatform.FABRIC, ServerPlatform.PAPER);
+                });
+        assertThat(providers)
+                .filteredOn(provider -> provider.providerId().equals("hangar"))
+                .singleElement()
+                .satisfies(provider -> {
+                    assertThat(provider.capabilities()).contains(ExtensionCatalogCapability.SEARCH, ExtensionCatalogCapability.DOWNLOAD);
+                    assertThat(provider.supportedExtensionTypes()).containsExactly(ServerExtensionType.PLUGIN);
+                    assertThat(provider.supportedPlatforms()).contains(ServerPlatform.PAPER);
+                });
+        assertThat(providers)
+                .filteredOn(provider -> provider.providerId().equals("curseforge"))
+                .singleElement()
+                .satisfies(provider -> {
+                    assertThat(provider.capabilities()).isEmpty();
+                    assertThat(provider.limitations()).contains("no implementado");
+                });
+    }
+
+    @Test
+    void curseForgeCatalogShouldNotExposeStubResultsAsRealSupport() throws IOException {
+        CurseForgeExtensionCatalogProvider provider = new CurseForgeExtensionCatalogProvider("test-key");
+        Server server = new Server();
+        server.setPlatform(ServerPlatform.FORGE);
+        server.setVersion("1.21.1");
+
+        assertThat(provider.supportsSearch()).isFalse();
+        assertThat(provider.search(new ExtensionCatalogQuery("jei", ServerPlatform.FORGE, ServerExtensionType.MOD, "1.21.1", 10))).isEmpty();
+        assertThat(provider.resolveDownload("jei", null, server)).isEmpty();
     }
 
     @Test
@@ -53,7 +86,8 @@ class ExtensionCatalogServiceTest {
                         Set.of("1.21.1"),
                         null,
                         "https://hangar.papermc.io/ViaVersion/ViaVersion",
-                        null
+                        null,
+                        0L
                 )),
                 Optional.empty(),
                 Optional.empty(),
@@ -77,7 +111,8 @@ class ExtensionCatalogServiceTest {
                         Set.of("1.21.1"),
                         null,
                         "https://modrinth.com/plugin/geyser",
-                        null
+                        null,
+                        0L
                 )),
                 Optional.empty(),
                 Optional.empty(),
@@ -102,6 +137,298 @@ class ExtensionCatalogServiceTest {
     }
 
     @Test
+    void shouldFilterWrongEcosystemCatalogResultsEvenWhenProviderReturnsThem() throws IOException {
+        ExtensionCatalogProvider provider = new FakeProvider(
+                "mixed",
+                "Mixed",
+                ExtensionSourceType.MODRINTH,
+                List.of(
+                        new ExtensionCatalogEntry(
+                                "mixed",
+                                "plugin",
+                                "p1",
+                                "Wrong Plugin",
+                                "Example",
+                                "1.0.0",
+                                "Plugin result",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.PLUGIN,
+                                Set.of(ServerPlatform.PAPER),
+                                Set.of("1.21.1"),
+                                null,
+                                null,
+                                null,
+                                0L
+                        ),
+                        new ExtensionCatalogEntry(
+                                "mixed",
+                                "mod",
+                                "m1",
+                                "Right Mod",
+                                "Example",
+                                "1.0.0",
+                                "Mod result",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.MOD,
+                                Set.of(ServerPlatform.FABRIC),
+                                Set.of("1.21.1"),
+                                null,
+                                null,
+                                null,
+                                0L
+                        )
+                ),
+                Optional.empty(),
+                Optional.empty(),
+                List.of()
+        );
+        ExtensionCatalogService service = new ExtensionCatalogService(new ExtensionCatalogRegistry(List.of(provider)));
+
+        List<ExtensionCatalogEntry> results = service.search(new ExtensionCatalogQuery(
+                "",
+                ServerPlatform.FABRIC,
+                ServerExtensionType.MOD,
+                "1.21.1",
+                20
+        ));
+
+        assertThat(results).extracting(ExtensionCatalogEntry::projectId).containsExactly("mod");
+    }
+
+    @Test
+    void shouldSortAggregatedSearchByDownloadCountWhenRequested() throws IOException {
+        ExtensionCatalogProvider provider = new FakeProvider(
+                "mixed",
+                "Mixed",
+                ExtensionSourceType.MODRINTH,
+                List.of(
+                        new ExtensionCatalogEntry(
+                                "mixed",
+                                "low",
+                                "l1",
+                                "Low Downloads",
+                                "Example",
+                                "1.0.0",
+                                "Mod result",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.MOD,
+                                Set.of(ServerPlatform.FABRIC),
+                                Set.of("1.21.1"),
+                                null,
+                                null,
+                                null,
+                                5L
+                        ),
+                        new ExtensionCatalogEntry(
+                                "mixed",
+                                "high",
+                                "h1",
+                                "High Downloads",
+                                "Example",
+                                "1.0.0",
+                                "Mod result",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.MOD,
+                                Set.of(ServerPlatform.FABRIC),
+                                Set.of("1.21.1"),
+                                null,
+                                null,
+                                null,
+                                500L
+                        )
+                ),
+                Optional.empty(),
+                Optional.empty(),
+                List.of()
+        );
+        ExtensionCatalogService service = new ExtensionCatalogService(new ExtensionCatalogRegistry(List.of(provider)));
+
+        List<ExtensionCatalogEntry> results = service.search(new ExtensionCatalogQuery(
+                "",
+                ServerPlatform.FABRIC,
+                ServerExtensionType.MOD,
+                "1.21.1",
+                20,
+                "downloads"
+        ));
+
+        assertThat(results).extracting(ExtensionCatalogEntry::projectId).containsExactly("high", "low");
+    }
+
+    @Test
+    void shouldDeduplicateSearchResultsByProviderAndProjectIdentity() throws IOException {
+        ExtensionCatalogProvider provider = new FakeProvider(
+                "modrinth",
+                "Modrinth",
+                ExtensionSourceType.MODRINTH,
+                List.of(
+                        new ExtensionCatalogEntry(
+                                "modrinth",
+                                "P1",
+                                "old",
+                                "ViaVersion",
+                                "ViaVersion",
+                                "1.0.0",
+                                "Protocol plugin",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.PLUGIN,
+                                Set.of(ServerPlatform.PAPER),
+                                Set.of("1.21.1"),
+                                null,
+                                "https://modrinth.com/plugin/viaversion",
+                                null,
+                                10L
+                        ),
+                        new ExtensionCatalogEntry(
+                                "modrinth",
+                                "P1",
+                                "new",
+                                "ViaVersion",
+                                "ViaVersion",
+                                "2.0.0",
+                                "Protocol plugin duplicate",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.PLUGIN,
+                                Set.of(ServerPlatform.PAPER),
+                                Set.of("1.21.1"),
+                                null,
+                                "https://modrinth.com/plugin/viaversion",
+                                null,
+                                100L
+                        ),
+                        new ExtensionCatalogEntry(
+                                "modrinth",
+                                "P2",
+                                "other",
+                                "ViaBackwards",
+                                "ViaVersion",
+                                "1.0.0",
+                                "Backwards protocol plugin",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.PLUGIN,
+                                Set.of(ServerPlatform.PAPER),
+                                Set.of("1.21.1"),
+                                null,
+                                "https://modrinth.com/plugin/viabackwards",
+                                null,
+                                50L
+                        )
+                ),
+                Optional.empty(),
+                Optional.empty(),
+                List.of()
+        );
+        ExtensionCatalogService service = new ExtensionCatalogService(new ExtensionCatalogRegistry(List.of(provider)));
+
+        List<ExtensionCatalogEntry> results = service.search(new ExtensionCatalogQuery(
+                "via",
+                ServerPlatform.PAPER,
+                ServerExtensionType.PLUGIN,
+                "1.21.1",
+                20,
+                "downloads"
+        ));
+
+        assertThat(results).extracting(ExtensionCatalogEntry::projectId).containsExactly("P1", "P2");
+        assertThat(results.getFirst().versionId()).isEqualTo("new");
+    }
+
+    @Test
+    void shouldKeepIncompatibleTypedSearchResultsWhenCompatibilityFiltersAreNotRequested() throws IOException {
+        ExtensionCatalogProvider provider = new FakeProvider(
+                "mixed",
+                "Mixed",
+                ExtensionSourceType.MODRINTH,
+                List.of(
+                        new ExtensionCatalogEntry(
+                                "mixed",
+                                "fabric",
+                                "f1",
+                                "Fabric Mod",
+                                "Example",
+                                "1.0.0",
+                                "Mod result",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.MOD,
+                                Set.of(ServerPlatform.FABRIC),
+                                Set.of("1.21.1"),
+                                null,
+                                null,
+                                null,
+                                50L
+                        ),
+                        new ExtensionCatalogEntry(
+                                "mixed",
+                                "forge",
+                                "g1",
+                                "Forge Mod",
+                                "Example",
+                                "1.0.0",
+                                "Mod result",
+                                ExtensionSourceType.MODRINTH,
+                                ServerExtensionType.MOD,
+                                Set.of(ServerPlatform.FORGE),
+                                Set.of("1.20.1"),
+                                null,
+                                null,
+                                null,
+                                25L
+                        )
+                ),
+                Optional.empty(),
+                Optional.empty(),
+                List.of()
+        );
+        ExtensionCatalogService service = new ExtensionCatalogService(new ExtensionCatalogRegistry(List.of(provider)));
+
+        List<ExtensionCatalogEntry> results = service.search(new ExtensionCatalogQuery(
+                "mod",
+                ServerPlatform.UNKNOWN,
+                ServerExtensionType.MOD,
+                "",
+                20,
+                "downloads"
+        ));
+
+        assertThat(results).extracting(ExtensionCatalogEntry::projectId).containsExactly("fabric", "forge");
+    }
+
+
+    @Test
+    void shouldRejectDownloadPlanWhenProviderReturnsWrongEcosystem() throws IOException {
+        ExtensionDownloadPlan wrongPlan = new ExtensionDownloadPlan(
+                "mixed",
+                "plugin",
+                "p1",
+                "1.0.0",
+                null,
+                "Plugin.jar",
+                "https://example.test/Plugin.jar",
+                ExtensionSourceType.MODRINTH,
+                ServerExtensionType.PLUGIN,
+                ServerPlatform.PAPER,
+                "1.21.1",
+                true,
+                "Ready"
+        );
+        ExtensionCatalogProvider provider = new FakeProvider(
+                "mixed",
+                "Mixed",
+                ExtensionSourceType.MODRINTH,
+                List.of(),
+                Optional.empty(),
+                Optional.of(wrongPlan),
+                List.of()
+        );
+        ExtensionCatalogService service = new ExtensionCatalogService(new ExtensionCatalogRegistry(List.of(provider)));
+        Server server = new Server();
+        server.setPlatform(ServerPlatform.FABRIC);
+        server.setVersion("1.21.1");
+
+        assertThat(service.resolveDownload("mixed", "plugin", "p1", server)).isEmpty();
+    }
+
+    @Test
     void shouldResolveDetailsDownloadsAndUpdatesFromProviderContract() throws IOException {
         ExtensionCatalogDetails details = new ExtensionCatalogDetails(
                 new ExtensionCatalogEntry(
@@ -118,7 +445,8 @@ class ExtensionCatalogServiceTest {
                         Set.of("1.21.1"),
                         null,
                         "https://hangar.papermc.io/ViaVersion/ViaVersion",
-                        "https://hangarcdn.papermc.io/example.jar"
+                        "https://hangarcdn.papermc.io/example.jar",
+                        0L
                 ),
                 "Long description",
                 "https://hangar.papermc.io/ViaVersion/ViaVersion",
@@ -258,7 +586,8 @@ class ExtensionCatalogServiceTest {
                         Set.of("1.21.1"),
                         null,
                         null,
-                        null
+                        null,
+                        0L
                 )),
                 Optional.empty(),
                 Optional.empty(),

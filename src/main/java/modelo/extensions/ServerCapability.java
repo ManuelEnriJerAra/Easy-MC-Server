@@ -9,5 +9,9 @@ public enum ServerCapability {
     PERFORMANCE_MONITORING,
     EXTENSIONS,
     MOD_EXTENSIONS,
-    PLUGIN_EXTENSIONS
+    PLUGIN_EXTENSIONS;
+
+    public boolean isExtensionCapability() {
+        return this == EXTENSIONS || this == MOD_EXTENSIONS || this == PLUGIN_EXTENSIONS;
+    }
 }

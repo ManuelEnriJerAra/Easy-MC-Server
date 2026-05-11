@@ -12,6 +12,7 @@ public class EasyMCConfig {
     private Integer estadisticasVentanaRecienteSegundos;
     private Integer estadisticasResolucionHistoricaSegundos;
     private Boolean jugadoresListaCompacta;
+    private Boolean extensionesListaCompacta;
     private Boolean consolaVistaSimple;
     private String curseForgeApiKey;
 
@@ -40,6 +41,7 @@ public class EasyMCConfig {
         this.estadisticasVentanaRecienteSegundos = estadisticasVentanaRecienteSegundos;
         this.estadisticasResolucionHistoricaSegundos = estadisticasResolucionHistoricaSegundos;
         this.jugadoresListaCompacta = jugadoresListaCompacta;
+        this.extensionesListaCompacta = null;
         this.consolaVistaSimple = consolaVistaSimple;
     }
 }

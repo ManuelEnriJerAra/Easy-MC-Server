@@ -8,8 +8,15 @@ import java.util.List;
 
 public final class ServerPlatformAdapters {
     private static final List<ServerPlatformAdapter> ADAPTERS = List.of(
+            new PurpurServerPlatformAdapter(),
+            new PufferfishServerPlatformAdapter(),
             new PaperServerPlatformAdapter(),
+            new SpigotServerPlatformAdapter(),
+            new BukkitServerPlatformAdapter(),
+            new NeoForgeServerPlatformAdapter(),
             new ForgeServerPlatformAdapter(),
+            new FabricServerPlatformAdapter(),
+            new QuiltServerPlatformAdapter(),
             new VanillaServerPlatformAdapter()
     );
 

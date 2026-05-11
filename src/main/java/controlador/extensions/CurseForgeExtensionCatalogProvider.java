@@ -1,15 +1,17 @@
 package controlador.extensions;
 
+import modelo.Server;
 import modelo.extensions.ExtensionSourceType;
+import modelo.extensions.ServerExtension;
 import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerPlatform;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 final class CurseForgeExtensionCatalogProvider extends AbstractStubExtensionCatalogProvider {
-    private final boolean apiKeyConfigured;
-
     CurseForgeExtensionCatalogProvider() {
         this(null);
     }
@@ -51,18 +53,49 @@ final class CurseForgeExtensionCatalogProvider extends AbstractStubExtensionCata
                         "worldedit-forge-7.3.2.jar"
                 )
         ));
-        this.apiKeyConfigured = apiKey != null && !apiKey.isBlank();
     }
 
     @Override
     public Set<ExtensionCatalogCapability> getCapabilities() {
-        return apiKeyConfigured
-                ? Set.of(
-                ExtensionCatalogCapability.SEARCH,
-                ExtensionCatalogCapability.DETAILS,
-                ExtensionCatalogCapability.DOWNLOAD,
-                ExtensionCatalogCapability.UPDATES
-        )
-                : Set.of();
+        return Set.of();
+    }
+
+    @Override
+    public Set<ServerExtensionType> getSupportedExtensionTypes() {
+        return Set.of();
+    }
+
+    @Override
+    public Set<ServerPlatform> getSupportedPlatforms() {
+        return Set.of();
+    }
+
+    @Override
+    public String getLimitations() {
+        return "Catalogo CurseForge no implementado con API real; el soporte actual de CurseForge se limita a import/export de manifest.";
+    }
+
+    @Override
+    public List<ExtensionCatalogEntry> search(ExtensionCatalogQuery query) {
+        return List.of();
+    }
+
+    @Override
+    public Optional<ExtensionCatalogDetails> getDetails(String projectId,
+                                                        ExtensionCatalogQuery query) {
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<ExtensionDownloadPlan> resolveDownload(String projectId,
+                                                           String versionId,
+                                                           Server server) {
+        return Optional.empty();
+    }
+
+    @Override
+    public List<ExtensionUpdateCandidate> findUpdates(Server server,
+                                                      List<ServerExtension> installedExtensions) throws IOException {
+        return List.of();
     }
 }

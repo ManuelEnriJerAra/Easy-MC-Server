@@ -16,9 +16,29 @@ record MarketplaceEntryViewModel(
         String providerLabel,
         String platformsSummary,
         String versionsSummary,
-        String descriptionPreview
+        String descriptionPreview,
+        boolean loadMoreRow
 ) {
+    static MarketplaceEntryViewModel loadMoreRow(String statusText) {
+        return new MarketplaceEntryViewModel(
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                statusText,
+                true
+        );
+    }
+
     String key() {
+        if (loadMoreRow) {
+            return "__load_more__";
+        }
         if (entry == null) {
             return "";
         }

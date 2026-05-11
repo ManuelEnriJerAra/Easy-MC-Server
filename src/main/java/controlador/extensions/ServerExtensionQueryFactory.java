@@ -6,7 +6,12 @@ import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 final class ServerExtensionQueryFactory {
+    private static final Pattern MINECRAFT_VERSION_HINT_PATTERN = Pattern.compile("(?i)(?<![\\d.])(1\\.(?:1[0-9]|2[0-9])(?:\\.\\d+)?)(?![\\d.])");
+
     private ServerExtensionQueryFactory() {
     }
 
@@ -45,6 +50,9 @@ final class ServerExtensionQueryFactory {
 
     private static ServerExtensionType resolvedExtensionType(Server server) {
         ServerEcosystemType ecosystemType = server.getEcosystemType() == null ? ServerEcosystemType.UNKNOWN : server.getEcosystemType();
+        if (ecosystemType == ServerEcosystemType.UNKNOWN && server.getPlatform() != null) {
+            ecosystemType = server.getPlatform().getDefaultEcosystemType();
+        }
         return switch (ecosystemType) {
             case MODS -> ServerExtensionType.MOD;
             case PLUGINS -> ServerExtensionType.PLUGIN;
@@ -72,6 +80,7 @@ final class ServerExtensionQueryFactory {
         if (value == null || value.isBlank()) {
             return null;
         }
-        return value.trim();
+        Matcher matcher = MINECRAFT_VERSION_HINT_PATTERN.matcher(value.trim());
+        return matcher.find() ? matcher.group(1) : null;
     }
 }

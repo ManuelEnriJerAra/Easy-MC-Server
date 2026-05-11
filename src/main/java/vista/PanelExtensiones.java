@@ -4,10 +4,14 @@ import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import controlador.extensions.ExtensionCompatibilityReport;
 import controlador.extensions.ExtensionCompatibilityStatus;
+import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
+import controlador.extensions.CurseForgeModpackService;
+import controlador.extensions.InstalledExtensionStatus;
 import modelo.Server;
 import modelo.extensions.ExtensionInstallState;
 import modelo.extensions.ExtensionLocalMetadata;
+import modelo.extensions.ExtensionRemoteDependency;
 import modelo.extensions.ExtensionSource;
 import modelo.extensions.ExtensionSourceType;
 import modelo.extensions.ExtensionUpdateState;
@@ -23,8 +27,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 final class PanelExtensiones extends JPanel {
     private static final String EMPTY_CARD = "empty";
@@ -35,34 +42,53 @@ final class PanelExtensiones extends JPanel {
 
     private final DefaultListModel<ServerExtension> extensionsModel = new DefaultListModel<>();
     private final JList<ServerExtension> extensionsList = new JList<>(extensionsModel);
+    private final Map<String, InstalledExtensionStatus> statusCache = new HashMap<>();
     private final JLabel summaryLabel = new JLabel();
     private final JLabel directoriesLabel = new JLabel();
     private final JLabel detailsTitleLabel = new JLabel("Ninguna extension seleccionada");
     private final JLabel detailsVersionLabel = new JLabel("-");
-    private final JLabel detailsAuthorLabel = new JLabel("-");
-    private final JLabel detailsStateLabel = new JLabel("-");
+    private final JLabel detailsStatusBadgeLabel = new ExtensionDetailsLayout.StatusBadgeLabel("Sin seleccion");
+    private final JLabel detailsSideLabel = new JLabel("-");
+    private final JLabel detailsInstalledVersionLabel = new JLabel("-");
     private final JLabel detailsUpdateLabel = new JLabel("-");
     private final JLabel detailsSourceLabel = new JLabel("-");
     private final JLabel detailsRemoteVersionLabel = new JLabel("-");
     private final JLabel detailsFileLabel = new JLabel("-");
     private final JLabel detailsPathLabel = new JLabel("-");
-    private final JTextArea descriptionArea = new JTextArea();
+    private final JLabel detailsLoadersLabel = new JLabel("-");
+    private final JLabel detailsMinecraftLabel = new JLabel("-");
+    private final JLabel detailsLicenseLabel = new JLabel("-");
+    private final JLabel detailsLinksLabel = new JLabel("-");
+    private final JLabel detailsMetadataFilesLabel = new JLabel("-");
+    private final JLabel detailsProviderNameLabel = new JLabel("-");
+    private final JLabel detailsDownloadsLabel = new JLabel("-");
+    private final JTextPane descriptionArea = new JTextPane();
     private final JPanel detailsContentCards = new JPanel(new CardLayout());
     private final JLabel placeholderLabel = new JLabel("", SwingConstants.CENTER);
     private final JLabel heroIconLabel = new JLabel();
+    private final JButton detailsActionButton = new FlatButton();
     private final JButton installButton = new FlatButton();
     private final JButton browseCatalogButton = new FlatButton();
-    private final JButton removeButton = new FlatButton();
+    private final JButton exportPackButton = new FlatButton();
+    private final JButton importPackButton = new FlatButton();
     private final JButton openDirectoryButton = new FlatButton();
+    private final JButton refreshButton = new FlatButton();
+    private final JButton viewModeButton = new FlatButton();
     private final CardPanel listCard;
     private final CardPanel detailsCard;
     private final JSplitPane splitPane;
+    private ExtensionListViewMode viewMode = GestorConfiguracion.isExtensionesListaCompacta()
+            ? ExtensionListViewMode.COMPACT
+            : ExtensionListViewMode.DETAILED;
     private boolean loadingExtensions;
     private boolean mutatingExtensions;
+    private boolean splitInitialized;
+    private int extensionListHoverIndex = -1;
 
     PanelExtensiones(GestorServidores gestorServidores, Server server) {
         this.gestorServidores = gestorServidores;
         this.server = server;
+        this.detailsTitleLabel.setText("Ningun " + extensionSingularLower() + " seleccionado");
 
         setLayout(new BorderLayout());
         setOpaque(false);
@@ -74,12 +100,28 @@ final class PanelExtensiones extends JPanel {
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listCard, detailsCard);
         splitPane.setOpaque(false);
         splitPane.setBorder(BorderFactory.createEmptyBorder());
-        splitPane.setResizeWeight(0.64d);
-        splitPane.setDividerLocation(760);
+        splitPane.setResizeWeight(0.56d);
+        splitPane.setContinuousLayout(true);
+        splitPane.setDividerSize(10);
+        listCard.setMinimumSize(new Dimension(420, 360));
+        detailsCard.setMinimumSize(new Dimension(420, 360));
         add(splitPane, BorderLayout.CENTER);
 
         configurarPanelListado();
         configurarPanelDetalles();
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                initializeSplitLayout();
+            }
+
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                initializeSplitLayout();
+                refreshLayout();
+            }
+        });
+        SwingUtilities.invokeLater(this::initializeSplitLayout);
         recargarExtensiones();
     }
 
@@ -93,96 +135,60 @@ final class PanelExtensiones extends JPanel {
         List<Path> directories = gestorServidores.obtenerDirectoriosExtensiones(server);
         boolean supported = gestorServidores.admiteGestionDeExtensiones(server) && !directories.isEmpty();
         String selectedRelativePath = selectedRelativePath();
+        statusCache.clear();
 
-        if (!supported) {
+            if (!supported) {
             loadingExtensions = false;
             mutatingExtensions = false;
             updateActionState();
             extensionsModel.clear();
-            summaryLabel.setText("Este servidor no usa una plataforma con extensiones gestionables.");
-            directoriesLabel.setText("No hay carpetas de mods o plugins disponibles.");
-            mostrarPlaceholderDetalles("Sin gestion de extensiones");
+            summaryLabel.setText(unsupportedSummary());
+            directoriesLabel.setText(unsupportedActionHint());
+            mostrarPlaceholderDetalles("Sin gestion de " + extensionPluralLower());
+            refreshLayout();
             return;
         }
 
         loadingExtensions = true;
         if (showLoadingState) {
             summaryLabel.setText("Sincronizando " + getSectionLabel().toLowerCase(Locale.ROOT) + "...");
-            directoriesLabel.setText("Carpetas: " + formatDirectories(directories));
-            mostrarPlaceholderDetalles("Cargando extensiones...");
+            directoriesLabel.setText(managedDirectoryLabel() + ": " + formatDirectories(directories));
+            mostrarPlaceholderDetalles("Cargando " + extensionPluralLower() + "...");
         }
         updateActionState();
-
-        new SwingWorker<List<ServerExtension>, Void>() {
-            @Override
-            protected List<ServerExtension> doInBackground() throws Exception {
-                return gestorServidores.sincronizarExtensionesInstaladas(server);
-            }
-
-            @Override
-            protected void done() {
-                loadingExtensions = false;
-                updateActionState();
-                extensionsModel.clear();
-                try {
-                    List<ServerExtension> extensions = get();
-                    summaryLabel.setText(getSectionLabel() + " instalados: " + extensions.size());
-                    directoriesLabel.setText("Carpetas: " + formatDirectories(directories));
-
-                    for (ServerExtension extension : extensions) {
-                        extensionsModel.addElement(extension);
-                    }
-                    ExtensionIconLoader.prefetchIcons(
-                            extensionsList,
-                            extensions.stream()
-                                    .map(ServerExtension::getSource)
-                                    .filter(source -> source != null && source.getIconUrl() != null && !source.getIconUrl().isBlank())
-                                    .map(ExtensionSource::getIconUrl)
-                                    .toList(),
-                            40,
-                            extensionsList::repaint
-                    );
-
-                    if (extensions.isEmpty()) {
-                        mostrarPlaceholderDetalles("No hay " + getSectionLabel().toLowerCase(Locale.ROOT) + " instalados");
-                        return;
-                    }
-                    seleccionarExtensionPorRuta(selectedRelativePath);
-                } catch (Exception ex) {
-                    summaryLabel.setText("No se han podido cargar las extensiones.");
-                    directoriesLabel.setText(rootMessage(ex));
-                    mostrarPlaceholderDetalles("Error al leer extensiones");
-                }
-            }
-        }.execute();
+        new ReloadExtensionsWorker(List.copyOf(directories), selectedRelativePath).execute();
     }
 
     private void configurarPanelListado() {
-        JButton refreshButton = new FlatButton();
-        refreshButton.setToolTipText("Refrescar extensiones");
+        refreshButton.setToolTipText("Refrescar " + extensionPluralLower());
         AppTheme.applyRefreshIconButtonStyle(refreshButton);
         refreshButton.addActionListener(e -> recargarExtensiones());
         listCard.getHeaderActionsPanel().add(refreshButton);
 
-        installButton.setText("Instalar .jar");
-        AppTheme.applyActionButtonStyle(installButton);
+        AppTheme.applyHeaderIconButtonStyle(viewModeButton);
+        viewModeButton.addActionListener(e -> toggleViewMode());
+        updateViewModeButton();
+        listCard.getHeaderActionsPanel().add(viewModeButton);
+
+        configureExtensionActionButton(installButton, "easymcicons/file.svg", "Instalar " + extensionSingularLower() + " .jar", 22, AppTheme::getForeground, false);
         installButton.addActionListener(e -> instalarExtensionManual());
 
-        browseCatalogButton.setText("Explorar catalogo");
-        AppTheme.applyAccentButtonStyle(browseCatalogButton);
+        configureExtensionActionButton(browseCatalogButton, "easymcicons/shop.svg", "Explorar catalogo de " + extensionPluralLower(), 44, AppTheme::getMainAccent, true);
         browseCatalogButton.addActionListener(e -> abrirMarketplaceExtensiones());
 
-        removeButton.setText("Eliminar");
-        AppTheme.applyActionButtonStyle(removeButton);
-        removeButton.setEnabled(false);
-        removeButton.addActionListener(e -> eliminarExtensionSeleccionada());
+        configureExtensionActionButton(importPackButton, "easymcicons/download.svg", "Importar pack", 22, AppTheme::getForeground, false);
+        importPackButton.addActionListener(e -> importarModpack());
 
-        openDirectoryButton.setText("Abrir carpeta");
-        AppTheme.applyActionButtonStyle(openDirectoryButton);
+        configureExtensionActionButton(exportPackButton, "easymcicons/upload.svg", "Exportar pack", 22, AppTheme::getForeground, false);
+        exportPackButton.addActionListener(e -> exportarModpack());
+
+        configureExtensionActionButton(openDirectoryButton, "easymcicons/folder.svg", "Abrir carpeta de " + extensionPluralLower(), 22, AppTheme::getForeground, false);
+        configureFolderHover(openDirectoryButton);
         openDirectoryButton.addActionListener(e -> abrirCarpetaExtensiones());
 
-        listCard.getActionsPanel().add(removeButton);
         listCard.getActionsPanel().add(openDirectoryButton);
+        listCard.getActionsPanel().add(importPackButton);
+        listCard.getActionsPanel().add(exportPackButton);
         listCard.getActionsPanel().add(installButton);
         listCard.getActionsPanel().add(browseCatalogButton);
 
@@ -205,10 +211,46 @@ final class PanelExtensiones extends JPanel {
         extensionsList.setCellRenderer(new ExtensionCellRenderer());
         extensionsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         extensionsList.setVisibleRowCount(12);
+        extensionsList.setFixedCellHeight(viewMode == ExtensionListViewMode.COMPACT ? 42 : -1);
         extensionsList.setOpaque(true);
         extensionsList.setBackground(AppTheme.getPanelBackground());
         extensionsList.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+        extensionsList.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         extensionsList.addListSelectionListener(this::onExtensionSelected);
+        extensionsList.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(java.awt.event.MouseEvent e) {
+                int index = extensionsList.locationToIndex(e.getPoint());
+                if (index != extensionListHoverIndex) {
+                    int previous = extensionListHoverIndex;
+                    extensionListHoverIndex = index;
+                    repaintExtensionRows(previous, index);
+                }
+            }
+        });
+        extensionsList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                if (extensionListHoverIndex >= 0) {
+                    int previous = extensionListHoverIndex;
+                    extensionListHoverIndex = -1;
+                    repaintExtensionRows(previous, -1);
+                }
+            }
+
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                int index = extensionsList.locationToIndex(e.getPoint());
+                if (index < 0 || index >= extensionsModel.size()) {
+                    return;
+                }
+                Rectangle bounds = extensionsList.getCellBounds(index, index);
+                if (bounds != null && e.getX() >= bounds.x + bounds.width - 58) {
+                    extensionsList.setSelectedIndex(index);
+                    eliminarExtensionSeleccionada();
+                }
+            }
+        });
 
         FlatScrollPane scroll = new FlatScrollPane();
         scroll.setBorder(null);
@@ -216,88 +258,226 @@ final class PanelExtensiones extends JPanel {
         scroll.setBackground(AppTheme.getPanelBackground());
         scroll.getViewport().setOpaque(true);
         scroll.getViewport().setBackground(AppTheme.getPanelBackground());
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
         scroll.setViewportView(extensionsList);
         content.add(scroll, BorderLayout.CENTER);
     }
 
+    private void configureExtensionActionButton(AbstractButton button,
+                                                String iconPath,
+                                                String tooltip,
+                                                int iconSize,
+                                                java.util.function.Supplier<Color> colorSupplier,
+                                                boolean prominent) {
+        if (button == null) {
+            return;
+        }
+        AppTheme.applyHeaderIconButtonStyle(button);
+        button.setToolTipText(tooltip);
+        button.setIcon(SvgIconFactory.create(iconPath, iconSize, iconSize, colorSupplier));
+        int buttonSize = prominent ? 54 : 38;
+        button.setPreferredSize(new Dimension(buttonSize, buttonSize));
+        button.setMinimumSize(new Dimension(buttonSize, buttonSize));
+        button.setMaximumSize(new Dimension(buttonSize, buttonSize));
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.putClientProperty("JButton.buttonType", "roundRect");
+        button.setBackground(AppTheme.getBackground());
+        button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), AppTheme.getSubtleBorderColor(), 1f));
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                if (!button.isEnabled()) {
+                    return;
+                }
+                button.setBackground(AppTheme.getSoftSelectionBackground());
+                button.repaint();
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                button.setBackground(AppTheme.getBackground());
+                button.repaint();
+            }
+        });
+    }
+
+    private void configureFolderHover(AbstractButton button) {
+        if (button == null) {
+            return;
+        }
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                if (!button.isEnabled()) {
+                    return;
+                }
+                button.setIcon(SvgIconFactory.create("easymcicons/folder-open.svg", 22, 22, AppTheme::getForeground));
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                button.setIcon(SvgIconFactory.create("easymcicons/folder.svg", 22, 22, AppTheme::getForeground));
+            }
+        });
+    }
+
+    private void repaintExtensionRows(int firstIndex, int secondIndex) {
+        Rectangle repaintBounds = null;
+        if (firstIndex >= 0 && firstIndex < extensionsModel.getSize()) {
+            repaintBounds = extensionsList.getCellBounds(firstIndex, firstIndex);
+        }
+        if (secondIndex >= 0 && secondIndex < extensionsModel.getSize()) {
+            Rectangle secondBounds = extensionsList.getCellBounds(secondIndex, secondIndex);
+            repaintBounds = repaintBounds == null ? secondBounds : repaintBounds.union(secondBounds);
+        }
+        if (repaintBounds != null) {
+            extensionsList.repaint(repaintBounds);
+        }
+    }
+
     private void configurarPanelDetalles() {
-        placeholderLabel.setFont(placeholderLabel.getFont().deriveFont(Font.BOLD, 24f));
-        placeholderLabel.setForeground(AppTheme.withAlpha(AppTheme.getMainAccent(), 180));
+        placeholderLabel.setFont(placeholderLabel.getFont().deriveFont(Font.BOLD, 20f));
+        placeholderLabel.setForeground(AppTheme.getMutedForeground());
 
         JPanel emptyPanel = new JPanel(new GridBagLayout());
         emptyPanel.setOpaque(false);
         emptyPanel.add(placeholderLabel);
 
-        JPanel detailsPanel = new JPanel(new BorderLayout(0, 16));
-        detailsPanel.setOpaque(false);
-
-        JPanel header = new JPanel(new BorderLayout(12, 0));
-        header.setOpaque(false);
         heroIconLabel.setIcon(SvgIconFactory.create("easymcicons/box-unselected.svg", 52, 52));
-        header.add(heroIconLabel, BorderLayout.WEST);
-
-        JPanel titleBlock = new JPanel();
-        titleBlock.setOpaque(false);
-        titleBlock.setLayout(new BoxLayout(titleBlock, BoxLayout.Y_AXIS));
-        detailsTitleLabel.setFont(detailsTitleLabel.getFont().deriveFont(Font.BOLD, 17f));
-        titleBlock.add(detailsTitleLabel);
-        titleBlock.add(Box.createVerticalStrut(4));
-        titleBlock.add(detailsVersionLabel);
-        titleBlock.add(Box.createVerticalStrut(2));
-        titleBlock.add(detailsAuthorLabel);
-        header.add(titleBlock, BorderLayout.CENTER);
-        detailsPanel.add(header, BorderLayout.NORTH);
-
-        JPanel body = new JPanel();
-        body.setOpaque(false);
-        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.add(createInfoRow("Estado", detailsStateLabel));
-        body.add(Box.createVerticalStrut(8));
-        body.add(createInfoRow("Actualizacion", detailsUpdateLabel));
-        body.add(Box.createVerticalStrut(8));
-        body.add(createInfoRow("Origen", detailsSourceLabel));
-        body.add(Box.createVerticalStrut(8));
-        body.add(createInfoRow("Version remota", detailsRemoteVersionLabel));
-        body.add(Box.createVerticalStrut(8));
-        body.add(createInfoRow("Archivo", detailsFileLabel));
-        body.add(Box.createVerticalStrut(8));
-        body.add(createInfoRow("Ruta", detailsPathLabel));
-        body.add(Box.createVerticalStrut(12));
-
-        JLabel descriptionTitle = new JLabel("Descripcion");
-        descriptionTitle.setFont(descriptionTitle.getFont().deriveFont(Font.BOLD, 15f));
-        descriptionTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        body.add(descriptionTitle);
-        body.add(Box.createVerticalStrut(6));
-
-        descriptionArea.setEditable(false);
-        descriptionArea.setLineWrap(true);
-        descriptionArea.setWrapStyleWord(true);
-        descriptionArea.setOpaque(false);
-        descriptionArea.setBorder(null);
-        descriptionArea.setFocusable(false);
-        descriptionArea.setForeground(AppTheme.getForeground());
-        descriptionArea.setFont(descriptionArea.getFont().deriveFont(14f));
-        descriptionArea.setAlignmentX(Component.LEFT_ALIGNMENT);
-        body.add(descriptionArea);
-        detailsPanel.add(body, BorderLayout.CENTER);
+        ExtensionDetailsLayout.configureStatusBadge(detailsStatusBadgeLabel);
+        AppTheme.applyHeaderIconButtonStyle(detailsActionButton);
+        detailsActionButton.setPreferredSize(new Dimension(56, 56));
+        detailsActionButton.setMinimumSize(new Dimension(56, 56));
+        detailsActionButton.setToolTipText("Eliminar " + extensionSingularLower());
+        detailsActionButton.addActionListener(e -> eliminarExtensionSeleccionada());
+        JPanel detailsPanel = new ExtensionDetailsLayout(
+                heroIconLabel,
+                detailsTitleLabel,
+                detailsVersionLabel,
+                detailsStatusBadgeLabel,
+                detailsActionButton,
+                descriptionArea,
+                buildDetailsSidePanel(),
+                List.of(
+                        buildCatalogParitySection(),
+                        buildInstalledMetadataSection()
+                ),
+                List.of(),
+                this::repaint
+        );
 
         detailsContentCards.setOpaque(false);
         detailsContentCards.add(emptyPanel, EMPTY_CARD);
         detailsContentCards.add(detailsPanel, DETAILS_CARD);
         detailsCard.getContentPanel().add(detailsContentCards, BorderLayout.CENTER);
-        mostrarPlaceholderDetalles("Selecciona una extension");
+        mostrarPlaceholderDetalles("Selecciona " + articleForExtension() + " " + extensionSingularLower());
     }
 
-    private JPanel createInfoRow(String title, JLabel valueLabel) {
-        JPanel row = new JPanel(new BorderLayout(0, 4));
-        row.setOpaque(false);
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
-        valueLabel.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 190));
-        row.add(titleLabel, BorderLayout.NORTH);
-        row.add(valueLabel, BorderLayout.CENTER);
-        return row;
+    private JPanel buildDetailsSidePanel() {
+        JPanel panel = new JPanel(new BorderLayout(0, 6));
+        panel.setOpaque(false);
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel title = new JLabel(getSideSectionTitle());
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        title.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 225));
+        panel.add(title, BorderLayout.NORTH);
+        panel.add(detailsSideLabel, BorderLayout.CENTER);
+        detailsSideLabel.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 215));
+        detailsSideLabel.setVerticalAlignment(SwingConstants.TOP);
+        return panel;
+    }
+
+    private JPanel buildCatalogParitySection() {
+        JPanel panel = new JPanel();
+        panel.setOpaque(false);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.add(ExtensionDetailsLayout.buildInfoRow("Plataforma", detailsSourceLabel));
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(ExtensionDetailsLayout.buildInfoRowWithDivider("Proveedor", detailsProviderNameLabel, detailsDownloadsLabel));
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(ExtensionDetailsLayout.buildInfoRow("Proyecto", detailsLinksLabel));
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(ExtensionDetailsLayout.buildInfoRow("Licencia", detailsLicenseLabel));
+        return panel;
+    }
+
+    private JPanel buildInstalledMetadataSection() {
+        return ExtensionDetailsLayout.buildInfoGrid(List.of(
+                ExtensionDetailsLayout.buildInfoRow("Version instalada", detailsInstalledVersionLabel),
+                ExtensionDetailsLayout.buildInfoRow("Version remota", detailsRemoteVersionLabel),
+                ExtensionDetailsLayout.buildInfoRow("Actualizacion", detailsUpdateLabel),
+                ExtensionDetailsLayout.buildInfoRow("Archivo", detailsFileLabel),
+                ExtensionDetailsLayout.buildInfoRow("Ruta", detailsPathLabel),
+                ExtensionDetailsLayout.buildInfoRow(getMetadataPlatformLabel(), detailsLoadersLabel),
+                ExtensionDetailsLayout.buildInfoRow("Minecraft", detailsMinecraftLabel),
+                ExtensionDetailsLayout.buildInfoRow("Metadata local", detailsMetadataFilesLabel)
+        ));
+    }
+
+    private void updateDetailsStatusBadge(ServerExtension extension, InstalledExtensionStatus status) {
+        VisualStatus visualStatus = visualStatus(status);
+        detailsStatusBadgeLabel.setText(visualStatus == VisualStatus.OK
+                ? resolveExtensionName(extension) + " está correctamente instalada en este servidor."
+                : status == null ? "Desconocido" : status.summary());
+        detailsStatusBadgeLabel.setToolTipText(buildStatusTooltip(status));
+        ExtensionDetailsLayout.applyStatusBadgeStyle(
+                detailsStatusBadgeLabel,
+                statusForeground(visualStatus),
+                statusBackground(visualStatus),
+                AppTheme.withAlpha(statusForeground(visualStatus), 70)
+        );
+    }
+
+    private void toggleViewMode() {
+        viewMode = viewMode == ExtensionListViewMode.DETAILED
+                ? ExtensionListViewMode.COMPACT
+                : ExtensionListViewMode.DETAILED;
+        GestorConfiguracion.guardarExtensionesListaCompacta(viewMode == ExtensionListViewMode.COMPACT);
+        updateViewModeButton();
+        applyListViewMode();
+    }
+
+    private void updateViewModeButton() {
+        boolean compact = viewMode == ExtensionListViewMode.COMPACT;
+        SvgIconFactory.apply(
+                viewModeButton,
+                compact ? "easymcicons/maximize.svg" : "easymcicons/minimize.svg",
+                18,
+                18,
+                AppTheme::getForeground
+        );
+        viewModeButton.setToolTipText(compact ? "Vista compacta activa" : "Vista detallada activa");
+    }
+
+    private void applyListViewMode() {
+        extensionsList.setCellRenderer(new ExtensionCellRenderer());
+        extensionsList.setFixedCellHeight(viewMode == ExtensionListViewMode.COMPACT ? 42 : -1);
+        extensionsList.revalidate();
+        extensionsList.repaint();
+        refreshLayout();
+    }
+
+    private void initializeSplitLayout() {
+        if (splitInitialized || splitPane.getWidth() <= 0) {
+            return;
+        }
+        splitInitialized = true;
+        splitPane.setDividerLocation(0.56d);
+        splitPane.revalidate();
+        splitPane.repaint();
+    }
+
+    private void refreshLayout() {
+        revalidate();
+        repaint();
+        listCard.revalidate();
+        listCard.repaint();
+        detailsCard.revalidate();
+        detailsCard.repaint();
+        splitPane.revalidate();
+        splitPane.repaint();
     }
 
     private void onExtensionSelected(ListSelectionEvent event) {
@@ -307,7 +487,7 @@ final class PanelExtensiones extends JPanel {
         ServerExtension extension = extensionsList.getSelectedValue();
         updateActionState();
         if (extension == null) {
-            mostrarPlaceholderDetalles("Selecciona una extension");
+            mostrarPlaceholderDetalles("Selecciona " + articleForExtension() + " " + extensionSingularLower());
             return;
         }
         mostrarDetalles(extension);
@@ -315,28 +495,41 @@ final class PanelExtensiones extends JPanel {
 
     private void mostrarDetalles(ServerExtension extension) {
         if (extension == null) {
-            mostrarPlaceholderDetalles("Selecciona una extension");
+            mostrarPlaceholderDetalles("Selecciona " + articleForExtension() + " " + extensionSingularLower());
             return;
         }
 
+        InstalledExtensionStatus status = assessInstalledStatus(extension);
         heroIconLabel.setIcon(resolveExtensionIcon(extension, 52));
         detailsTitleLabel.setText(resolveExtensionName(extension));
-        detailsVersionLabel.setText("Version " + resolveVersion(extension));
-        detailsAuthorLabel.setText(resolveAuthor(extension));
-        detailsStateLabel.setText(describeCompatibility(extension).summary());
+        detailsVersionLabel.setText("Version " + resolveVersion(extension) + "  |  " + resolveAuthor(extension));
+        detailsActionButton.setIcon(SvgIconFactory.create("easymcicons/trash-unselected.svg", 48, 48, AppTheme::getForeground));
+        detailsActionButton.setEnabled(!loadingExtensions && !mutatingExtensions);
+        updateDetailsStatusBadge(extension, status);
+        detailsSideLabel.setText("<html>" + escapeHtml(sideText(extension)) + "</html>");
+        detailsInstalledVersionLabel.setText("<html>" + escapeHtml(resolveVersion(extension)) + "</html>");
         detailsUpdateLabel.setText(resolveUpdateState(extension));
-        detailsSourceLabel.setText(describeSource(extension.getSource()));
+        detailsSourceLabel.setText("<html>" + escapeHtml(resolvePlatformDetails(extension)) + "</html>");
+        detailsProviderNameLabel.setText(describeSource(extension.getSource()));
+        detailsDownloadsLabel.setText(resolveDownloads(extension));
         detailsRemoteVersionLabel.setText(resolveRemoteVersion(extension));
         detailsFileLabel.setText(resolveFileName(extension));
         detailsPathLabel.setText(resolveRelativePath(extension.getLocalMetadata()));
-        descriptionArea.setText(resolveDescription(extension, describeCompatibility(extension)));
+        detailsLoadersLabel.setText("<html>" + escapeHtml(joinMetadata(extension.getLocalMetadata() == null ? null : extension.getLocalMetadata().getSupportedLoaders(), "-")) + "</html>");
+        detailsMinecraftLabel.setText("<html>" + escapeHtml(resolveMinecraftMetadata(extension)) + "</html>");
+        detailsLicenseLabel.setText("<html>" + escapeHtml(resolveLicense(extension)) + "</html>");
+        detailsLinksLabel.setText("<html>" + escapeHtml(resolveLinks(extension)) + "</html>");
+        detailsMetadataFilesLabel.setText("<html>" + escapeHtml(joinMetadata(extension.getLocalMetadata() == null ? null : extension.getLocalMetadata().getEmbeddedMetadataFiles(), "-")) + "</html>");
+        setDescriptionText(baseDescription(extension));
 
         ((CardLayout) detailsContentCards.getLayout()).show(detailsContentCards, DETAILS_CARD);
+        refreshLayout();
     }
 
     private void mostrarPlaceholderDetalles(String text) {
         placeholderLabel.setText(text);
         ((CardLayout) detailsContentCards.getLayout()).show(detailsContentCards, EMPTY_CARD);
+        refreshLayout();
     }
 
     private void instalarExtensionManual() {
@@ -350,6 +543,15 @@ final class PanelExtensiones extends JPanel {
 
         File selected = chooser.getSelectedFile();
         if (selected == null) {
+            return;
+        }
+
+        if (EventQueue.isDispatchThread()) {
+            mutatingExtensions = true;
+            summaryLabel.setText("Validando " + extensionSingularLower() + " manual...");
+            directoriesLabel.setText(selected.getName());
+            updateActionState();
+            new ManualInstallWorker(selected.toPath(), false).execute();
             return;
         }
 
@@ -367,7 +569,7 @@ final class PanelExtensiones extends JPanel {
             if (compatibility.warning()) {
                 int confirm = JOptionPane.showConfirmDialog(
                         this,
-                        compatibility.summary() + "\n\n¿Quieres instalar la extension de todas formas?",
+                        compatibility.summary() + "\n\n¿Quieres instalar " + articleForExtension() + " " + extensionSingularLower() + " de todas formas?",
                         "Compatibilidad dudosa",
                         JOptionPane.YES_NO_OPTION,
                         JOptionPane.WARNING_MESSAGE
@@ -377,41 +579,15 @@ final class PanelExtensiones extends JPanel {
                 }
             }
             mutatingExtensions = true;
-            summaryLabel.setText("Instalando extension manual...");
+            summaryLabel.setText("Instalando " + extensionSingularLower() + " manual...");
             directoriesLabel.setText(selected.getName());
             updateActionState();
-
-            new SwingWorker<Void, Void>() {
-                @Override
-                protected Void doInBackground() throws Exception {
-                    gestorServidores.instalarExtensionManual(server, selected.toPath());
-                    return null;
-                }
-
-                @Override
-                protected void done() {
-                    mutatingExtensions = false;
-                    updateActionState();
-                    try {
-                        get();
-                        recargarExtensiones(false);
-                    } catch (Exception ex) {
-                        summaryLabel.setText("No se ha podido instalar la extension.");
-                        directoriesLabel.setText(rootMessage(ex));
-                        JOptionPane.showMessageDialog(
-                                PanelExtensiones.this,
-                                "No se ha podido instalar la extension: " + rootMessage(ex),
-                                "Extensiones",
-                                JOptionPane.ERROR_MESSAGE
-                        );
-                    }
-                }
-            }.execute();
+            new ManualInstallWorker(selected.toPath()).execute();
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(
                     this,
-                    "No se ha podido validar la extension: " + ex.getMessage(),
-                    "Extensiones",
+                    "No se ha podido validar " + articleForExtension() + " " + extensionSingularLower() + ": " + ex.getMessage(),
+                    getSectionLabel(),
                     JOptionPane.ERROR_MESSAGE
             );
         }
@@ -423,10 +599,11 @@ final class PanelExtensiones extends JPanel {
             return;
         }
 
+        List<String> dependents = findDependentExtensions(extension);
         int confirm = JOptionPane.showConfirmDialog(
                 this,
-                "¿Seguro que quieres eliminar '" + resolveExtensionName(extension) + "' de este servidor?",
-                "Eliminar extension",
+                buildRemoveConfirmationMessage(extension, dependents),
+                "Eliminar " + extensionSingularLower(),
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE
         );
@@ -435,36 +612,100 @@ final class PanelExtensiones extends JPanel {
         }
 
         mutatingExtensions = true;
-        summaryLabel.setText("Eliminando extension...");
+        summaryLabel.setText("Eliminando " + extensionSingularLower() + "...");
         directoriesLabel.setText(resolveExtensionName(extension));
         updateActionState();
+        new RemoveExtensionWorker(extension).execute();
+    }
 
-        new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                gestorServidores.eliminarExtensionLocal(server, extension);
-                return null;
+    private String buildRemoveConfirmationMessage(ServerExtension extension, List<String> dependents) {
+        String extensionName = resolveExtensionName(extension);
+        if (dependents == null || dependents.isEmpty()) {
+            return "¿Seguro que quieres eliminar '" + extensionName + "' de este servidor?";
+        }
+        return "Hay " + getSectionLabel().toLowerCase(Locale.ROOT) + " que necesitan " + extensionName + " para funcionar:\n\n- "
+                + String.join("\n- ", dependents)
+                + "\n\n¿Quieres eliminarlo igualmente?";
+    }
+
+    private List<String> findDependentExtensions(ServerExtension dependencyCandidate) {
+        if (dependencyCandidate == null || server == null || server.getExtensions() == null) {
+            return List.of();
+        }
+        List<String> dependents = new ArrayList<>();
+        for (ServerExtension installed : server.getExtensions()) {
+            if (installed == null || installed == dependencyCandidate || isSameInstalledExtension(installed, dependencyCandidate)) {
+                continue;
             }
+            if (dependsOn(installed, dependencyCandidate)) {
+                dependents.add(resolveExtensionName(installed));
+            }
+        }
+        return dependents.stream().distinct().sorted(String.CASE_INSENSITIVE_ORDER).toList();
+    }
 
-            @Override
-            protected void done() {
-                mutatingExtensions = false;
-                updateActionState();
-                try {
-                    get();
-                    recargarExtensiones(false);
-                } catch (Exception ex) {
-                    summaryLabel.setText("No se ha podido eliminar la extension.");
-                    directoriesLabel.setText(rootMessage(ex));
-                    JOptionPane.showMessageDialog(
-                            PanelExtensiones.this,
-                            "No se ha podido eliminar la extension: " + rootMessage(ex),
-                            "Extensiones",
-                            JOptionPane.ERROR_MESSAGE
-                    );
+    private boolean dependsOn(ServerExtension installed, ServerExtension dependencyCandidate) {
+        ExtensionLocalMetadata metadata = installed == null ? null : installed.getLocalMetadata();
+        if (metadata == null) {
+            return false;
+        }
+        if (metadata.getDependencies() != null) {
+            for (ExtensionRemoteDependency dependency : metadata.getDependencies()) {
+                if (matchesDependency(dependency, dependencyCandidate)) {
+                    return true;
                 }
             }
-        }.execute();
+        }
+        if (metadata.getLocalDependencyDescriptions() != null) {
+            String dependencyName = normalizeDependencyText(resolveExtensionName(dependencyCandidate));
+            String dependencyFile = normalizeDependencyText(resolveFileName(dependencyCandidate));
+            for (String description : metadata.getLocalDependencyDescriptions()) {
+                String normalized = normalizeDependencyText(description);
+                if (normalized != null && (normalized.equals(dependencyName)
+                        || dependencyName != null && normalized.contains(dependencyName)
+                        || dependencyFile != null && normalized.contains(dependencyFile))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesDependency(ExtensionRemoteDependency dependency, ServerExtension dependencyCandidate) {
+        if (dependency == null || dependencyCandidate == null) {
+            return false;
+        }
+        ExtensionSource source = dependencyCandidate.getSource();
+        if (source != null
+                && isSameText(source.getProvider(), dependency.getProviderId())
+                && isSameText(source.getProjectId(), dependency.getProjectId())) {
+            return true;
+        }
+        return isSameText(resolveExtensionName(dependencyCandidate), dependency.getDisplayName())
+                || isSameText(resolveExtensionName(dependencyCandidate), dependency.getProjectId());
+    }
+
+    private boolean isSameInstalledExtension(ServerExtension left, ServerExtension right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        ExtensionLocalMetadata leftMetadata = left.getLocalMetadata();
+        ExtensionLocalMetadata rightMetadata = right.getLocalMetadata();
+        return isSameText(left.getId(), right.getId())
+                || isSameText(leftMetadata == null ? null : leftMetadata.getRelativePath(), rightMetadata == null ? null : rightMetadata.getRelativePath())
+                || isSameText(resolveFileName(left), resolveFileName(right));
+    }
+
+    private boolean isSameText(String left, String right) {
+        return left != null && right != null && !left.isBlank() && !right.isBlank()
+                && left.trim().equalsIgnoreCase(right.trim());
+    }
+
+    private String normalizeDependencyText(String value) {
+        if (value == null || value.isBlank() || "-".equals(value.trim())) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT).replace(".jar", "");
     }
 
     private void abrirCarpetaExtensiones() {
@@ -477,34 +718,125 @@ final class PanelExtensiones extends JPanel {
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(
                     this,
-                    "No se ha podido abrir la carpeta de extensiones: " + ex.getMessage(),
-                    "Extensiones",
+                    "No se ha podido abrir la carpeta de " + extensionPluralLower() + ": " + ex.getMessage(),
+                    getSectionLabel(),
                     JOptionPane.ERROR_MESSAGE
             );
         } catch (UnsupportedOperationException ex) {
             JOptionPane.showMessageDialog(
                     this,
                     "Este sistema no soporta abrir carpetas desde Java.",
-                    "Extensiones",
+                    getSectionLabel(),
                     JOptionPane.ERROR_MESSAGE
             );
         }
     }
 
+    private ServerEcosystemType currentEcosystem() {
+        return ecosystemOf(server);
+    }
+
+    static ServerEcosystemType ecosystemOf(Server server) {
+        if (server == null) {
+            return ServerEcosystemType.UNKNOWN;
+        }
+        if (server.getEcosystemType() != null && server.getEcosystemType() != ServerEcosystemType.UNKNOWN) {
+            return server.getEcosystemType();
+        }
+        ServerPlatform platform = server.getPlatform();
+        if (platform != null && platform != ServerPlatform.UNKNOWN) {
+            return platform.getDefaultEcosystemType();
+        }
+        return ServerEcosystemType.UNKNOWN;
+    }
+
+    static ServerExtensionType extensionTypeForEcosystem(ServerEcosystemType ecosystemType) {
+        return switch (ecosystemType == null ? ServerEcosystemType.UNKNOWN : ecosystemType) {
+            case MODS -> ServerExtensionType.MOD;
+            case PLUGINS -> ServerExtensionType.PLUGIN;
+            default -> ServerExtensionType.UNKNOWN;
+        };
+    }
+
+    static boolean supportsModpackActions(ServerEcosystemType ecosystemType) {
+        return (ecosystemType == null ? ServerEcosystemType.UNKNOWN : ecosystemType) == ServerEcosystemType.MODS;
+    }
+
     private String getSectionLabel() {
-        return switch (server.getEcosystemType() == null ? ServerEcosystemType.UNKNOWN : server.getEcosystemType()) {
+        return switch (currentEcosystem()) {
             case MODS -> "Mods";
             case PLUGINS -> "Plugins";
             default -> "Extensiones";
         };
     }
 
+    private String getSideSectionTitle() {
+        return switch (currentEcosystem()) {
+            case MODS -> "Lado del mod";
+            case PLUGINS -> "Entorno del plugin";
+            default -> "Lado de la extension";
+        };
+    }
+
+    private String getMetadataPlatformLabel() {
+        return switch (currentEcosystem()) {
+            case MODS -> "Loaders";
+            case PLUGINS -> "Plataformas";
+            default -> "Compatibilidad";
+        };
+    }
+
     private String titleForManualInstall() {
-        return switch (server.getEcosystemType() == null ? ServerEcosystemType.UNKNOWN : server.getEcosystemType()) {
+        return switch (currentEcosystem()) {
             case MODS -> "Selecciona un mod (.jar)";
             case PLUGINS -> "Selecciona un plugin (.jar)";
             default -> "Selecciona una extension (.jar)";
         };
+    }
+
+    private String extensionSingularLower() {
+        return switch (currentEcosystem()) {
+            case MODS -> "mod";
+            case PLUGINS -> "plugin";
+            default -> "extension";
+        };
+    }
+
+    private String extensionPluralLower() {
+        return switch (currentEcosystem()) {
+            case MODS -> "mods";
+            case PLUGINS -> "plugins";
+            default -> "extensiones";
+        };
+    }
+
+    private String articleForExtension() {
+        return switch (currentEcosystem()) {
+            case MODS, PLUGINS -> "un";
+            default -> "una";
+        };
+    }
+
+    private String managedDirectoryLabel() {
+        return switch (currentEcosystem()) {
+            case MODS -> "Carpeta de mods";
+            case PLUGINS -> "Carpeta de plugins";
+            default -> "Carpeta de extensiones";
+        };
+    }
+
+    private String unsupportedSummary() {
+        return currentEcosystem() == ServerEcosystemType.NONE
+                ? "Este servidor Vanilla no admite extensiones gestionadas."
+                : "Este servidor no usa una plataforma con extensiones gestionables.";
+    }
+
+    private String unsupportedActionHint() {
+        boolean convertible = gestorServidores != null && gestorServidores.puedeConvertirseAPlataformaCompatible(server);
+        if (convertible) {
+            return "Convierte el servidor a Forge, Fabric, Paper u otra plataforma compatible para gestionar extensiones.";
+        }
+        return "No hay carpeta de mods o plugins disponible para este servidor.";
     }
 
     private String formatDirectories(List<Path> directories) {
@@ -523,25 +855,47 @@ final class PanelExtensiones extends JPanel {
     }
 
     private String resolveVersion(ServerExtension extension) {
-        return extension == null || extension.getVersion() == null || extension.getVersion().isBlank()
-                ? "sin version"
-                : extension.getVersion();
+        String version = firstUsableText(
+                extension == null ? null : extension.getVersion(),
+                extension == null || extension.getLocalMetadata() == null ? null : extension.getLocalMetadata().getInstalledVersion()
+        );
+        return version == null ? "sin version" : version;
     }
 
     private String resolveAuthor(ServerExtension extension) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        if (metadata != null && metadata.getAuthors() != null && !metadata.getAuthors().isEmpty()) {
+            return String.join(", ", metadata.getAuthors().stream()
+                    .filter(author -> author != null && !author.isBlank())
+                    .limit(3)
+                    .toList());
+        }
         ExtensionSource source = extension == null ? null : extension.getSource();
         String author = source == null ? null : source.getAuthor();
         return author == null || author.isBlank() ? "Autor desconocido" : author;
     }
 
-    private String resolveDescription(ServerExtension extension, ExtensionCompatibilityReport compatibility) {
-        if (compatibility != null && compatibility.reasons() != null && !compatibility.reasons().isEmpty()) {
-            String reasons = compatibility.reasons().stream().reduce((left, right) -> left + "\n- " + right).orElse("");
-            String prefix = compatibility.compatible() ? "" : "Compatibilidad:\n- " + reasons + "\n\n";
-            String description = baseDescription(extension);
-            return prefix + description;
+    private String firstUsableText(String... values) {
+        if (values == null) {
+            return null;
         }
-        return baseDescription(extension);
+        for (String value : values) {
+            if (isUsableMetadataText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private boolean isUsableMetadataText(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim();
+        if (normalized.startsWith("${") && normalized.endsWith("}")) {
+            return false;
+        }
+        return !normalized.contains(".jarVersion");
     }
 
     private String baseDescription(ServerExtension extension) {
@@ -565,13 +919,83 @@ final class PanelExtensiones extends JPanel {
         return metadata.getRelativePath();
     }
 
+    private String resolveDownloads(ServerExtension extension) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        Long downloads = metadata == null ? null : metadata.getDownloadCount();
+        if (downloads == null || downloads <= 0L) {
+            return "Descargas no disponibles";
+        }
+        return String.format(Locale.ROOT, "%,d descargas", downloads);
+    }
+
+    private String resolvePlatformDetails(ServerExtension extension) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        String loaders = joinMetadata(metadata == null ? null : metadata.getSupportedLoaders(), null);
+        ServerPlatform platform = extension == null || extension.getPlatform() == null
+                ? ServerPlatform.UNKNOWN
+                : extension.getPlatform();
+        String platformText = platform == ServerPlatform.UNKNOWN ? null : platform.name();
+        return firstUsableText(loaders, platformText, "-");
+    }
+
+    private void setDescriptionText(String text) {
+        descriptionArea.setText(text == null || text.isBlank() ? "Sin descripcion disponible." : text);
+        descriptionArea.setCaretPosition(0);
+    }
+
+    private String resolveMinecraftMetadata(ServerExtension extension) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        String versions = joinMetadata(metadata == null ? null : metadata.getSupportedMinecraftVersions(), null);
+        return firstUsableText(versions, metadata == null ? null : metadata.getMinecraftVersionConstraint(), "-");
+    }
+
+    private String resolveLicense(ServerExtension extension) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        ExtensionSource source = extension == null ? null : extension.getSource();
+        return firstUsableText(
+                metadata == null ? null : metadata.getLicenseName(),
+                source == null ? null : source.getLicenseName(),
+                "-"
+        );
+    }
+
+    private String resolveLinks(ServerExtension extension) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        ExtensionSource source = extension == null ? null : extension.getSource();
+        List<String> links = new ArrayList<>();
+        addLink(links, "Web", firstUsableText(metadata == null ? null : metadata.getWebsiteUrl(), source == null ? null : source.getWebsiteUrl()));
+        addLink(links, "Proyecto", source == null ? null : source.getProjectUrl());
+        addLink(links, "Issues", firstUsableText(metadata == null ? null : metadata.getIssuesUrl(), source == null ? null : source.getIssuesUrl()));
+        return links.isEmpty() ? "-" : String.join(" | ", links);
+    }
+
+    private void addLink(List<String> links, String label, String url) {
+        if (links == null || label == null || label.isBlank() || url == null || url.isBlank()) {
+            return;
+        }
+        links.add(label + ": " + url);
+    }
+
+    private String joinMetadata(List<String> values, String fallback) {
+        if (values == null || values.isEmpty()) {
+            return fallback;
+        }
+        String joined = values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .limit(6)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse(null);
+        return joined == null || joined.isBlank() ? fallback : joined;
+    }
+
     private String describeSource(ExtensionSource source) {
         if (source == null || source.getType() == null) {
             return "Desconocido";
         }
         return switch (source.getType()) {
             case MANUAL -> "Instalacion manual";
-            case LOCAL_FILE -> "Detectado localmente";
+            case LOCAL_FILE -> "Archivo local";
             case MODRINTH -> "Modrinth";
             case CURSEFORGE -> "CurseForge";
             case HANGAR -> "Hangar";
@@ -584,8 +1008,8 @@ final class PanelExtensiones extends JPanel {
         if (!gestorServidores.admiteGestionDeExtensiones(server)) {
             JOptionPane.showMessageDialog(
                     this,
-                    "Este servidor no admite una experiencia de catalogo para extensiones gestionadas.",
-                    "Extensiones",
+                    "Este servidor no admite una experiencia de catalogo para " + extensionPluralLower() + ".",
+                    getSectionLabel(),
                     JOptionPane.WARNING_MESSAGE
             );
             return;
@@ -593,15 +1017,118 @@ final class PanelExtensiones extends JPanel {
         ExtensionMarketplaceDialog.showDialog(this, gestorServidores, server, this::recargarExtensiones);
     }
 
+    private void exportarModpack() {
+        if (!supportsModpackActions(currentEcosystem())) {
+            JOptionPane.showMessageDialog(this, "La exportacion de modpacks solo esta disponible para servidores de mods.", "Mods", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Object selected = JOptionPane.showInputDialog(
+                this,
+                "Selecciona el contenido del modpack a exportar:",
+                "Exportar modpack",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                new Object[]{"Servidor", "Cliente", "Completo"},
+                "Completo"
+        );
+        if (selected == null) {
+            return;
+        }
+
+        CurseForgeModpackService.ExportMode mode = switch (selected.toString()) {
+            case "Servidor" -> CurseForgeModpackService.ExportMode.SERVER;
+            case "Cliente" -> CurseForgeModpackService.ExportMode.CLIENT;
+            default -> CurseForgeModpackService.ExportMode.COMPLETE;
+        };
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Exportar modpack CurseForge");
+        chooser.setSelectedFile(new File(safeServerNameForFile() + ".zip"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Archivo ZIP", "zip"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        Path target = chooser.getSelectedFile().toPath();
+        if (!target.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip")) {
+            target = target.resolveSibling(target.getFileName() + ".zip");
+        }
+
+        mutatingExtensions = true;
+        summaryLabel.setText("Exportando modpack...");
+        directoriesLabel.setText(target.getFileName().toString());
+        updateActionState();
+
+        Path exportTarget = target;
+        new ExportModpackWorker(exportTarget, mode).execute();
+    }
+
+    private void importarModpack() {
+        if (!supportsModpackActions(currentEcosystem())) {
+            JOptionPane.showMessageDialog(this, "La importacion de modpacks solo esta disponible para servidores de mods.", "Mods", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Importar modpack CurseForge");
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Archivo ZIP", "zip"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        Path sourceZip = chooser.getSelectedFile().toPath();
+
+        try {
+            CurseForgeModpackService.ImportManifest manifest = gestorServidores.leerManifestModpackCurseForge(sourceZip);
+            int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "Se importara el manifest \"" + manifest.name() + "\" con " + manifest.files().size() + " archivos.\n\nEsto descargara e instalara los mods en el servidor actual.",
+                    "Importar modpack",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+            if (confirm != JOptionPane.YES_OPTION) {
+                return;
+            }
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "No se ha podido leer el modpack: " + ex.getMessage(), "Importar modpack", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        mutatingExtensions = true;
+        summaryLabel.setText("Importando modpack...");
+        directoriesLabel.setText(sourceZip.getFileName().toString());
+        updateActionState();
+        new ImportModpackWorker(sourceZip).execute();
+    }
+
     private void updateActionState() {
         List<Path> directories = gestorServidores.obtenerDirectoriosExtensiones(server);
         boolean supported = gestorServidores.admiteGestionDeExtensiones(server) && !directories.isEmpty();
         boolean busy = loadingExtensions || mutatingExtensions;
+        boolean modsServer = supportsModpackActions(currentEcosystem());
+        refreshButton.setToolTipText("Refrescar " + extensionPluralLower());
+        installButton.setToolTipText("Instalar " + extensionSingularLower() + " .jar");
+        browseCatalogButton.setToolTipText("Explorar catalogo de " + extensionPluralLower());
+        openDirectoryButton.setToolTipText("Abrir carpeta de " + extensionPluralLower());
+        detailsActionButton.setToolTipText("Eliminar " + extensionSingularLower());
         installButton.setEnabled(supported && !busy);
         browseCatalogButton.setEnabled(supported && !busy);
+        importPackButton.setVisible(modsServer);
+        exportPackButton.setVisible(modsServer);
+        importPackButton.setEnabled(supported && modsServer && !busy);
+        exportPackButton.setEnabled(supported && modsServer && !busy);
         openDirectoryButton.setEnabled(supported && !busy);
-        removeButton.setEnabled(supported && !busy && extensionsList.getSelectedValue() != null);
+        detailsActionButton.setEnabled(supported && !busy && extensionsList.getSelectedValue() != null);
         extensionsList.setEnabled(!busy);
+    }
+
+    private String safeServerNameForFile() {
+        String name = server.getDisplayName();
+        if (name == null || name.isBlank()) {
+            return "modpack";
+        }
+        return name.replaceAll("[\\\\/:*?\"<>|]+", "_").trim();
     }
 
     private String rootMessage(Throwable error) {
@@ -614,6 +1141,14 @@ final class PanelExtensiones extends JPanel {
                 : current.getMessage();
     }
 
+    private Throwable rootCause(Throwable error) {
+        Throwable current = error;
+        while (current != null && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current == null ? error : current;
+    }
+
     private String resolveRemoteVersion(ServerExtension extension) {
         ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
         if (metadata == null || metadata.getKnownRemoteVersion() == null || metadata.getKnownRemoteVersion().isBlank()) {
@@ -623,6 +1158,11 @@ final class PanelExtensiones extends JPanel {
     }
 
     private javax.swing.Icon resolveExtensionIcon(ServerExtension extension, int size) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        String localIconUrl = metadata == null ? null : metadata.getLocalIconUrl();
+        if (localIconUrl != null && !localIconUrl.isBlank()) {
+            return ExtensionIconLoader.getIcon(localIconUrl, size, this::repaint);
+        }
         ExtensionSource source = extension == null ? null : extension.getSource();
         String iconUrl = source == null ? null : source.getIconUrl();
         return ExtensionIconLoader.getIcon(iconUrl, size, this::repaint);
@@ -648,15 +1188,84 @@ final class PanelExtensiones extends JPanel {
         return gestorServidores.validarCompatibilidadExtension(server, extension);
     }
 
+    private InstalledExtensionStatus assessInstalledStatus(ServerExtension extension) {
+        if (extension == null) {
+            return gestorServidores.evaluarEstadoExtensionInstalada(server, null);
+        }
+        return statusCache.computeIfAbsent(statusCacheKey(extension), ignored ->
+                gestorServidores.evaluarEstadoExtensionInstalada(server, extension));
+    }
+
     private VisualStatus resolveVisualStatus(ServerExtension extension) {
-        ExtensionCompatibilityReport compatibility = describeCompatibility(extension);
-        if (compatibility.status() == ExtensionCompatibilityStatus.INCOMPATIBLE) {
+        return visualStatus(assessInstalledStatus(extension));
+    }
+
+    private String statusCacheKey(ServerExtension extension) {
+        if (extension == null) {
+            return "-";
+        }
+        ExtensionLocalMetadata metadata = extension.getLocalMetadata();
+        return firstUsableText(
+                metadata == null ? null : metadata.getRelativePath(),
+                metadata == null ? null : metadata.getSha256(),
+                extension.getId(),
+                extension.getFileName(),
+                resolveExtensionName(extension)
+        );
+    }
+
+    private VisualStatus visualStatus(InstalledExtensionStatus status) {
+        ExtensionCompatibilityStatus severity = status == null ? ExtensionCompatibilityStatus.WARNING : status.severity();
+        if (severity == ExtensionCompatibilityStatus.INCOMPATIBLE) {
             return VisualStatus.INCOMPATIBLE;
         }
-        if (compatibility.status() == ExtensionCompatibilityStatus.WARNING) {
+        if (severity == ExtensionCompatibilityStatus.WARNING) {
             return VisualStatus.WARNING;
         }
         return VisualStatus.OK;
+    }
+
+    private Color statusForeground(VisualStatus status) {
+        return ExtensionStatusPresentation.foreground(toCompatibilityStatus(status));
+    }
+
+    private Color statusBackground(VisualStatus status) {
+        return ExtensionStatusPresentation.background(toCompatibilityStatus(status));
+    }
+
+    private String statusIconPath(VisualStatus status) {
+        return ExtensionStatusPresentation.iconPath(toCompatibilityStatus(status));
+    }
+
+    private Color statusIconColor(VisualStatus status) {
+        return ExtensionStatusPresentation.iconColor(toCompatibilityStatus(status));
+    }
+
+    private ExtensionCompatibilityStatus toCompatibilityStatus(VisualStatus status) {
+        return switch (status == null ? VisualStatus.WARNING : status) {
+            case OK -> ExtensionCompatibilityStatus.COMPATIBLE;
+            case WARNING -> ExtensionCompatibilityStatus.WARNING;
+            case INCOMPATIBLE -> ExtensionCompatibilityStatus.INCOMPATIBLE;
+        };
+    }
+
+    private String buildStatusTooltip(InstalledExtensionStatus status) {
+        if (status == null) {
+            return "Estado desconocido";
+        }
+        List<String> details = status.diagnostics();
+        if (details.isEmpty()) {
+            return status.summary();
+        }
+        StringBuilder tooltip = new StringBuilder("<html><body style='margin:0;padding:0'>")
+                .append(escapeHtml(status.summary()));
+        details.stream()
+                .filter(detail -> detail != null && !detail.isBlank())
+                .distinct()
+                .limit(6)
+                .forEach(detail -> tooltip.append("<br>- ").append(escapeHtml(detail)));
+        tooltip.append("</body></html>");
+        return tooltip.toString();
     }
 
     private boolean extensionFileExists(ServerExtension extension) {
@@ -676,7 +1285,7 @@ final class PanelExtensiones extends JPanel {
         if (extension == null) {
             return false;
         }
-        ServerEcosystemType ecosystemType = server.getEcosystemType() == null ? ServerEcosystemType.UNKNOWN : server.getEcosystemType();
+        ServerEcosystemType ecosystemType = currentEcosystem();
         ServerExtensionType extensionType = extension.getExtensionType() == null ? ServerExtensionType.UNKNOWN : extension.getExtensionType();
         if (ecosystemType == ServerEcosystemType.MODS && extensionType == ServerExtensionType.PLUGIN) {
             return true;
@@ -726,6 +1335,296 @@ final class PanelExtensiones extends JPanel {
         INCOMPATIBLE
     }
 
+    private String escapeHtml(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+    }
+
+    private record ImportSummary(int installed, List<String> warnings) {
+    }
+
+    private record ReloadResult(List<ServerExtension> extensions, Map<String, InstalledExtensionStatus> statuses) {
+    }
+
+    private final class ReloadExtensionsWorker extends SwingWorker<ReloadResult, Void> {
+        private final List<Path> directories;
+        private final String selectedRelativePath;
+
+        private ReloadExtensionsWorker(List<Path> directories, String selectedRelativePath) {
+            this.directories = directories == null ? List.of() : List.copyOf(directories);
+            this.selectedRelativePath = selectedRelativePath;
+        }
+
+        @Override
+        protected ReloadResult doInBackground() throws Exception {
+            List<ServerExtension> extensions = gestorServidores.sincronizarExtensionesInstaladas(server);
+            Map<String, InstalledExtensionStatus> statuses = new HashMap<>();
+            for (ServerExtension extension : extensions) {
+                statuses.put(statusCacheKey(extension), gestorServidores.evaluarEstadoExtensionInstalada(server, extension));
+            }
+            return new ReloadResult(extensions, statuses);
+        }
+
+        @Override
+        protected void done() {
+            loadingExtensions = false;
+            updateActionState();
+            extensionsModel.clear();
+            try {
+                ReloadResult result = get();
+                List<ServerExtension> extensions = result.extensions();
+                statusCache.clear();
+                statusCache.putAll(result.statuses());
+                summaryLabel.setText(getSectionLabel() + " instalados: " + extensions.size());
+                directoriesLabel.setText(managedDirectoryLabel() + ": " + formatDirectories(directories));
+
+                extensionsModel.addAll(extensions);
+                ExtensionIconLoader.prefetchIcons(
+                        extensionsList,
+                        extensions.stream()
+                                .map(extension -> {
+                                    ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+                                    if (metadata != null && metadata.getLocalIconUrl() != null && !metadata.getLocalIconUrl().isBlank()) {
+                                        return metadata.getLocalIconUrl();
+                                    }
+                                    ExtensionSource source = extension == null ? null : extension.getSource();
+                                    return source == null ? null : source.getIconUrl();
+                                })
+                                .filter(iconUrl -> iconUrl != null && !iconUrl.isBlank())
+                                .toList(),
+                        40,
+                        () -> extensionsList.repaint(extensionsList.getVisibleRect())
+                );
+
+                if (extensions.isEmpty()) {
+                    mostrarPlaceholderDetalles("No hay " + getSectionLabel().toLowerCase(Locale.ROOT) + " instalados");
+                    refreshLayout();
+                    return;
+                }
+                seleccionarExtensionPorRuta(selectedRelativePath);
+                applyListViewMode();
+            } catch (Exception ex) {
+                summaryLabel.setText("No se han podido cargar las extensiones.");
+                directoriesLabel.setText(rootMessage(ex));
+                mostrarPlaceholderDetalles("Error al leer extensiones");
+            }
+            refreshLayout();
+        }
+    }
+
+    private final class ManualInstallWorker extends SwingWorker<Void, Void> {
+        private final Path selectedPath;
+        private final boolean compatibilityAccepted;
+
+        private ManualInstallWorker(Path selectedPath) {
+            this(selectedPath, true);
+        }
+
+        private ManualInstallWorker(Path selectedPath, boolean compatibilityAccepted) {
+            this.selectedPath = selectedPath;
+            this.compatibilityAccepted = compatibilityAccepted;
+        }
+
+        @Override
+        protected Void doInBackground() throws Exception {
+            if (!compatibilityAccepted) {
+                ExtensionCompatibilityReport compatibility = gestorServidores.validarCompatibilidadExtension(server, selectedPath);
+                if (compatibility.incompatible()) {
+                    throw new ManualInstallCompatibilityException(compatibility, false);
+                }
+                if (compatibility.warning()) {
+                    throw new ManualInstallCompatibilityException(compatibility, true);
+                }
+            }
+            gestorServidores.instalarExtensionManual(server, selectedPath);
+            return null;
+        }
+
+        @Override
+        protected void done() {
+            mutatingExtensions = false;
+            updateActionState();
+            try {
+                get();
+                recargarExtensiones(false);
+            } catch (Exception ex) {
+                Throwable root = rootCause(ex);
+                if (root instanceof ManualInstallCompatibilityException compatibilityException) {
+                    handleManualInstallCompatibility(selectedPath, compatibilityException);
+                    return;
+                }
+                summaryLabel.setText("No se ha podido instalar " + articleForExtension() + " " + extensionSingularLower() + ".");
+                directoriesLabel.setText(rootMessage(ex));
+                JOptionPane.showMessageDialog(
+                        PanelExtensiones.this,
+                        "No se ha podido instalar " + articleForExtension() + " " + extensionSingularLower() + ": " + rootMessage(ex),
+                        getSectionLabel(),
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
+    }
+
+    private void handleManualInstallCompatibility(Path selectedPath, ManualInstallCompatibilityException exception) {
+        ExtensionCompatibilityReport compatibility = exception.report();
+        summaryLabel.setText("Instalacion manual pendiente.");
+        directoriesLabel.setText(selectedPath == null || selectedPath.getFileName() == null ? "-" : selectedPath.getFileName().toString());
+        if (!exception.canOverride()) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    compatibility.summary(),
+                    "Instalacion incompatible",
+                    JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                        compatibility.summary() + "\n\nÂ¿Quieres instalar " + articleForExtension() + " " + extensionSingularLower() + " de todas formas?",
+                "Compatibilidad dudosa",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+        mutatingExtensions = true;
+        summaryLabel.setText("Instalando " + extensionSingularLower() + " manual...");
+        updateActionState();
+        new ManualInstallWorker(selectedPath, true).execute();
+    }
+
+    private static final class ManualInstallCompatibilityException extends Exception {
+        private final ExtensionCompatibilityReport report;
+        private final boolean canOverride;
+
+        private ManualInstallCompatibilityException(ExtensionCompatibilityReport report, boolean canOverride) {
+            super(report == null ? "Compatibilidad no disponible." : report.summary());
+            this.report = report;
+            this.canOverride = canOverride;
+        }
+
+        private ExtensionCompatibilityReport report() {
+            return report;
+        }
+
+        private boolean canOverride() {
+            return canOverride;
+        }
+    }
+
+    private final class RemoveExtensionWorker extends SwingWorker<Void, Void> {
+        private final ServerExtension extension;
+
+        private RemoveExtensionWorker(ServerExtension extension) {
+            this.extension = extension;
+        }
+
+        @Override
+        protected Void doInBackground() throws Exception {
+            gestorServidores.eliminarExtensionLocal(server, extension);
+            return null;
+        }
+
+        @Override
+        protected void done() {
+            mutatingExtensions = false;
+            updateActionState();
+            try {
+                get();
+                recargarExtensiones(false);
+            } catch (Exception ex) {
+                summaryLabel.setText("No se ha podido eliminar " + articleForExtension() + " " + extensionSingularLower() + ".");
+                directoriesLabel.setText(rootMessage(ex));
+                JOptionPane.showMessageDialog(
+                        PanelExtensiones.this,
+                        "No se ha podido eliminar " + articleForExtension() + " " + extensionSingularLower() + ": " + rootMessage(ex),
+                        getSectionLabel(),
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
+    }
+
+    private final class ExportModpackWorker extends SwingWorker<CurseForgeModpackService.ExportResult, Void> {
+        private final Path exportTarget;
+        private final CurseForgeModpackService.ExportMode mode;
+
+        private ExportModpackWorker(Path exportTarget, CurseForgeModpackService.ExportMode mode) {
+            this.exportTarget = exportTarget;
+            this.mode = mode;
+        }
+
+        @Override
+        protected CurseForgeModpackService.ExportResult doInBackground() throws Exception {
+            return gestorServidores.exportarModpackCurseForge(server, exportTarget, mode);
+        }
+
+        @Override
+        protected void done() {
+            mutatingExtensions = false;
+            updateActionState();
+            try {
+                CurseForgeModpackService.ExportResult result = get();
+                summaryLabel.setText("Modpack exportado");
+                directoriesLabel.setText(result.archivePath().getFileName().toString());
+                StringBuilder message = new StringBuilder("Se ha exportado el modpack con ")
+                        .append(result.exportedFiles())
+                        .append(result.exportedFiles() == 1 ? " mod." : " mods.");
+                if (!result.skippedEntries().isEmpty()) {
+                    message.append("\n\nNo se han podido incluir algunas entradas:\n- ")
+                            .append(String.join("\n- ", result.skippedEntries()));
+                }
+                JOptionPane.showMessageDialog(PanelExtensiones.this, message.toString(), "Exportar modpack", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                summaryLabel.setText("No se ha podido exportar el modpack.");
+                directoriesLabel.setText(rootMessage(ex));
+                JOptionPane.showMessageDialog(PanelExtensiones.this, "No se ha podido exportar el modpack: " + rootMessage(ex), "Exportar modpack", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private final class ImportModpackWorker extends SwingWorker<ImportSummary, Void> {
+        private final Path sourceZip;
+
+        private ImportModpackWorker(Path sourceZip) {
+            this.sourceZip = sourceZip;
+        }
+
+        @Override
+        protected ImportSummary doInBackground() throws Exception {
+            List<String> warnings = new ArrayList<>();
+            int installed = gestorServidores.importarModpackCurseForge(server, sourceZip, warnings);
+            return new ImportSummary(installed, List.copyOf(warnings));
+        }
+
+        @Override
+        protected void done() {
+            mutatingExtensions = false;
+            updateActionState();
+            try {
+                ImportSummary summary = get();
+                StringBuilder message = new StringBuilder("Se han importado ")
+                        .append(summary.installed())
+                        .append(summary.installed() == 1 ? " mod." : " mods.");
+                if (!summary.warnings().isEmpty()) {
+                    message.append("\n\nAvisos:\n- ").append(String.join("\n- ", summary.warnings()));
+                }
+                JOptionPane.showMessageDialog(PanelExtensiones.this, message.toString(), "Importar modpack", JOptionPane.INFORMATION_MESSAGE);
+                recargarExtensiones(false);
+            } catch (Exception ex) {
+                summaryLabel.setText("No se ha podido importar el modpack.");
+                directoriesLabel.setText(rootMessage(ex));
+                JOptionPane.showMessageDialog(PanelExtensiones.this, "No se ha podido importar el modpack: " + rootMessage(ex), "Importar modpack", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
     private final class ExtensionCellRenderer implements ListCellRenderer<ServerExtension> {
         @Override
         public Component getListCellRendererComponent(JList<? extends ServerExtension> list,
@@ -733,66 +1632,241 @@ final class PanelExtensiones extends JPanel {
                                                       int index,
                                                       boolean isSelected,
                                                       boolean cellHasFocus) {
-            JPanel card = new JPanel(new BorderLayout(12, 0));
+            InstalledExtensionStatus status = assessInstalledStatus(value);
+            boolean compact = viewMode == ExtensionListViewMode.COMPACT;
+            if (compact) {
+                return createCompactRow(list, value, status, index, isSelected);
+            }
+            int rowWidth = Math.max(360, list.getWidth() - 18);
+            JPanel card = new JPanel(new BorderLayout(10, 0));
             card.setOpaque(true);
             card.setBorder(AppTheme.createRoundedBorder(
-                    new Insets(10, 10, 10, 10),
+                    new Insets(0, 0, 0, 0),
                     isSelected ? AppTheme.getMainAccent() : AppTheme.getBorderColor(),
                     1f
             ));
             card.setBackground(isSelected ? AppTheme.getSoftSelectionBackground() : AppTheme.getPanelBackground());
 
-            JLabel icon = new JLabel(resolveExtensionIcon(value, 40));
+            JLabel icon = new JLabel(resolveExtensionIcon(value, 52));
+            icon.setHorizontalAlignment(SwingConstants.CENTER);
+            icon.setVerticalAlignment(SwingConstants.CENTER);
+            icon.setOpaque(true);
+            icon.setBackground(AppTheme.withAlpha(AppTheme.getForeground(), 12));
+            icon.setPreferredSize(new Dimension(compact ? 38 : 48, compact ? 38 : 58));
+            icon.setPreferredSize(new Dimension(52, 52));
             card.add(icon, BorderLayout.WEST);
 
-            JPanel textBlock = new JPanel();
+            JPanel content = new JPanel(new BorderLayout(8, 0));
+            content.setOpaque(false);
+
+            JPanel textBlock = new JPanel(new BorderLayout(0, 2));
             textBlock.setOpaque(false);
-            textBlock.setLayout(new BoxLayout(textBlock, BoxLayout.Y_AXIS));
 
-            JLabel nameLabel = new JLabel(resolveExtensionName(value));
-            nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 16f));
-            textBlock.add(nameLabel);
+            JPanel titleRow = new JPanel();
+            titleRow.setOpaque(false);
+            titleRow.setLayout(new BoxLayout(titleRow, BoxLayout.X_AXIS));
 
-            JLabel authorLabel = new JLabel(resolveAuthor(value));
-            authorLabel.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 180));
-            textBlock.add(authorLabel);
+            int iconWidth = 64;
+            int actionWidth = 58;
+            int titleBudget = Math.max(190, rowWidth - iconWidth - actionWidth - 42);
+            JLabel nameLabel = new JLabel(ellipsize(resolveExtensionName(value), list.getFont().deriveFont(Font.BOLD, 15.5f), titleBudget / 2));
+            nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 15.5f));
+            nameLabel.setToolTipText(resolveExtensionName(value));
+            titleRow.add(nameLabel);
+            titleRow.add(Box.createHorizontalStrut(10));
 
-            JLabel versionLabel = new JLabel("Version " + resolveVersion(value));
-            versionLabel.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 180));
-            textBlock.add(versionLabel);
+            String titleMeta = extensionTypeLabel(value) + " / by " + resolveAuthor(value) + " / " + describeSource(value == null ? null : value.getSource());
+            JLabel metaLabel = new JLabel(ellipsize(titleMeta, list.getFont().deriveFont(Font.PLAIN, 12.5f), titleBudget / 2));
+            metaLabel.setFont(metaLabel.getFont().deriveFont(Font.PLAIN, 12.5f));
+            metaLabel.setForeground(AppTheme.getMutedForeground());
+            metaLabel.setToolTipText(titleMeta);
+            titleRow.add(metaLabel);
+            textBlock.add(titleRow, BorderLayout.NORTH);
 
-            card.add(textBlock, BorderLayout.CENTER);
-            card.add(createStateBadge(resolveVisualStatus(value)), BorderLayout.EAST);
+            String description = rowDescription(value, status);
+            JLabel descriptionLabel = new JLabel(ellipsize(description, list.getFont().deriveFont(13.25f), Math.max(120, rowWidth - iconWidth - actionWidth - 36)));
+            descriptionLabel.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 210));
+            descriptionLabel.setFont(descriptionLabel.getFont().deriveFont(13.25f));
+            descriptionLabel.setVerticalAlignment(SwingConstants.TOP);
+            descriptionLabel.setToolTipText(description);
+            textBlock.add(descriptionLabel, BorderLayout.CENTER);
+
+            JPanel eastPanel = new JPanel(new BorderLayout(8, 0));
+            eastPanel.setOpaque(false);
+            boolean hover = index == extensionListHoverIndex;
+            eastPanel.add(hover ? createRowActionIcon(52) : createStatusIcon(status, 52), BorderLayout.EAST);
+
+            content.add(textBlock, BorderLayout.CENTER);
+            content.add(eastPanel, BorderLayout.EAST);
+            card.add(content, BorderLayout.CENTER);
             return card;
         }
 
-        private JLabel createStateBadge(VisualStatus status) {
-            JLabel badge = new JLabel(symbolFor(status), SwingConstants.CENTER);
-            badge.setOpaque(true);
-            badge.setForeground(Color.WHITE);
-            badge.setPreferredSize(new Dimension(36, 36));
-            badge.setMinimumSize(new Dimension(36, 36));
-            badge.setMaximumSize(new Dimension(36, 36));
-            badge.setFont(badge.getFont().deriveFont(Font.BOLD, 22f));
-            badge.setBackground(colorFor(status));
-            badge.setBorder(BorderFactory.createEmptyBorder());
-            return badge;
+        private Component createCompactRow(JList<? extends ServerExtension> list, ServerExtension value, InstalledExtensionStatus status, int index, boolean isSelected) {
+            JPanel row = new JPanel(new BorderLayout(8, 0));
+            row.setOpaque(true);
+            row.setBackground(isSelected ? AppTheme.getSoftSelectionBackground() : AppTheme.getPanelBackground());
+            row.setBorder(AppTheme.createRoundedBorder(
+                    new Insets(0, 0, 0, 0),
+                    isSelected ? AppTheme.getMainAccent() : AppTheme.getBorderColor(),
+                    1f
+            ));
+
+            JLabel icon = new JLabel(resolveExtensionIcon(value, 42));
+            icon.setHorizontalAlignment(SwingConstants.CENTER);
+            icon.setVerticalAlignment(SwingConstants.CENTER);
+            icon.setPreferredSize(new Dimension(42, 42));
+            icon.setMinimumSize(new Dimension(42, 42));
+            row.add(icon, BorderLayout.WEST);
+
+            JPanel titleRow = new JPanel();
+            titleRow.setOpaque(false);
+            titleRow.setLayout(new BoxLayout(titleRow, BoxLayout.X_AXIS));
+            titleRow.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
+            int textBudget = Math.max(120, list.getWidth() - 120);
+            JLabel nameLabel = new JLabel(ellipsize(resolveExtensionName(value), list.getFont().deriveFont(Font.BOLD, 13.25f), textBudget / 2));
+            nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 13.25f));
+            nameLabel.setForeground(AppTheme.getForeground());
+            nameLabel.setToolTipText(resolveExtensionName(value));
+            titleRow.add(nameLabel);
+            titleRow.add(Box.createHorizontalStrut(8));
+
+            String titleMeta = extensionTypeLabel(value) + " / by " + resolveAuthor(value) + " / " + describeSource(value == null ? null : value.getSource());
+            JLabel metaLabel = new JLabel(ellipsize(titleMeta, list.getFont().deriveFont(Font.PLAIN, 12.25f), textBudget / 2));
+            metaLabel.setFont(metaLabel.getFont().deriveFont(Font.PLAIN, 12.25f));
+            metaLabel.setForeground(AppTheme.getMutedForeground());
+            metaLabel.setToolTipText(titleMeta);
+            titleRow.add(metaLabel);
+
+            JPanel center = new JPanel(new GridBagLayout());
+            center.setOpaque(false);
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 1d;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.anchor = GridBagConstraints.WEST;
+            center.add(titleRow, gbc);
+            row.add(center, BorderLayout.CENTER);
+            boolean hover = index == extensionListHoverIndex;
+            row.add(hover ? createRowActionIcon(42) : createStatusIcon(status, 42), BorderLayout.EAST);
+            return row;
         }
 
-        private String symbolFor(VisualStatus status) {
-            return switch (status == null ? VisualStatus.WARNING : status) {
-                case OK -> "✓";
-                case WARNING -> "!";
-                case INCOMPATIBLE -> "×";
-            };
+        private JLabel createStatusIcon(InstalledExtensionStatus status, int size) {
+            VisualStatus visualStatus = visualStatus(status);
+            JLabel label = new JLabel();
+            label.setHorizontalAlignment(SwingConstants.CENTER);
+            label.setVerticalAlignment(SwingConstants.CENTER);
+            label.setPreferredSize(new Dimension(size, size));
+            label.setMinimumSize(new Dimension(size, size));
+            label.setToolTipText(status == null ? "Estado desconocido" : status.summary());
+            int iconSize = Math.max(28, Math.min(size - 10, 34));
+            String iconPath = statusIconPath(visualStatus);
+            if (iconPath != null) {
+                label.setIcon(SvgIconFactory.create(iconPath, iconSize, iconSize, () -> statusIconColor(visualStatus)));
+            }
+            return label;
         }
 
-        private Color colorFor(VisualStatus status) {
-            return switch (status == null ? VisualStatus.WARNING : status) {
-                case OK -> new Color(112, 187, 0);
-                case WARNING -> new Color(255, 191, 64);
-                case INCOMPATIBLE -> new Color(255, 82, 82);
-            };
+        private JLabel createRowActionIcon(int size) {
+            JLabel label = new JLabel();
+            label.setHorizontalAlignment(SwingConstants.CENTER);
+            label.setVerticalAlignment(SwingConstants.CENTER);
+            label.setPreferredSize(new Dimension(size, size));
+            label.setMinimumSize(new Dimension(size, size));
+            label.setToolTipText("Eliminar " + extensionSingularLower());
+            int iconSize = Math.max(30, Math.min(size - 8, 42));
+            label.setIcon(SvgIconFactory.create("easymcicons/trash-unselected.svg", iconSize, iconSize, AppTheme::getForeground));
+            return label;
         }
+
+    }
+
+    private String shortDescription(ServerExtension extension) {
+        String description = baseDescription(extension).replace('\n', ' ').trim();
+        return description.length() > 110 ? description.substring(0, 107) + "..." : description;
+    }
+
+    private String rowDescription(ServerExtension extension, InstalledExtensionStatus status) {
+        String description = shortDescription(extension) + "  |  " + resolveFileName(extension);
+        if (status != null && status.severity() == ExtensionCompatibilityStatus.INCOMPATIBLE) {
+            description += "  |  Incompatible: " + status.summary();
+        }
+        return description;
+    }
+
+    private String extensionTypeLabel(ServerExtension extension) {
+        ServerExtensionType extensionType = extension == null || extension.getExtensionType() == null
+                ? ServerExtensionType.UNKNOWN
+                : extension.getExtensionType();
+        return extensionType.getDisplayName();
+    }
+
+    private String sideText(ServerExtension extension) {
+        ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
+        boolean supportsClient = sideSupported(metadata == null ? null : metadata.getClientSide());
+        boolean supportsServer = sideSupported(metadata == null ? null : metadata.getServerSide());
+        if (supportsClient && supportsServer) {
+            return "Cliente + servidor";
+        }
+        if (supportsServer) {
+            return "Servidor";
+        }
+        if (supportsClient) {
+            return "Cliente";
+        }
+        return "Lado indefinido";
+    }
+
+    private String ellipsize(String text, Font font, int maxWidth) {
+        String value = text == null || text.isBlank() ? "-" : text.trim();
+        if (value.length() <= 1 || maxWidth <= 0) {
+            return value;
+        }
+        FontMetrics metrics = getFontMetrics(font == null ? getFont() : font);
+        if (metrics.stringWidth(value) <= maxWidth) {
+            return value;
+        }
+        String ellipsis = "...";
+        int ellipsisWidth = metrics.stringWidth(ellipsis);
+        if (maxWidth <= ellipsisWidth) {
+            return metrics.stringWidth(".") <= maxWidth ? "." : "";
+        }
+        int low = 0;
+        int high = value.length();
+        while (low < high) {
+            int mid = (low + high + 1) / 2;
+            if (metrics.stringWidth(value.substring(0, mid)) + ellipsisWidth <= maxWidth) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        if (low <= 0) {
+            return ellipsis;
+        }
+        return value.substring(0, Math.min(value.length(), low)) + ellipsis;
+    }
+
+    private Color neutralBadgeBackground() {
+        return ExtensionStatusPresentation.neutralBadgeBackground();
+    }
+
+    private Color foregroundFor(Color background) {
+        return ExtensionStatusPresentation.foregroundFor(background);
+    }
+
+    private boolean sideSupported(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("required") || normalized.equals("optional") || normalized.equals("supported");
+    }
+
+    private enum ExtensionListViewMode {
+        DETAILED,
+        COMPACT
     }
 }
