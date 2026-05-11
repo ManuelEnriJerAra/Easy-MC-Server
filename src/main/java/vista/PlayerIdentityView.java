@@ -6,8 +6,11 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
@@ -29,6 +32,7 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
 import controlador.MojangAPI;
+import controlador.Utilidades;
 
 public class PlayerIdentityView extends JPanel {
     public enum SizePreset {
@@ -63,10 +67,12 @@ public class PlayerIdentityView extends JPanel {
     private String username;
     private boolean actionsVisibleOnHover = false;
     private boolean pointerInside;
+    private boolean highlighted;
+    private boolean operatorHighlighted;
 
     public PlayerIdentityView(String username, SizePreset sizePreset) {
         super(new BorderLayout());
-        setOpaque(true);
+        setOpaque(false);
         avatarLabel.setHorizontalAlignment(SwingConstants.CENTER);
         avatarLabel.setVerticalAlignment(SwingConstants.CENTER);
 
@@ -89,7 +95,7 @@ public class PlayerIdentityView extends JPanel {
     }
 
     public void setPlayerName(String username) {
-        this.username = username == null ? "" : username.strip();
+        this.username = username == null ? "" : Utilidades.limpiarSecuenciasConsola(username).strip();
         nameLabel.setText(this.username);
         aplicarCabezaJugadorAsync(this.username);
     }
@@ -116,11 +122,38 @@ public class PlayerIdentityView extends JPanel {
     }
 
     public void setHighlighted(boolean highlighted) {
-        Color background = highlighted ? AppTheme.getSoftSelectionBackground() : AppTheme.getPanelBackground();
-        Color borderColor = highlighted ? AppTheme.getMainAccent() : AppTheme.getSubtleBorderColor();
+        this.highlighted = highlighted;
+        applyVisualState();
+    }
+
+    public void setOperatorHighlighted(boolean operatorHighlighted) {
+        this.operatorHighlighted = operatorHighlighted;
+        applyVisualState();
+    }
+
+    private void applyVisualState() {
+        Color background;
+        Color borderColor;
+        Color foreground;
+        float thickness;
+        if (operatorHighlighted) {
+            background = highlighted
+                    ? AppTheme.tint(AppTheme.getMainAccent(), AppTheme.getForeground(), 0.10f)
+                    : AppTheme.getMainAccent();
+            borderColor = AppTheme.tint(AppTheme.getMainAccent(), AppTheme.getForeground(), highlighted ? 0.42f : 0.30f);
+            foreground = Color.WHITE;
+            thickness = highlighted ? 1.35f : 1.25f;
+        } else {
+            background = highlighted ? AppTheme.getSoftSelectionBackground() : AppTheme.getPanelBackground();
+            borderColor = highlighted ? AppTheme.getMainAccent() : AppTheme.getSubtleBorderColor();
+            foreground = AppTheme.getForeground();
+            thickness = highlighted ? 1.1f : 1f;
+        }
+
         setBackground(background);
+        nameLabel.setForeground(foreground);
         setBorder(BorderFactory.createCompoundBorder(
-                AppTheme.createRoundedBorder(sizePreset.padding, borderColor, highlighted ? 1.1f : 1f),
+                AppTheme.createRoundedBorder(sizePreset.padding, borderColor, thickness),
                 BorderFactory.createEmptyBorder(
                         sizePreset.padding.top,
                         sizePreset.padding.left,
@@ -128,6 +161,26 @@ public class PlayerIdentityView extends JPanel {
                         sizePreset.padding.right
                 )
         ));
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(getBackground());
+            int width = getWidth();
+            int height = getHeight();
+            int arc = AppTheme.getArc();
+            if (arc > 0) {
+                g2.fillRoundRect(0, 0, Math.max(0, width - 1), Math.max(0, height - 1), arc, arc);
+            } else {
+                g2.fillRect(0, 0, width, height);
+            }
+        } finally {
+            g2.dispose();
+        }
+        super.paintComponent(g);
     }
 
     public JLabel getNameLabel() {

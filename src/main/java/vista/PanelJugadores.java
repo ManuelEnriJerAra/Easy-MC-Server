@@ -110,6 +110,8 @@ public class PanelJugadores extends JPanel {
     private final Map<TipoLista, DefaultListModel<String>> modelosListasAbiertas = new EnumMap<>(TipoLista.class);
     private final Map<String, String> sugerenciasExactasRemotas = new ConcurrentHashMap<>();
     private final Set<String> sugerenciasExactasRemotasNoEncontradas = ConcurrentHashMap.newKeySet();
+    private final Set<String> operadores = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    private final Set<JLabel> whitelistOpsCountLabels = ConcurrentHashMap.newKeySet();
 
     private Server server;
     private Consumer<String> consoleListener;
@@ -351,6 +353,7 @@ public class PanelJugadores extends JPanel {
             contenedorJugadores.add(panel);
         }
 
+        actualizarIndicadoresOperador();
         refrescarUI();
     }
 
@@ -361,6 +364,7 @@ public class PanelJugadores extends JPanel {
         PlayerPanel panel = new PlayerPanel(nombre);
         panelsPorJugador.put(nombre, panel);
         contenedorJugadores.add(panel);
+        actualizarIndicadoresOperador();
         refrescarUI();
     }
 
@@ -396,6 +400,8 @@ public class PanelJugadores extends JPanel {
         btnWhitelist.setToolTipText("Abrir Whitelist (" + whitelistCount + ")");
         btnBaneados.setToolTipText("Abrir Baneados: IDs baneadas (" + bannedPlayersCount + "), IPs baneadas (" + bannedIpsCount + ")");
         btnOps.setToolTipText("Abrir OPs (" + opsCount + ")");
+        actualizarLabelsOpsWhitelist(opsCount);
+        actualizarIndicadoresOperador();
         revalidate();
         repaint();
     }
@@ -584,6 +590,21 @@ public class PanelJugadores extends JPanel {
             }
         });
 
+        JPanel contadorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        contadorPanel.setOpaque(false);
+        contadorPanel.add(contadorLabel);
+        if (tipo == TipoLista.WHITELIST) {
+            JLabel opsLabel = new JLabel(formatearContadorOpsWhitelist(cargarListaDesdeArchivo(TipoLista.OPS).size()));
+            opsLabel.setForeground(AppTheme.getMutedForeground());
+            whitelistOpsCountLabels.add(opsLabel);
+            opsLabel.addHierarchyListener(e -> {
+                if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) != 0 && !opsLabel.isDisplayable()) {
+                    whitelistOpsCountLabels.remove(opsLabel);
+                }
+            });
+            contadorPanel.add(opsLabel);
+        }
+
         JPanel botones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         botones.setOpaque(false);
         botones.add(btnAdd);
@@ -594,7 +615,7 @@ public class PanelJugadores extends JPanel {
 
         JPanel accionesCabecera = new JPanel(new BorderLayout(8, 0));
         accionesCabecera.setOpaque(false);
-        accionesCabecera.add(contadorLabel, BorderLayout.WEST);
+        accionesCabecera.add(contadorPanel, BorderLayout.WEST);
         accionesCabecera.add(botones, BorderLayout.EAST);
 
         JPanel cabecera = new JPanel(new BorderLayout(0, 4));
@@ -845,6 +866,18 @@ public class PanelJugadores extends JPanel {
             case BANNED_PLAYERS -> count == 1 ? "1 jugador baneado" : count + " jugadores baneados";
             case BANNED_IPS -> count == 1 ? "1 IP baneada" : count + " IPs baneadas";
         };
+    }
+
+    private String formatearContadorOpsWhitelist(int count) {
+        return "OPs: " + Math.max(0, count);
+    }
+
+    private void actualizarLabelsOpsWhitelist(int opsCount) {
+        String text = formatearContadorOpsWhitelist(opsCount);
+        whitelistOpsCountLabels.removeIf(label -> label == null || !label.isDisplayable());
+        for (JLabel label : whitelistOpsCountLabels) {
+            label.setText(text);
+        }
     }
 
     private void actualizarIconoModoCompacto(JButton button, PlayerIdentityView.SizePreset sizePreset) {
@@ -1314,6 +1347,16 @@ public class PanelJugadores extends JPanel {
         }
     }
 
+    private void actualizarIndicadoresOperador() {
+        operadores.clear();
+        operadores.addAll(cargarListaDesdeArchivo(TipoLista.OPS));
+        for (Map.Entry<String, PlayerPanel> entry : panelsPorJugador.entrySet()) {
+            PlayerPanel panel = entry.getValue();
+            if (panel == null) continue;
+            panel.setOperator(containsIgnoreCase(operadores, entry.getKey()));
+        }
+    }
+
     private boolean modificarListaOffline(TipoLista tipo, String value, boolean add) {
         Path path = resolverRutaLista(tipo);
         if (path == null) {
@@ -1605,24 +1648,17 @@ public class PanelJugadores extends JPanel {
 
     private class PlayerPanel extends JPanel {
         private final PlayerIdentityView identityView;
-        private final Color bgNormal;
-        private final Color bgHover;
-        private final javax.swing.border.Border borderNormal;
-        private final javax.swing.border.Border borderHover;
+        private boolean operator;
+        private boolean hover;
 
         PlayerPanel(String username) {
-            super(new BorderLayout(8, 0));
-            setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 10));
+            super(new BorderLayout());
+            setOpaque(false);
+            setBorder(BorderFactory.createEmptyBorder());
             setToolTipText("Click derecho para acciones");
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-            bgNormal = AppTheme.getPanelBackground();
-            bgHover = AppTheme.getSoftSelectionBackground();
-            borderNormal = getBorder();
-            borderHover = AppTheme.createAccentBorder(new Insets(5, 7, 5, 9), 1f);
-
             identityView = new PlayerIdentityView(username, PlayerIdentityView.SizePreset.REGULAR);
-            identityView.setOpaque(false);
             add(identityView, BorderLayout.CENTER);
             instalarMenuContextual(username);
         }
@@ -1663,17 +1699,21 @@ public class PanelJugadores extends JPanel {
         }
 
         private void setHover(boolean hover) {
-            if (hover) {
-                setOpaque(true);
-                setBackground(bgHover);
-                setBorder(borderHover);
-                identityView.setHighlighted(true);
-            } else {
-                setOpaque(false);
-                setBackground(bgNormal);
-                setBorder(borderNormal);
-                identityView.setHighlighted(false);
-            }
+            this.hover = hover;
+            applyOperatorStyle();
+        }
+
+        private void setOperator(boolean operator) {
+            if (this.operator == operator) return;
+            this.operator = operator;
+            applyOperatorStyle();
+        }
+
+        private void applyOperatorStyle() {
+            setOpaque(false);
+            setBorder(BorderFactory.createEmptyBorder());
+            identityView.setOperatorHighlighted(operator);
+            identityView.setHighlighted(hover);
             revalidate();
             repaint();
         }

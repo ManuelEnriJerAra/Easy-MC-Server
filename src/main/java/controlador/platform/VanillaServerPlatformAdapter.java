@@ -1,13 +1,13 @@
 package controlador.platform;
 
 import controlador.MojangAPI;
-import controlador.Utilidades;
 import modelo.Server;
 import modelo.extensions.ServerPlatform;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAdapter {
     private final MojangAPI mojangApi;
@@ -90,15 +90,13 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
             downloader.download(url, destinationJar.toFile());
         }
 
-        if (request.acceptEula()) {
-            Utilidades.rellenaEULA(request.targetDirectory().toFile());
-        }
-        if (request.defaultIconSource() != null && Files.isRegularFile(request.defaultIconSource())) {
-            Utilidades.copiarArchivo(request.defaultIconSource().toFile(), request.targetDirectory().resolve("server-icon.png").toFile());
-        }
-
-        server.setServerDir(request.targetDirectory().toString());
-        server.setVersion(request.minecraftVersion());
-        server.setPlatform(ServerPlatform.VANILLA);
+        ServerPlatformInstallSupport.prepareCommonFiles(
+                server,
+                request,
+                ServerPlatform.VANILLA,
+                request.platformVersion(),
+                "Easy-MC Vanilla " + request.minecraftVersion(),
+                List.of()
+        );
     }
 }

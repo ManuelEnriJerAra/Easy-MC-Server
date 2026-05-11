@@ -28,10 +28,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class Utilidades {
     private static final char SECTION_SIGN = '\u00A7';
+    private static final Pattern ANSI_ESCAPE_SEQUENCE = Pattern.compile("\\u001B\\[[0-?]*[ -/]*[@-~]|\\u009B[0-?]*[ -/]*[@-~]");
+    private static final Pattern ORPHAN_ANSI_COLOR_SEQUENCE = Pattern.compile("\\[(?:\\d{1,3};)*\\d{1,3}m");
 
     public static void copiarArchivo(File origen, File destino){
         try{
@@ -350,6 +353,15 @@ public class Utilidades {
         String normalized = value.replace("\u00C2" + String.valueOf(SECTION_SIGN), String.valueOf(SECTION_SIGN));
         String repaired = intentarRepararUtf8MalInterpretado(normalized);
         return tieneMenosMojibake(repaired, normalized) ? repaired : normalized;
+    }
+
+    public static String limpiarSecuenciasConsola(String value) {
+        if(value == null || value.isEmpty()) {
+            return value;
+        }
+
+        String cleaned = ANSI_ESCAPE_SEQUENCE.matcher(value).replaceAll("");
+        return ORPHAN_ANSI_COLOR_SEQUENCE.matcher(cleaned).replaceAll("");
     }
 
     private static String intentarRepararUtf8MalInterpretado(String value) {

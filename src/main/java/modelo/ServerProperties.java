@@ -18,6 +18,7 @@ import lombok.AllArgsConstructor;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 
 @Getter
 @Setter
@@ -170,15 +171,31 @@ public class ServerProperties{
         File propiedades = new File(serverDirectory,"server.properties"); // creamos el archivo server.properties
         try(PrintWriter pw = new PrintWriter(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(propiedades), StandardCharsets.UTF_8)))){
             pw.println("# Minecraft server Properties");
-            for(Field campo : this.getClass().getDeclaredFields()) {
-                // copiamos cada campo, menos si es el servidor
-                if(!campo.getName().equals("server")){
-                    campo.setAccessible(true);
-                    pw.println(propertyKeyForField(campo) + " = " + campo.get(this).toString());
-                }
-            }
+            Properties properties = toProperties();
+            properties.stringPropertyNames().stream()
+                    .sorted()
+                    .forEach(key -> pw.println(key + " = " + properties.getProperty(key)));
         }
         System.out.println("Escritura de propiedades finalizada");
+    }
+
+    public Properties toProperties() {
+        Properties properties = new Properties();
+        for(Field campo : this.getClass().getDeclaredFields()) {
+            if(campo.getName().equals("server")){
+                continue;
+            }
+            try {
+                campo.setAccessible(true);
+                Object value = campo.get(this);
+                if(value != null) {
+                    properties.setProperty(propertyKeyForField(campo), value.toString());
+                }
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("No se ha podido leer la propiedad " + campo.getName(), e);
+            }
+        }
+        return properties;
     }
 
     // leo las propiedades del server.properties y las introduzco en el objeto

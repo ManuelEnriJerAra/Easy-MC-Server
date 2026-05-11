@@ -1,6 +1,7 @@
 package controlador.platform;
 
 import controlador.MojangAPI;
+import controlador.Utilidades;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import modelo.Server;
@@ -19,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -227,6 +229,7 @@ class ServerPlatformAdaptersTest {
         assertThat(Files.exists(installDir.resolve("1.21.5_server.jar"))).isTrue();
         assertThat(Files.exists(installDir.resolve("eula.txt"))).isTrue();
         assertThat(Files.exists(installDir.resolve("server-icon.png"))).isTrue();
+        assertFullServerProperties(installDir, "Easy-MC Vanilla 1.21.5");
 
         ServerPlatformProfile profile = adapter.detect(installDir);
         assertThat(profile).isNotNull();
@@ -279,6 +282,7 @@ class ServerPlatformAdaptersTest {
         assertThat(Files.exists(installDir.resolve("mods"))).isTrue();
         assertThat(Files.exists(installDir.resolve("eula.txt"))).isTrue();
         assertThat(Files.exists(installDir.resolve("server-icon.png"))).isTrue();
+        assertFullServerProperties(installDir, "Easy-MC Forge 1.20.1");
         assertThat(adapter.detect(installDir)).isNotNull();
         assertThat(adapter.detect(installDir).platform()).isEqualTo(ServerPlatform.FORGE);
     }
@@ -320,6 +324,7 @@ class ServerPlatformAdaptersTest {
         assertThat(server.getLoaderVersion()).isEqualTo("21.1.200");
         assertThat(Files.exists(installDir.resolve("mods"))).isTrue();
         assertThat(Files.exists(installDir.resolve("config"))).isTrue();
+        assertFullServerProperties(installDir, "Easy-MC NeoForge 1.21.1");
         assertThat(adapter.detect(installDir).platform()).isEqualTo(ServerPlatform.NEOFORGE);
     }
 
@@ -340,12 +345,14 @@ class ServerPlatformAdaptersTest {
         paperAdapter.install(paperServer, request(tempDir.resolve("paper-created"), "1.21.1", "42", sourceJar));
         assertThat(paperServer.getPlatform()).isEqualTo(ServerPlatform.PAPER);
         assertThat(Files.exists(tempDir.resolve("paper-created").resolve("plugins"))).isTrue();
+        assertFullServerProperties(tempDir.resolve("paper-created"), "Easy-MC Paper 1.21.1");
 
         Server purpurServer = new Server();
         PurpurServerPlatformAdapter purpurAdapter = new PurpurServerPlatformAdapter(new PurpurDownloadsClient(new FakePlatformHttpClient(Map.of())));
         purpurAdapter.install(purpurServer, request(tempDir.resolve("purpur-created"), "1.21.1", "99", sourceJar));
         assertThat(purpurServer.getPlatform()).isEqualTo(ServerPlatform.PURPUR);
         assertThat(Files.exists(tempDir.resolve("purpur-created").resolve("plugins"))).isTrue();
+        assertFullServerProperties(tempDir.resolve("purpur-created"), "Easy-MC Purpur 1.21.1");
 
         Server fabricServer = new Server();
         FabricServerPlatformAdapter fabricAdapter = new FabricServerPlatformAdapter(new FabricMetaClient(new FakePlatformHttpClient(Map.of())));
@@ -358,6 +365,7 @@ class ServerPlatformAdaptersTest {
         assertThat(fabricServer.getPlatform()).isEqualTo(ServerPlatform.FABRIC);
         assertThat(fabricServer.getLoaderVersion()).isEqualTo("0.19.2");
         assertThat(Files.exists(tempDir.resolve("fabric-created").resolve("mods"))).isTrue();
+        assertFullServerProperties(tempDir.resolve("fabric-created"), "Easy-MC Fabric 1.21.1");
 
         Server quiltServer = new Server();
         QuiltServerPlatformAdapter quiltAdapter = new QuiltServerPlatformAdapter(
@@ -385,6 +393,7 @@ class ServerPlatformAdaptersTest {
         assertThat(quiltServer.getPlatform()).isEqualTo(ServerPlatform.QUILT);
         assertThat(quiltServer.getLoaderVersion()).isEqualTo("0.29.2");
         assertThat(Files.exists(tempDir.resolve("quilt-created").resolve("mods"))).isTrue();
+        assertFullServerProperties(tempDir.resolve("quilt-created"), "Easy-MC Quilt 1.21.1");
     }
 
     @Test
@@ -518,6 +527,16 @@ class ServerPlatformAdaptersTest {
                 null,
                 (url, destination) -> Files.copy(sourceJar, destination.toPath())
         );
+    }
+
+    private void assertFullServerProperties(Path installDir, String expectedMotd) throws IOException {
+        Properties properties = Utilidades.cargarPropertiesUtf8(installDir.resolve("server.properties"));
+        assertThat(properties.getProperty("motd")).isEqualTo(expectedMotd);
+        assertThat(properties.getProperty("server-port")).isEqualTo("25565");
+        assertThat(properties.getProperty("online-mode")).isEqualTo("true");
+        assertThat(properties.getProperty("level-name")).isEqualTo("world");
+        assertThat(properties.getProperty("gamemode")).isEqualTo("survival");
+        assertThat(properties.size()).isGreaterThan(20);
     }
 
     private static final class FakePlatformHttpClient implements PlatformHttpClient {

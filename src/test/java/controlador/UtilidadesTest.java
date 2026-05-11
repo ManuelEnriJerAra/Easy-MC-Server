@@ -94,6 +94,21 @@ class UtilidadesTest {
     }
 
     @Test
+    void limpiarSecuenciasConsola_debeEliminarColoresAnsiDeNombresDeJugador() {
+        String raw = "\u001B[38;2;255;255;85mManuJeroZX joined the game";
+
+        assertThat(Utilidades.limpiarSecuenciasConsola(raw)).isEqualTo("ManuJeroZX joined the game");
+    }
+
+    @Test
+    void limpiarSecuenciasConsola_debeEliminarColoresAnsiSiSePerdioEscapeInicial() {
+        String raw = "[12:34:56] [Server thread/INFO]: [38;2;255;255;85mManuJeroZX joined the game";
+
+        assertThat(Utilidades.limpiarSecuenciasConsola(raw))
+                .isEqualTo("[12:34:56] [Server thread/INFO]: ManuJeroZX joined the game");
+    }
+
+    @Test
     void resolveSystemPicturesDirectory_debePriorizarPicturesDeWindows() throws Exception {
         Path home = tempDir.resolve("home");
         Path pictures = home.resolve("Pictures");

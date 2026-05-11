@@ -98,6 +98,11 @@ public final class GestorUsuariosConocidos {
             return false;
         }
 
+        username = Utilidades.limpiarSecuenciasConsola(username);
+        if (username == null || username.isBlank()) {
+            return false;
+        }
+
         String normalizedName = normalize(username);
         KnownUser existing = USERS_BY_NAME.get(normalizedName);
         boolean changed = false;
@@ -149,7 +154,7 @@ public final class GestorUsuariosConocidos {
                 if (node == null || !node.isObject()) {
                     continue;
                 }
-                String name = node.path("name").asText(null);
+                String name = Utilidades.limpiarSecuenciasConsola(node.path("name").asText(null));
                 if (name == null || name.isBlank()) {
                     continue;
                 }

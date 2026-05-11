@@ -28,6 +28,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+import controlador.Utilidades;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Setter;
@@ -381,6 +382,7 @@ public class Server {
     }
 
     public synchronized void appendConsoleLinea(String linea){
+        linea = Utilidades.limpiarSecuenciasConsola(linea);
         linea = conHoraSiFalta(linea);
         if(!Objects.equals(linea, "")){
             consoleBuffer.append(linea).append("\n");

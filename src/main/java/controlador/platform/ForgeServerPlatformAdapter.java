@@ -1,6 +1,5 @@
 package controlador.platform;
 
-import controlador.Utilidades;
 import modelo.extensions.ServerCapability;
 import modelo.extensions.ServerPlatform;
 
@@ -130,19 +129,14 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
         Files.createDirectories(request.targetDirectory().resolve("mods"));
         Files.createDirectories(request.targetDirectory().resolve("config"));
 
-        if (request.acceptEula()) {
-            Utilidades.rellenaEULA(request.targetDirectory().toFile());
-        }
-        if (request.defaultIconSource() != null && Files.isRegularFile(request.defaultIconSource())) {
-            Utilidades.copiarArchivo(request.defaultIconSource().toFile(), request.targetDirectory().resolve("server-icon.png").toFile());
-        }
-        Utilidades.escribirPuertoEnProperties(request.targetDirectory(), 25565);
-        Utilidades.escribirMotdEnProperties(request.targetDirectory(), "Easy-MC Forge " + request.minecraftVersion());
-
-        server.setServerDir(request.targetDirectory().toString());
-        server.setVersion(request.minecraftVersion());
-        server.setLoaderVersion(request.platformVersion());
-        server.setPlatform(ServerPlatform.FORGE);
+        ServerPlatformInstallSupport.prepareCommonFiles(
+                server,
+                request,
+                ServerPlatform.FORGE,
+                request.platformVersion(),
+                "Easy-MC Forge " + request.minecraftVersion(),
+                List.of(request.targetDirectory().resolve("mods"), request.targetDirectory().resolve("config"))
+        );
     }
 
     @Override

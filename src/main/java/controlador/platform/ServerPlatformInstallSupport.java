@@ -2,12 +2,14 @@ package controlador.platform;
 
 import controlador.Utilidades;
 import modelo.Server;
+import modelo.ServerProperties;
 import modelo.extensions.ServerPlatform;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Properties;
 
 final class ServerPlatformInstallSupport {
     private ServerPlatformInstallSupport() {
@@ -53,6 +55,7 @@ final class ServerPlatformInstallSupport {
         if (request.defaultIconSource() != null && Files.isRegularFile(request.defaultIconSource())) {
             Utilidades.copiarArchivo(request.defaultIconSource().toFile(), request.targetDirectory().resolve("server-icon.png").toFile());
         }
+        ensureDefaultServerProperties(request.targetDirectory());
         Utilidades.escribirPuertoEnProperties(request.targetDirectory(), 25565);
         if (motd != null && !motd.isBlank()) {
             Utilidades.escribirMotdEnProperties(request.targetDirectory(), motd);
@@ -62,5 +65,18 @@ final class ServerPlatformInstallSupport {
         server.setVersion(request.minecraftVersion());
         server.setLoaderVersion(loaderVersion);
         server.setPlatform(platform);
+    }
+
+    private static void ensureDefaultServerProperties(Path targetDirectory) throws IOException {
+        if (targetDirectory == null) {
+            return;
+        }
+        Path propertiesPath = targetDirectory.resolve("server.properties");
+        Properties merged = new ServerProperties().toProperties();
+        if (Files.isRegularFile(propertiesPath)) {
+            Properties existing = Utilidades.cargarPropertiesUtf8(propertiesPath);
+            merged.putAll(existing);
+        }
+        Utilidades.guardarPropertiesUtf8(propertiesPath, merged, null);
     }
 }
