@@ -1456,13 +1456,13 @@ public class GestorServidores {
         if (icon == null || button == null) {
             return;
         }
-        Timer timer = new Timer(16, null);
-        final int frames = 18;
+        Timer timer = new Timer(24, null);
+        final int frames = 32;
         final int[] frame = {0};
         timer.addActionListener(e -> {
             frame[0]++;
             double progress = Math.min(1d, frame[0] / (double) frames);
-            icon.setAngleRadians(-progress * Math.PI * 2d);
+            icon.setAngleRadians(progress * Math.PI * 2d);
             button.repaint();
             if (frame[0] >= frames) {
                 icon.setAngleRadians(0d);
@@ -2486,6 +2486,7 @@ public class GestorServidores {
         Font pathFont = new Font(Font.MONOSPACED, Font.PLAIN, 16);
         parentPrefixLabel.setFont(pathFont);
         folderNameField.setFont(pathFont);
+        folderNameField.setHorizontalAlignment(JTextField.CENTER);
         JPanel folderPathPanel = new JPanel(new BorderLayout(0, 0));
         Color folderNameBorderColor = UIManager.getColor("Component.borderColor") == null
                 ? Color.GRAY
@@ -2499,8 +2500,8 @@ public class GestorServidores {
         folderPathPanel.add(folderNameField, BorderLayout.CENTER);
         folderPathPanel.add(resetFolderButton, BorderLayout.EAST);
         folderPathPanel.setPreferredSize(new Dimension(620, 42));
-        JPanel folderNameWrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        folderNameWrap.add(folderPathPanel);
+        JPanel folderNameWrap = new JPanel(new GridBagLayout());
+        folderNameWrap.add(folderPathPanel, new GridBagConstraints());
         cards.add(createWizardStepPanel("Nombre de carpeta", folderNameWrap), "folderName");
 
         JButton backButton = new JButton();

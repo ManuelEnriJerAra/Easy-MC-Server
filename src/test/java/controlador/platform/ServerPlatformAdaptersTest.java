@@ -387,6 +387,42 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
+    void detect_debePreferirMcVersionExplicitaDeNeoForgeSemantico() throws Exception {
+        Path neoForgeDir = tempDir.resolve("neoforge-semantic-version");
+        Files.createDirectories(neoForgeDir.resolve("mods"));
+        Files.createDirectories(neoForgeDir.resolve("libraries/net/neoforged/neoforge/26.1.2.48-beta"));
+        Files.writeString(
+                neoForgeDir.resolve("libraries/net/neoforged/neoforge/26.1.2.48-beta/win_args.txt"),
+                """
+                --fml.neoForgeVersion 26.1.2.48-beta
+                --fml.mcVersion 26.1.2
+                --fml.neoFormVersion 1
+                """
+        );
+        Files.writeString(neoForgeDir.resolve("run.bat"), "@echo off\njava @libraries/net/neoforged/neoforge/26.1.2.48-beta/win_args.txt nogui\n");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(neoForgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.NEOFORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("26.1.2");
+    }
+
+    @Test
+    void detect_debeInferirVersionMinecraftDesdeCoordenadaNeoForgeSemantica() throws Exception {
+        Path neoForgeDir = tempDir.resolve("neoforge-semantic-coordinate-version");
+        Files.createDirectories(neoForgeDir.resolve("mods"));
+        Files.createDirectories(neoForgeDir.resolve("libraries/net/neoforged/neoforge/26.1.2.48-beta"));
+        Files.writeString(neoForgeDir.resolve("run.bat"), "@echo off\njava @libraries/net/neoforged/neoforge/26.1.2.48-beta/win_args.txt nogui\n");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(neoForgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.NEOFORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("26.1.2");
+    }
+
+    @Test
     void install_vanillaDebeEncapsularDescargaEulaYMetadatos() throws Exception {
         Path sourceJar = tempDir.resolve("downloads").resolve("source.jar");
         TestWorldFixtures.createValidServerJar(sourceJar.getParent(), sourceJar.getFileName().toString());
@@ -618,6 +654,8 @@ class ServerPlatformAdaptersTest {
 
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("21.1.200")).isEqualTo("1.21.1");
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("20.6.120")).isEqualTo("1.20.6");
+        assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.2.48-beta")).isEqualTo("26.1.2");
+        assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.2")).isEqualTo("26.1.2");
     }
 
     @Test

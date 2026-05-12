@@ -57,17 +57,41 @@ class NeoForgeRepositoryClient {
         if (artifactVersion == null || artifactVersion.isBlank()) {
             return null;
         }
-        if (artifactVersion.contains("-")) {
-            return artifactVersion.substring(0, artifactVersion.indexOf('-'));
+        String releasePart = artifactVersion.trim();
+        int qualifierIndex = releasePart.indexOf('-');
+        if (qualifierIndex > 0) {
+            releasePart = releasePart.substring(0, qualifierIndex);
         }
-        String[] parts = artifactVersion.split("\\.");
+        String[] parts = releasePart.split("\\.");
         if (parts.length < 2) {
             return null;
         }
         try {
-            int minecraftMinor = Integer.parseInt(parts[0]);
+            int first = Integer.parseInt(parts[0]);
             int minecraftPatch = Integer.parseInt(parts[1]);
+            if (parts.length >= 4) {
+                Integer third = parseInt(parts[2]);
+                return third == null ? null : first + "." + minecraftPatch + "." + third;
+            }
+
+            Integer third = parts.length >= 3 ? parseInt(parts[2]) : null;
+            if (first >= 2 && third != null && third < 100) {
+                return first + "." + minecraftPatch + "." + third;
+            }
+
+            int minecraftMinor = first;
             return minecraftPatch <= 0 ? "1." + minecraftMinor : "1." + minecraftMinor + "." + minecraftPatch;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Integer parseInt(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(value);
         } catch (NumberFormatException e) {
             return null;
         }

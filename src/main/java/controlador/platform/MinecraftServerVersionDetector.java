@@ -24,6 +24,17 @@ final class MinecraftServerVersionDetector {
                     + "|[ab]\\d+\\.\\d+(?:\\.\\d+)?"
                     + ")(?![a-z0-9.])"
     );
+    private static final String VERSION_PATTERN_BODY =
+            "1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
+                    + "|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
+                    + "|\\d{2}w\\d{2}[a-z]"
+                    + "|[ab]\\d+\\.\\d+(?:\\.\\d+)?";
+    private static final Pattern EXPLICIT_MC_VERSION_PATTERN = Pattern.compile(
+            "(?i)--fml\\.mcversion\\s+(" + VERSION_PATTERN_BODY + ")(?=\\s|$)"
+    );
+    private static final Pattern MINECRAFT_SERVER_COORDINATE_PATTERN = Pattern.compile(
+            "(?i)net/minecraft/server/(" + VERSION_PATTERN_BODY + ")(?=/|\\s|$)"
+    );
     private static final Pattern FORGE_COORDINATE_PATTERN = Pattern.compile(
             "(?i)(?:net/minecraftforge/forge/|--fml\\.mcversion\\s+)(1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?)(?:-|\\s|$)"
     );
@@ -236,6 +247,14 @@ final class MinecraftServerVersionDetector {
             return null;
         }
         String normalized = text.replace('\\', '/');
+        String explicitMinecraftVersion = extractExplicitMinecraftVersion(normalized);
+        if (explicitMinecraftVersion != null) {
+            return explicitMinecraftVersion;
+        }
+        String minecraftServerCoordinateVersion = extractMinecraftServerCoordinateVersion(normalized);
+        if (minecraftServerCoordinateVersion != null) {
+            return minecraftServerCoordinateVersion;
+        }
         String forgeVersion = extractForgeCoordinateVersion(normalized);
         if (forgeVersion != null) {
             return forgeVersion;
@@ -256,6 +275,16 @@ final class MinecraftServerVersionDetector {
             }
         }
         return null;
+    }
+
+    private static String extractExplicitMinecraftVersion(String text) {
+        Matcher matcher = EXPLICIT_MC_VERSION_PATTERN.matcher(text);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private static String extractMinecraftServerCoordinateVersion(String text) {
+        Matcher matcher = MINECRAFT_SERVER_COORDINATE_PATTERN.matcher(text);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private static String extractForgeCoordinateVersion(String text) {
