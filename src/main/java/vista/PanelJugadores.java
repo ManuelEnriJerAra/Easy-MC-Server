@@ -12,6 +12,8 @@ import java.awt.Frame;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.LayoutManager;
+import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
@@ -66,7 +68,9 @@ import javax.swing.JSeparator;
 import javax.swing.JTextField;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
+import javax.swing.Scrollable;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
@@ -93,13 +97,16 @@ public class PanelJugadores extends JPanel {
     private static final String CARD_JUGADORES = "jugadores";
     private static final String CARD_VACIO = "vacio";
     private static final DateTimeFormatter LIST_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss Z");
+    private static final int MAX_FAKE_PLAYERS = 200;
 
     private final GestorServidores gestorServidores;
     private final ObjectMapper mapper = new ObjectMapper();
     private final MojangAPI mojangAPI = new MojangAPI();
 
-    private final JPanel contenedorJugadores = new JPanel(new WrapLayout(FlowLayout.LEFT, 10, 8));
+    private final JPanel contenedorJugadores = new PlayerWrapPanel(new WrapLayout(FlowLayout.LEFT, 10, 8, 180));
     private final Map<String, PlayerPanel> panelsPorJugador = new LinkedHashMap<>();
+    private final LinkedHashSet<String> jugadoresReales = new LinkedHashSet<>();
+    private final LinkedHashSet<String> jugadoresDebug = new LinkedHashSet<>();
     private final JScrollPane scrollJugadores;
     private final JPanel panelCentro = new JPanel(new CardLayout());
     private final JPanel panelSinJugadores = new JPanel(new GridBagLayout());
@@ -107,6 +114,9 @@ public class PanelJugadores extends JPanel {
     private final JButton btnWhitelist = new FlatButton();
     private final JButton btnBaneados = new FlatButton();
     private final JButton btnOps = new FlatButton();
+    private final JButton btnDebugAddPlayer = new FlatButton();
+    private final JButton btnDebugRemovePlayer = new FlatButton();
+    private final PropertyChangeListener debugModeListener;
     private final Map<TipoLista, DefaultListModel<String>> modelosListasAbiertas = new EnumMap<>(TipoLista.class);
     private final Map<String, String> sugerenciasExactasRemotas = new ConcurrentHashMap<>();
     private final Set<String> sugerenciasExactasRemotasNoEncontradas = ConcurrentHashMap.newKeySet();
@@ -117,8 +127,10 @@ public class PanelJugadores extends JPanel {
     private Consumer<String> consoleListener;
     private final PropertyChangeListener listenerEstadoServidor;
     private int maxPlayers;
+    private int fakePlayerSequence;
     private WatchService listasWatchService;
     private Thread listasWatchThread;
+    private JPanel headerActionsPanel;
 
     public PanelJugadores(GestorServidores gestorServidores) {
         this(gestorServidores, true);
@@ -168,6 +180,13 @@ public class PanelJugadores extends JPanel {
         configurarBotonCabecera(btnWhitelist, "Whitelist", "easymcicons/whitelist.svg", () -> abrirDialogoLista("Whitelist", TipoLista.WHITELIST));
         configurarBotonCabecera(btnBaneados, "Baneados", "easymcicons/user-block.svg", this::abrirDialogoBaneados);
         configurarBotonCabecera(btnOps, "OPs", "easymcicons/shield-user.svg", () -> abrirDialogoLista("OPs", TipoLista.OPS));
+        configurarBotonDebug(btnDebugAddPlayer, "Anadir jugador falso", "easymcicons/plus.svg", this::addFakePlayer);
+        configurarBotonDebug(btnDebugRemovePlayer, "Eliminar jugador falso", "easymcicons/minus.svg", this::removeFakePlayer);
+        debugModeListener = evt -> {
+            if (!DebugMode.PROPERTY_ENABLED.equals(evt.getPropertyName())) return;
+            SwingUtilities.invokeLater(this::actualizarModoDebug);
+        };
+        DebugMode.addPropertyChangeListener(debugModeListener);
 
         server = gestorServidores.getServidorSeleccionado();
         maxPlayers = leerMaxPlayers(server);
@@ -202,6 +221,7 @@ public class PanelJugadores extends JPanel {
                     server.removeConsoleListener(consoleListener);
                 }
                 gestorServidores.removePropertyChangeListener("estadoServidor", listenerEstadoServidor);
+                DebugMode.removePropertyChangeListener(debugModeListener);
                 detenerWatcherListas();
             }
         });
@@ -209,12 +229,8 @@ public class PanelJugadores extends JPanel {
 
     public void configureHeaderActions(JPanel headerActionsPanel) {
         if (headerActionsPanel == null) return;
-        headerActionsPanel.removeAll();
-        headerActionsPanel.add(btnWhitelist);
-        headerActionsPanel.add(btnBaneados);
-        headerActionsPanel.add(btnOps);
-        headerActionsPanel.revalidate();
-        headerActionsPanel.repaint();
+        this.headerActionsPanel = headerActionsPanel;
+        actualizarAccionesCabecera();
     }
 
     public void refrescarPanel() {
@@ -273,6 +289,38 @@ public class PanelJugadores extends JPanel {
         boton.addActionListener(e -> onClick.run());
     }
 
+    private void configurarBotonDebug(JButton boton, String tooltip, String iconPath, Runnable onClick) {
+        boton.setToolTipText(tooltip);
+        AppTheme.applyHeaderIconButtonStyle(boton);
+        SvgIconFactory.apply(boton, iconPath, 18, 18, AppTheme::getForeground);
+        boton.addActionListener(e -> {
+            if (!DebugMode.isEnabled()) return;
+            onClick.run();
+        });
+    }
+
+    private void actualizarAccionesCabecera() {
+        if (headerActionsPanel == null) return;
+        headerActionsPanel.removeAll();
+        if (DebugMode.isEnabled()) {
+            headerActionsPanel.add(btnDebugAddPlayer);
+            headerActionsPanel.add(btnDebugRemovePlayer);
+        }
+        headerActionsPanel.add(btnWhitelist);
+        headerActionsPanel.add(btnBaneados);
+        headerActionsPanel.add(btnOps);
+        headerActionsPanel.revalidate();
+        headerActionsPanel.repaint();
+    }
+
+    private void actualizarModoDebug() {
+        if (!DebugMode.isEnabled() && !jugadoresDebug.isEmpty()) {
+            jugadoresDebug.clear();
+            renderJugadores();
+        }
+        actualizarAccionesCabecera();
+    }
+
     private void procesarLinea(String raw) {
         if (raw == null || raw.isBlank()) return;
 
@@ -329,11 +377,22 @@ public class PanelJugadores extends JPanel {
     }
 
     private void setJugadores(Set<String> nombres) {
-        LinkedHashSet<String> target = new LinkedHashSet<>();
+        jugadoresReales.clear();
         if (nombres != null) {
             for (String nombre : nombres) {
                 if (nombre == null || nombre.isBlank()) continue;
-                addToSetWithLimit(target, nombre);
+                addToSetWithLimit(jugadoresReales, nombre);
+            }
+        }
+        renderJugadores();
+    }
+
+    private void renderJugadores() {
+        LinkedHashSet<String> target = new LinkedHashSet<>(jugadoresReales);
+        for (String nombre : jugadoresDebug) {
+            if (nombre == null || nombre.isBlank()) continue;
+            if (!containsIgnoreCase(target, nombre)) {
+                target.add(nombre);
             }
         }
 
@@ -359,23 +418,40 @@ public class PanelJugadores extends JPanel {
 
     private void addJugador(String nombre) {
         if (nombre == null || nombre.isBlank()) return;
-        if (panelsPorJugador.size() >= maxPlayers) return;
-        if (getPlayerPanelKeyIgnoreCase(nombre) != null) return;
-        PlayerPanel panel = new PlayerPanel(nombre);
-        panelsPorJugador.put(nombre, panel);
-        contenedorJugadores.add(panel);
-        actualizarIndicadoresOperador();
-        refrescarUI();
+        if (jugadoresReales.size() >= maxPlayers) return;
+        if (containsIgnoreCase(jugadoresReales, nombre)) return;
+        addToSetWithLimit(jugadoresReales, nombre);
+        renderJugadores();
     }
 
     private void removeJugador(String nombre) {
         if (nombre == null || nombre.isBlank()) return;
-        String existingKey = getPlayerPanelKeyIgnoreCase(nombre);
-        if (existingKey == null) return;
-        PlayerPanel panel = panelsPorJugador.remove(existingKey);
-        if (panel == null) return;
-        contenedorJugadores.remove(panel);
-        refrescarUI();
+        removeIgnoreCase(jugadoresReales, nombre);
+        renderJugadores();
+    }
+
+    private void addFakePlayer() {
+        if (jugadoresDebug.size() >= MAX_FAKE_PLAYERS) return;
+        String name;
+        do {
+            fakePlayerSequence++;
+            name = String.format(Locale.ROOT, "DebugPlayer%03d", fakePlayerSequence);
+        } while (containsIgnoreCase(jugadoresReales, name) || containsIgnoreCase(jugadoresDebug, name));
+
+        jugadoresDebug.add(name);
+        renderJugadores();
+    }
+
+    private void removeFakePlayer() {
+        if (jugadoresDebug.isEmpty()) return;
+        String last = null;
+        for (String name : jugadoresDebug) {
+            last = name;
+        }
+        if (last != null) {
+            jugadoresDebug.remove(last);
+            renderJugadores();
+        }
     }
 
     private void enviarComando(String comando) {
@@ -1796,6 +1872,40 @@ public class PanelJugadores extends JPanel {
             menu.add(tell);
 
             return menu;
+        }
+    }
+
+    private static final class PlayerWrapPanel extends JPanel implements Scrollable {
+        private PlayerWrapPanel(LayoutManager layout) {
+            super(layout);
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return orientation == SwingConstants.VERTICAL ? 32 : 24;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+            if (visibleRect == null) return 96;
+            return orientation == SwingConstants.VERTICAL
+                    ? Math.max(32, visibleRect.height - 32)
+                    : Math.max(24, visibleRect.width - 24);
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
         }
     }
 

@@ -37,6 +37,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -50,6 +51,8 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 
 public class VentanaPrincipal extends JFrame {
+    private static final String BASE_TITLE = "Easy-MC-Server";
+    private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
     private static final String PROP_MANAGED_ROUNDED_BORDER = "easy-mc-server.managedRoundedBorder";
     private static final String PROP_ROUNDED_BORDER_ENABLED = "easy-mc-server.roundedBorderEnabled";
 
@@ -86,13 +89,20 @@ public class VentanaPrincipal extends JFrame {
     private CardPanel jugadoresCard; // card dentro del split del HOME
     private JPanel consolaCard; // card dentro del split del HOME
     private final Map<PaginaDerecha, JButton> navButtons = new EnumMap<>(PaginaDerecha.class);
+    private final PropertyChangeListener debugModeListener;
+    private int infoClicksForDebug;
 
     public VentanaPrincipal(GestorServidores gestorServidores) {
         this.gestorServidores = gestorServidores;
         this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         this.setSize(1280, 720);
-        this.setTitle("Easy-MC-Server");
+        actualizarTituloDebug();
         this.setLocationRelativeTo(null);
+        debugModeListener = evt -> {
+            if (!DebugMode.PROPERTY_ENABLED.equals(evt.getPropertyName())) return;
+            SwingUtilities.invokeLater(this::actualizarTituloDebug);
+        };
+        DebugMode.addPropertyChangeListener(debugModeListener);
         ventanaPrincipalPanel = new JPanel(new BorderLayout()); // el panel principal, donde se aloja todo
         Color bgApp = AppTheme.getBackground();
         Color panelBg = AppTheme.getPanelBackground();
@@ -318,6 +328,11 @@ public class VentanaPrincipal extends JFrame {
             @Override
             public void windowClosing(WindowEvent e) {
                 intentarCerrarAplicacion(gestorServidores);
+            }
+
+            @Override
+            public void windowClosed(WindowEvent e) {
+                DebugMode.removePropertyChangeListener(debugModeListener);
             }
         });
 
@@ -1037,12 +1052,30 @@ public class VentanaPrincipal extends JFrame {
 
     private void navegarAPaginaDerecha(PaginaDerecha pagina){
         if(pagina == null) pagina = PaginaDerecha.HOME;
+        registrarClickInfoDebug(pagina);
         if(pagina == paginaDerechaActual){
             setPaginaDerecha(pagina);
             return;
         }
         if(!confirmarSalidaConfiguracion(gestorServidores.getServidorSeleccionado(), pagina)) return;
         setPaginaDerecha(pagina);
+    }
+
+    private void registrarClickInfoDebug(PaginaDerecha pagina) {
+        if (pagina != PaginaDerecha.INFO) {
+            infoClicksForDebug = 0;
+            return;
+        }
+
+        infoClicksForDebug++;
+        if (infoClicksForDebug < DEBUG_TOGGLE_INFO_CLICKS) return;
+
+        infoClicksForDebug = 0;
+        DebugMode.toggle();
+    }
+
+    private void actualizarTituloDebug() {
+        setTitle(DebugMode.isEnabled() ? BASE_TITLE + " (debug)" : BASE_TITLE);
     }
 
     private boolean aplicarCambioServidor(Server server, boolean restaurarSeleccionSiCancela){
