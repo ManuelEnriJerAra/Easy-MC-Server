@@ -1,0 +1,77 @@
+# World Management Pipeline
+
+World UI behavior is mostly in `src/main/java/vista/PanelMundo.java`.
+
+Supporting services live under:
+
+- `src/main/java/controlador/GestorMundos.java`
+- `src/main/java/controlador/WorldDataReader.java`
+- `src/main/java/controlador/world`
+
+## Refresh Pipeline
+
+`refrescarDatos()` is the broad refresh entry point.
+
+Typical sequence:
+
+1. Resolve the selected server through `GestorServidores`.
+2. Synchronize worlds with `GestorMundos.sincronizarMundosServidor(...)`.
+3. List worlds with `GestorMundos.listarMundos(...)`.
+4. Resolve the active world with `GestorMundos.getMundoActivo(...)`.
+5. Populate the world combo box.
+6. Call `actualizarVistaMundos()`.
+
+`actualizarVistaMundos()` updates:
+
+- use-world button state
+- preview preferences
+- metadata labels
+- world settings controls
+- selected preview
+- shared preview-render state
+- storage stats
+- recent connections
+
+## Recent Connections Pipeline
+
+`actualizarConexionesRecientes()` renders the "Ultimas conexiones" card.
+
+Data source order:
+
+1. Parse recent join lines from `Server.getRawLogLines()`.
+2. If no log joins are found, fallback to `WorldPlayerDataService.findRecentPlayers(...)`.
+3. In Debug mode, merge in-memory fake connections ahead of real entries.
+4. Render rows with `crearFilaConexion(...)`.
+
+Keep the display bounded to the existing recent-connection limit.
+
+## Preview Pipeline
+
+Preview state is coordinated between UI controls, metadata, and background render workers.
+
+Important areas:
+
+- `PreviewRenderPreferences`
+- preview option menu installation
+- preview status label
+- shared render state fields
+- preview generation SwingWorker
+
+When touching preview code, keep UI updates on the EDT and avoid starting duplicate generation workers.
+
+## World Settings
+
+The configuration card edits server/world properties such as:
+
+- `allow-nether`
+- region file compression
+- spawn protection
+- max world size
+
+Use existing helper methods for reading, applying, tracking persisted state, and enabling the save button.
+
+## UI Notes
+
+Cards use `CardPanel`. Compact rows use `BoxCategory`.
+
+For header/debug controls, use icon-only buttons styled through `AppTheme` and `SvgIconFactory`.

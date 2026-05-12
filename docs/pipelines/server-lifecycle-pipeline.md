@@ -1,0 +1,83 @@
+# Server Lifecycle Pipeline
+
+Use this guide before editing server import/listing/persistence, start/stop/restart, backups, deletion, or process handling.
+
+## Core Classes
+
+- `controlador.GestorServidores`: central server manager.
+- `modelo.Server`: server model, runtime process, console listeners, extension list.
+- `modelo.ServerConfig`: persisted server config values.
+- `controlador.ServerRuntime`: runtime helper.
+- `controlador.ServerLogReader`: reads process output and forwards console lines.
+- `controlador.DetectorTipoServidor`: legacy/server type detection.
+- `controlador.DetectorVersionServidor`: version detection support.
+- `controlador.platform.*`: modern platform detection, validation, startup command, creation.
+
+## Managed Server List
+
+`GestorServidores` owns the server collection and selected server.
+
+Typical responsibilities:
+
+- Load persisted servers.
+- Add imported or newly created servers.
+- Persist changes after reorder/favorite/edit.
+- Expose `PropertyChangeSupport` events for UI panels.
+- Keep selected server consistent.
+
+Before changing persistence, inspect `GestorConfiguracion`, `EasyMCConfig`, `Server`, and tests in `GestorServidoresTest`.
+
+## Start Pipeline
+
+General sequence:
+
+1. Resolve selected or requested `Server`.
+2. Validate server directory.
+3. Detect/resolve platform profile.
+4. Locate executable jar if required.
+5. Build a `ProcessBuilder` through the platform adapter or default Java jar path.
+6. Start the process.
+7. Store the `Process` in the `Server`.
+8. Start `ServerLogReader` to stream logs.
+9. Notify property listeners so UI controls update.
+
+Platform adapters can customize start behavior through:
+
+- `buildStartProcess(...)`
+- `requiresExecutableJarForStart()`
+
+Forge/NeoForge/Quilt may use generated argument files or special launch paths.
+
+## Stop And Command Pipeline
+
+Commands are written to the running process input stream.
+
+Stop should prefer graceful server command behavior before killing the process. UI buttons should reflect whether the process exists and is alive.
+
+## Import Pipeline
+
+Importing an existing server should:
+
+- Validate the selected folder.
+- Detect platform/version where possible.
+- Avoid corrupting or rewriting unknown server contents.
+- Preserve user data.
+- Add the server to the managed list only after validation succeeds.
+
+## Delete/Remove Pipeline
+
+There is a distinction between removing a server from the app and deleting files from disk. Keep UI copy clear and do not delete folders unless the flow explicitly asks for that destructive operation.
+
+## Events And UI
+
+Panels use `GestorServidores` property changes for state updates. If adding events, keep names stable and update consumers.
+
+## Tests
+
+Relevant tests:
+
+- `src/test/java/controlador/GestorServidoresTest.java`
+- `src/test/java/modelo/ServerModelPlatformTest.java`
+- `src/test/java/controlador/platform/ServerPlatformAdaptersTest.java`
+
+Run at least targeted tests when changing lifecycle, persistence, or platform detection.
