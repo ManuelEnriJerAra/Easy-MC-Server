@@ -132,6 +132,7 @@ Rules:
 - Do not end the subject with a period.
 - Avoid `WIP` commits unless the user explicitly asks for a checkpoint.
 - If a commit spans unrelated areas, either split it or use the dominant user-facing purpose.
+- Use `Docs` for commits that only add or update pending feature/fix documentation; reserve `Feature` for implemented product behavior.
 - When asked for a commit message, inspect all current changes with `git status --short` and relevant `git diff` output before suggesting it; do not base the message only on the latest request.
 
 Examples:
