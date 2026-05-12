@@ -53,6 +53,8 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 public class VentanaPrincipal extends JFrame {
     private static final String BASE_TITLE = "Easy-MC-Server";
     private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
+    private static final int SERVER_LIST_INITIAL_WIDTH = 320;
+    private static final int SERVER_LIST_MIN_WIDTH = 280;
     private static final String PROP_MANAGED_ROUNDED_BORDER = "easy-mc-server.managedRoundedBorder";
     private static final String PROP_ROUNDED_BORDER_ENABLED = "easy-mc-server.roundedBorderEnabled";
 
@@ -78,6 +80,7 @@ public class VentanaPrincipal extends JFrame {
     private JSplitPane splitPrincipal;
     private JSplitPane splitHome;
     private PanelConfigServidor panelConfigServidor;
+    private boolean divisorPrincipalInicializado;
 
     enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, EXTENSIONES, INFO }
     private record TemaInfo(String name, String className){}
@@ -188,6 +191,7 @@ public class VentanaPrincipal extends JFrame {
             public void actionPerformed(ActionEvent e) {
                 Server server = gestorServidores.importarServidor();
                 if(server != null){
+                    listaServidoresPanel.refrescarListado();
                     seleccionarServidor(server);
                 }
             }
@@ -360,6 +364,8 @@ public class VentanaPrincipal extends JFrame {
         wrapperIzquierdo.setOpaque(true);
         wrapperIzquierdo.setBackground(bgApp);
         wrapperIzquierdo.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
+        wrapperIzquierdo.setPreferredSize(new Dimension(SERVER_LIST_INITIAL_WIDTH, 0));
+        wrapperIzquierdo.setMinimumSize(new Dimension(SERVER_LIST_MIN_WIDTH, 0));
 
         wrapperDerecho = new JPanel(new BorderLayout());
         wrapperDerecho.add(panelDerecho, BorderLayout.CENTER);
@@ -384,12 +390,14 @@ public class VentanaPrincipal extends JFrame {
         barraWrapper.add(panelBarraVertical, BorderLayout.CENTER);
         ventanaPrincipalPanel.add(barraWrapper, BorderLayout.WEST);
         ventanaPrincipalPanel.add(splitPrincipal, BorderLayout.CENTER);
+        SwingUtilities.invokeLater(this::aplicarDivisorPrincipalInicial);
 
         // Fuerza un repintado completo al redimensionar para evitar artefactos visuales con componentes transparentes
         this.addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
                 SwingUtilities.invokeLater(() -> {
+                    aplicarDivisorPrincipalInicial();
                     JRootPane root = getRootPane();
                     if(root != null){
                         RepaintManager.currentManager(root).markCompletelyDirty(root);
@@ -930,6 +938,21 @@ public class VentanaPrincipal extends JFrame {
                 root.repaint();
             });
         }
+    }
+
+    private void aplicarDivisorPrincipalInicial(){
+        if(divisorPrincipalInicializado || splitPrincipal == null) return;
+
+        int splitWidth = splitPrincipal.getWidth();
+        if(splitWidth <= 0) return;
+
+        int dividerSize = Math.max(0, splitPrincipal.getDividerSize());
+        int maxLeftWidth = Math.max(SERVER_LIST_MIN_WIDTH, splitWidth - dividerSize - 480);
+        int leftWidth = Math.min(SERVER_LIST_INITIAL_WIDTH, maxLeftWidth);
+        leftWidth = Math.max(SERVER_LIST_MIN_WIDTH, leftWidth);
+
+        splitPrincipal.setDividerLocation(leftWidth);
+        divisorPrincipalInicializado = true;
     }
 
     private void reconfigurarSplitPanes(){

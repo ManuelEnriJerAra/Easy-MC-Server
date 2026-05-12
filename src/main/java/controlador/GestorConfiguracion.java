@@ -13,7 +13,7 @@ public final class GestorConfiguracion {
     private static final String JSON_FILE = "easy-mc-config.json";
     private static final String LEGACY_JSON_FILE = "EasyMCConfig.json";
     private static final String DEFAULT_THEME_CLASS =
-            "com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTSolarizedLightIJTheme";
+            "com.formdev.flatlaf.intellijthemes.FlatArcIJTheme";
     private static final int DEFAULT_STATS_RANGE_SECONDS = 60;
     private static final boolean DEFAULT_STATS_PERSISTENCE_ENABLED = true;
     private static final int DEFAULT_STATS_RECENT_WINDOW_SECONDS = 24 * 60 * 60;

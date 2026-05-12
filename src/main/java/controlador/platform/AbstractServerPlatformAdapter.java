@@ -61,7 +61,7 @@ abstract class AbstractServerPlatformAdapter implements ServerPlatformAdapter {
     protected ServerPlatformProfile buildProfile(Path serverDir, String loaderVersion) {
         try {
             Path executableJar = resolveExecutableJar(serverDir);
-            String minecraftVersion = MinecraftServerJarInspector.readMinecraftVersion(executableJar);
+            String minecraftVersion = MinecraftServerVersionDetector.detect(serverDir, executableJar);
             List<Path> extensionDirectories = getExtensionDirectories(serverDir);
             return new ServerPlatformProfile(
                     getPlatform(),
@@ -76,6 +76,25 @@ abstract class AbstractServerPlatformAdapter implements ServerPlatformAdapter {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    protected ServerPlatformProfile buildProfileAllowingMissingJar(Path serverDir, String loaderVersion) {
+        Path executableJar = null;
+        try {
+            executableJar = resolveExecutableJar(serverDir);
+        } catch (IOException | RuntimeException ignored) {
+        }
+        String minecraftVersion = MinecraftServerVersionDetector.detect(serverDir, executableJar);
+        return new ServerPlatformProfile(
+                getPlatform(),
+                getLoader(),
+                loaderVersion,
+                minecraftVersion,
+                getEcosystemType(),
+                getCapabilities(),
+                getExtensionDirectories(serverDir),
+                executableJar
+        );
     }
 
     protected boolean exists(Path serverDir, String fileName) {

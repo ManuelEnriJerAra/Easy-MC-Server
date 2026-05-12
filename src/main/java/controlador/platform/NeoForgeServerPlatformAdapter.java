@@ -37,12 +37,13 @@ public final class NeoForgeServerPlatformAdapter extends AbstractServerPlatformA
     public ServerPlatformProfile detect(Path serverDir) {
         Path executableJar = resolveJarSilently(serverDir);
         boolean hasNeoForgeMarkers = existsNeoForgeNamedFile(serverDir)
+                || hasNeoForgeRuntimePath(serverDir)
                 || MinecraftServerJarInspector.looksLikeNeoForgeServerJar(executableJar);
         if (!hasNeoForgeMarkers) {
             return null;
         }
         ServerValidationResult validation = validate(serverDir);
-        return validation.valid() ? buildProfile(serverDir, null) : null;
+        return validation.valid() ? buildProfileAllowingMissingJar(serverDir, null) : null;
     }
 
     @Override
@@ -131,6 +132,20 @@ public final class NeoForgeServerPlatformAdapter extends AbstractServerPlatformA
         }
         try (var stream = Files.list(serverDir)) {
             return stream.anyMatch(path -> path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).contains("neoforge"));
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    private boolean hasNeoForgeRuntimePath(Path serverDir) {
+        if (serverDir == null || !Files.isDirectory(serverDir.resolve("libraries"))) {
+            return false;
+        }
+        try (var paths = Files.walk(serverDir.resolve("libraries"), 6)) {
+            return paths.anyMatch(path -> path.toString()
+                    .replace('\\', '/')
+                    .toLowerCase(java.util.Locale.ROOT)
+                    .contains("/net/neoforged/neoforge/"));
         } catch (IOException | RuntimeException e) {
             return false;
         }

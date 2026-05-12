@@ -293,7 +293,7 @@ public class PanelServidores extends FlatScrollPane {
         if(servidores == null) return panelContenedor;
 
         for(Server servidor : servidores){
-            if(servidor == null || servidor.getVersion() == null) continue;
+            if(servidor == null) continue;
             JPanel fila = crearFila(servidor, servidor.getVersion());
             panelContenedor.add(fila);
         }

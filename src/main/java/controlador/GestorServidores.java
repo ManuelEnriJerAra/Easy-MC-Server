@@ -100,7 +100,7 @@ public class GestorServidores {
     );
     private static final Set<String> DIRECTORIOS_EXTENSION_PRESERVABLES = Set.of("mods", "plugins", "config");
     private static final DateTimeFormatter BACKUP_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-    private static final Pattern MINECRAFT_VERSION_PATTERN = Pattern.compile("1\\.(?:1[0-9]|2[0-9])(?:\\.\\d+)?");
+    private static final Pattern MINECRAFT_VERSION_PATTERN = Pattern.compile("(?i)(?:1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?|\\d{2}w\\d{2}[a-z]|[ab]\\d+\\.\\d+(?:\\.\\d+)?)");
 
     // ===== ATRIBUTOS =====
     private static final MojangAPI MOJANG_API = new MojangAPI();
@@ -1860,16 +1860,28 @@ public class GestorServidores {
     Server importarServidorDesdeDirectorio(Path directorio) {
         if (directorio == null) return null;
 
-        String directorioNormalizado = directorio.toAbsolutePath().toString();
+        Path directorioNormalizadoPath = normalizarDirectorioServidor(directorio);
+        if (directorioNormalizadoPath == null || !Files.isDirectory(directorioNormalizadoPath)) {
+            System.out.println("El directorio seleccionado no existe o no es una carpeta valida.");
+            return null;
+        }
+
+        String directorioNormalizado = directorioNormalizadoPath.toString();
         for (Server existente : listaServidores) {
             if (existente == null || existente.getServerDir() == null) continue;
-            if (existente.getServerDir().equals(directorioNormalizado)) {
+            Path existentePath;
+            try {
+                existentePath = normalizarDirectorioServidor(Path.of(existente.getServerDir()));
+            } catch (RuntimeException e) {
+                continue;
+            }
+            if (Objects.equals(existentePath, directorioNormalizadoPath)) {
                 System.out.println("El servidor ya está importado.");
                 return existente;
             }
         }
 
-        ServerPlatformProfile profile = inspeccionarServidor(directorio);
+        ServerPlatformProfile profile = inspeccionarServidor(directorioNormalizadoPath);
         if (profile == null) {
             System.out.println("No se ha podido detectar una plataforma valida para el servidor importado.");
             return null;
@@ -1891,6 +1903,21 @@ public class GestorServidores {
         } catch (IOException ignored) {
         }
         return server;
+    }
+
+    private Path normalizarDirectorioServidor(Path directorio) {
+        if (directorio == null) {
+            return null;
+        }
+        try {
+            return directorio.toRealPath();
+        } catch (IOException | RuntimeException e) {
+            try {
+                return directorio.toAbsolutePath().normalize();
+            } catch (RuntimeException ignored) {
+                return null;
+            }
+        }
     }
 
     // Guarda la lista de servidores en el JSON
@@ -3360,15 +3387,19 @@ public class GestorServidores {
     }
 
     private String construirNombreServidorImportado(String version, String serverDir, boolean forzarSufijoCopia) {
-        String versionNormalizada = (version == null || version.isBlank()) ? "sin versión" : version.trim();
-        String base = "Servidor " + versionNormalizada;
+        String versionNormalizada = (version == null || version.isBlank()) ? null : version.trim();
+        String base = versionNormalizada == null ? nombreCarpetaServidor(serverDir) : "Servidor " + versionNormalizada;
 
         int duplicadosExistentes = 0;
         if (listaServidores != null) {
             for (Server existente : listaServidores) {
                 if (existente == null) continue;
                 if (serverDir != null && serverDir.equals(existente.getServerDir())) continue;
-                if (!Objects.equals(versionNormalizada, normalizarVersionNombre(existente.getVersion()))) continue;
+                if (versionNormalizada == null) {
+                    if (!Objects.equals(base, existente.getDisplayName())) continue;
+                } else if (!Objects.equals(versionNormalizada, normalizarVersionNombre(existente.getVersion()))) {
+                    continue;
+                }
                 duplicadosExistentes++;
             }
         }
@@ -3381,6 +3412,21 @@ public class GestorServidores {
 
     private String normalizarVersionNombre(String version) {
         return (version == null || version.isBlank()) ? "sin versión" : version.trim();
+    }
+
+    private String nombreCarpetaServidor(String serverDir) {
+        if (serverDir == null || serverDir.isBlank()) {
+            return "Servidor importado";
+        }
+        try {
+            Path path = Path.of(serverDir);
+            Path fileName = path.getFileName();
+            if (fileName != null && !fileName.toString().isBlank()) {
+                return fileName.toString();
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return "Servidor importado";
     }
 }
 

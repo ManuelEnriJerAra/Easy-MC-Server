@@ -15,7 +15,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class MinecraftServerJarInspector {
-    private static final Pattern VERSION_PATTERN = Pattern.compile("(?<![\\d.])(1\\.(?:1[0-9]|2[0-9])(?:\\.\\d+)?)(?![\\d.])");
+    private static final Pattern VERSION_PATTERN = Pattern.compile(
+            "(?i)(?<![a-z0-9.])("
+                    + "1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
+                    + "|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
+                    + "|\\d{2}w\\d{2}[a-z]"
+                    + "|[ab]\\d+\\.\\d+(?:\\.\\d+)?"
+                    + ")(?![a-z0-9.])"
+    );
     private static final String[] FORGE_ENTRY_MARKERS = {
             "net/minecraftforge/server/ServerMain.class",
             "net/minecraftforge/common/MinecraftForge.class",
@@ -90,7 +97,10 @@ final class MinecraftServerJarInspector {
             JarEntry serverClass = jar.getJarEntry("net/minecraft/server/MinecraftServer.class");
             if (serverClass != null) {
                 try (InputStream in = jar.getInputStream(serverClass)) {
-                    return readVersionClass(in);
+                    String version = readVersionClass(in);
+                    if (version != null && !version.isBlank()) {
+                        return version;
+                    }
                 }
             }
             return null;

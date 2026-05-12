@@ -204,6 +204,189 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
+    void detect_debeInferirVersionDesdeArgsDeForgeModernoSinJarEjecutable() throws Exception {
+        Path forgeDir = tempDir.resolve("forge-script-version");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries/net/minecraftforge/forge/1.20.1-47.2.0"));
+        Files.writeString(forgeDir.resolve("run.bat"), "@echo off\njava @libraries/net/minecraftforge/forge/1.20.1-47.2.0/win_args.txt nogui\n");
+        Files.writeString(forgeDir.resolve("unix_args.txt"), "--fml.mcVersion 1.20.1\n--fml.forgeVersion 47.2.0\n");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.20.1");
+    }
+
+    @Test
+    void detect_debeInferirVersionDesdeManifestDeModpackForge() throws Exception {
+        Path forgeDir = tempDir.resolve("26.1.2_server_1");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("config"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+        Files.writeString(forgeDir.resolve("manifest.json"), """
+                {
+                  "minecraft": {
+                    "version": "1.14.4",
+                    "modLoaders": [
+                      { "id": "forge-26.1.2", "primary": true }
+                    ]
+                  }
+                }
+                """);
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.14.4");
+    }
+
+    @Test
+    void detect_noDebeUsarVersionDeLoaderForgeComoVersionMinecraft() throws Exception {
+        Path forgeDir = tempDir.resolve("forge-loader-only");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("config"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+        Files.writeString(forgeDir.resolve("manifest.json"), """
+                {
+                  "minecraft": {
+                    "modLoaders": [
+                      { "id": "forge-26.1.2", "primary": true }
+                    ]
+                  }
+                }
+                """);
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isNull();
+    }
+
+    @Test
+    void detect_noDebeUsarNombreDeCarpetaNiJarComoVersion() throws Exception {
+        Path forgeDir = tempDir.resolve("1.20.1_server_1");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "forge-1.20.1-server.jar",
+                "{\"id\":\"forge\"}",
+                "net/minecraftforge/common/MinecraftForge.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isNull();
+    }
+
+    @Test
+    void detect_debeInferirVersionDesdeLauncherPropertiesDeFabric() throws Exception {
+        Path fabricDir = tempDir.resolve("fabric-launcher-version");
+        Files.createDirectories(fabricDir.resolve("mods"));
+        Files.writeString(fabricDir.resolve("fabric-server-launcher.properties"), "minecraftVersion=1.19.4\nserverJar=server.jar\n");
+        Files.writeString(fabricDir.resolve("fabric-server-launcher.jar"), "");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(fabricDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FABRIC);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.19.4");
+    }
+
+    @Test
+    void detect_debeInferirVersionDesdeJarInternoAunqueNoSeaElEjecutableElegido() throws Exception {
+        Path paperDir = tempDir.resolve("paper-multi-jar");
+        TestWorldFixtures.createJar(
+                paperDir.resolve("launcher.jar"),
+                Map.of("version.json", "{\"id\":\"launcher\"}"),
+                "io/papermc/paper/PaperBootstrap.class"
+        );
+        TestWorldFixtures.createJar(
+                paperDir.resolve("server-runtime.jar"),
+                Map.of("version.json", "{\"id\":\"1.21.4\"}")
+        );
+        Files.createDirectories(paperDir.resolve("plugins"));
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(paperDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.21.4");
+    }
+
+    @Test
+    void detect_debeInferirVersionDesdeLogDelServidor() throws Exception {
+        Path paperDir = tempDir.resolve("paper-log-version");
+        TestWorldFixtures.createValidServerJar(
+                paperDir,
+                "server.jar",
+                "{\"id\":\"git-Paper-123\"}",
+                "io/papermc/paper/PaperBootstrap.class"
+        );
+        Files.createDirectories(paperDir.resolve("plugins"));
+        Files.createDirectories(paperDir.resolve("logs"));
+        Files.writeString(paperDir.resolve("logs").resolve("latest.log"), "[Server thread/INFO]: Starting minecraft server version 1.20.6\n");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(paperDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.20.6");
+    }
+
+    @Test
+    void detect_debeInferirVersionSnapshotDesdeJar() throws Exception {
+        Path vanillaDir = tempDir.resolve("vanilla-snapshot");
+        TestWorldFixtures.createValidServerJar(vanillaDir, "server.jar", "{\"id\":\"24w14a\"}");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(vanillaDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.VANILLA);
+        assertThat(profile.minecraftVersion()).isEqualTo("24w14a");
+    }
+
+    @Test
+    void detect_debeInferirVersionDesdeMmcPack() throws Exception {
+        Path fabricDir = tempDir.resolve("fabric-mmc-pack");
+        Files.createDirectories(fabricDir.resolve("mods"));
+        Files.writeString(fabricDir.resolve("fabric-server-launcher.jar"), "");
+        Files.writeString(fabricDir.resolve("mmc-pack.json"), """
+                {
+                  "components": [
+                    { "uid": "net.fabricmc.fabric-loader", "version": "0.15.11" },
+                    { "uid": "net.minecraft", "version": "1.20.4" }
+                  ]
+                }
+                """);
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(fabricDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FABRIC);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.20.4");
+    }
+
+    @Test
+    void detect_debeInferirVersionMinecraftDesdeCoordenadaNeoForge() throws Exception {
+        Path neoForgeDir = tempDir.resolve("neoforge-runtime-version");
+        Files.createDirectories(neoForgeDir.resolve("mods"));
+        Files.createDirectories(neoForgeDir.resolve("libraries/net/neoforged/neoforge/21.1.172"));
+        Files.writeString(neoForgeDir.resolve("run.bat"), "@echo off\njava @libraries/net/neoforged/neoforge/21.1.172/win_args.txt nogui\n");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(neoForgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.NEOFORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.21.1");
+    }
+
+    @Test
     void install_vanillaDebeEncapsularDescargaEulaYMetadatos() throws Exception {
         Path sourceJar = tempDir.resolve("downloads").resolve("source.jar");
         TestWorldFixtures.createValidServerJar(sourceJar.getParent(), sourceJar.getFileName().toString());
@@ -477,8 +660,8 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
-    void detect_debeIgnorarVersionJsonQueNoSeaVersionMinecraft() throws Exception {
-        Path paperDir = tempDir.resolve("paper-invalid-version-json");
+    void detect_debeAceptarVersionSemanticaFuturaDesdeVersionJson() throws Exception {
+        Path paperDir = tempDir.resolve("paper-future-version-json");
         TestWorldFixtures.createValidServerJar(
                 paperDir,
                 "bootstrap.jar",
@@ -491,7 +674,7 @@ class ServerPlatformAdaptersTest {
 
         assertThat(profile).isNotNull();
         assertThat(profile.platform()).isEqualTo(ServerPlatform.PAPER);
-        assertThat(profile.minecraftVersion()).isNull();
+        assertThat(profile.minecraftVersion()).isEqualTo("26.1.2");
     }
 
     private static final class FakeMojangApi extends MojangAPI {

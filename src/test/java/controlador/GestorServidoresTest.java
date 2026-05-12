@@ -1091,6 +1091,80 @@ class GestorServidoresTest {
     }
 
     @Test
+    void importarServidorNoVanillaSinVersionDetectada_debePersistirloYUsarNombreDeCarpeta() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("paper-import");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "paper-server.jar",
+                "{\"id\":\"git-Paper-123\"}",
+                "io/papermc/paperclip/Paperclip.class"
+        );
+        Files.writeString(serverDir.resolve("paper.yml"), "settings: {}\n");
+
+        Server imported = gestor.importarServidorDesdeDirectorio(serverDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getPlatform()).isEqualTo(modelo.extensions.ServerPlatform.PAPER);
+        assertThat(imported.getVersion()).isNull();
+        assertThat(imported.getDisplayName()).isEqualTo("paper-import");
+        assertThat(gestor.getListaServidores()).extracting(Server::getId).contains(imported.getId());
+    }
+
+    @Test
+    void importarServidorDebeEvitarDuplicadosConRutasNormalizadas() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("paper-duplicate");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "paper-1.20.4.jar",
+                "{\"id\":\"git-Paper-123\"}",
+                "io/papermc/paperclip/Paperclip.class"
+        );
+        Files.writeString(serverDir.resolve("paper.yml"), "settings: {}\n");
+
+        Server first = gestor.importarServidorDesdeDirectorio(serverDir);
+        Server second = gestor.importarServidorDesdeDirectorio(serverDir.resolve("."));
+
+        assertThat(second).isSameAs(first);
+        assertThat(gestor.getListaServidores()).hasSize(1);
+    }
+
+    @Test
+    void importarServidorDebeDetectarVersionAntiguaDesdeMetadatos() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("forge-legacy");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "forge-server.jar",
+                "{\"id\":\"forge\"}",
+                "net/minecraftforge/common/MinecraftForge.class"
+        );
+        Files.createDirectories(serverDir.resolve("mods"));
+        Files.createDirectories(serverDir.resolve("libraries"));
+        Files.writeString(serverDir.resolve("version_history.json"), "{\"minecraftVersion\":\"1.7.10\"}\n");
+
+        Server imported = gestor.importarServidorDesdeDirectorio(serverDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getPlatform()).isEqualTo(modelo.extensions.ServerPlatform.FORGE);
+        assertThat(imported.getVersion()).isEqualTo("1.7.10");
+    }
+
+    @Test
+    void importarServidorDebeAceptarVersionSemanticaFuturaDesdeVersionJson() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("future-vanilla");
+        TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"26.1.2\",\"name\":\"26.1.2\"}");
+
+        Server imported = gestor.importarServidorDesdeDirectorio(serverDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getPlatform()).isEqualTo(modelo.extensions.ServerPlatform.VANILLA);
+        assertThat(imported.getVersion()).isEqualTo("26.1.2");
+    }
+
+    @Test
     void eliminarServidor_debeFallarSiProcesoSigueVivo() {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
         Server server = new Server();

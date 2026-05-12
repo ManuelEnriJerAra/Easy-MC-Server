@@ -42,7 +42,27 @@ public final class FabricServerPlatformAdapter extends AbstractServerPlatformAda
             return null;
         }
         ServerValidationResult validation = validate(serverDir);
-        return validation.valid() ? buildProfile(serverDir, null) : null;
+        return validation.valid() ? buildProfileAllowingMissingJar(serverDir, null) : null;
+    }
+
+    @Override
+    public ServerValidationResult validate(Path serverDir) {
+        if (serverDir == null) {
+            return ServerValidationResult.error("No se ha indicado el directorio del servidor.");
+        }
+        if (!Files.isDirectory(serverDir)) {
+            return ServerValidationResult.error("No existe la carpeta del servidor.");
+        }
+        Path executableJar = resolveJarSilently(serverDir);
+        boolean hasServerJar = executableJar != null && Files.isRegularFile(executableJar)
+                && (MinecraftServerJarInspector.looksLikeMinecraftServerJar(executableJar)
+                || MinecraftServerJarInspector.looksLikeFabricServerJar(executableJar));
+        boolean hasFabricRuntime = exists(serverDir, "fabric-server-launcher.properties")
+                || exists(serverDir, "fabric-server-launch.properties")
+                || existsFabricNamedFile(serverDir);
+        return (hasServerJar || hasFabricRuntime)
+                ? ServerValidationResult.ok()
+                : ServerValidationResult.error("No se ha encontrado una instalacion valida de Fabric.");
     }
 
     @Override

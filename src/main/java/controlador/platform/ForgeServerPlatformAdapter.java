@@ -48,7 +48,7 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
             return null;
         }
         ServerValidationResult validation = validate(serverDir);
-        return validation.valid() ? buildProfile(serverDir, null) : null;
+        return validation.valid() ? buildProfileAllowingMissingJar(serverDir, null) : null;
     }
 
     @Override
