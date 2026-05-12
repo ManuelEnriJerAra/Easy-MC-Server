@@ -16,7 +16,9 @@ Core API:
 - `ServerCreationOption`
 - `ServerValidationResult`
 
-Supported adapters include Vanilla, Forge, NeoForge, Fabric, Quilt, Paper, Bukkit, Spigot, Purpur, Pufferfish.
+Adapters include Vanilla, Forge, NeoForge, Fabric, Quilt, Paper, Bukkit, Spigot, Purpur, and Pufferfish.
+
+Automated creation is supported only by adapters that override `supportsAutomatedCreation()`. Bukkit, Spigot, and Pufferfish currently provide import/detection support for existing installations, not automated creation.
 
 ## Adapter Responsibilities
 
