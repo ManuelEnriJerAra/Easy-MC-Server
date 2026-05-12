@@ -37,6 +37,7 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.AWTEventListener;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -45,6 +46,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
+import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.io.FileNotFoundException;
 import java.nio.file.Files;
@@ -80,6 +82,7 @@ import java.util.stream.Stream;
 public class PanelMundo extends JPanel {
     private static final String[] REGION_FILE_COMPRESSION_OPTIONS = {"deflate", "lz4", "none"};
     private static final int CONNECTION_HEAD_SIZE = 24;
+    private static final int MAX_DEBUG_RECENT_CONNECTIONS = 4;
     private static final int PREVIEW_PLAYER_HEAD_SIZE = 24;
     private static final Pattern JOIN = Pattern.compile("([^\\s]+) joined the game");
     private static final Pattern HORA_LOG = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
@@ -155,9 +158,15 @@ public class PanelMundo extends JPanel {
     private final JLabel pesoStatsSavesValueLabel = new JLabel("-");
     private final JLabel pesoTotalValueLabel = new JLabel("-");
     private final JPanel conexionesPanel = new JPanel();
+    private final JButton btnDebugAddConnection = new FlatButton();
+    private final JButton btnDebugRemoveConnection = new FlatButton();
+    private final List<RecentConnection> conexionesDebug = new ArrayList<>();
+    private final PropertyChangeListener debugModeListener;
 
     private World mundoActivoActual;
+    private JPanel conexionesHeaderActionsPanel;
     private boolean actualizandoComboMundos = false;
+    private int fakeConnectionSequence;
     private PreviewRenderPreferences previewPreferences = PreviewRenderPreferences.defaults();
     private static final int EMPTY_SPIRAL_RINGS_TO_STOP = 2;
     private static final int PREVIEW_RENDER_MARGIN_BLOCKS = MCARenderer.CHUNK_BLOCK_SIDE;
@@ -252,6 +261,13 @@ public class PanelMundo extends JPanel {
         stylePreviewStatusLabel(previewRenderStatusLabel);
         instalarInteraccionSeed();
         configurarControlesAjustesMundo();
+        configurarBotonDebug(btnDebugAddConnection, "Anadir conexion falsa", "easymcicons/plus.svg", this::addFakeConnection);
+        configurarBotonDebug(btnDebugRemoveConnection, "Eliminar conexion falsa", "easymcicons/minus.svg", this::removeFakeConnection);
+        debugModeListener = evt -> {
+            if (!DebugMode.PROPERTY_ENABLED.equals(evt.getPropertyName())) return;
+            SwingUtilities.invokeLater(this::actualizarModoDebugConexiones);
+        };
+        DebugMode.addPropertyChangeListener(debugModeListener);
 
         conexionesPanel.setOpaque(false);
         conexionesPanel.setLayout(new BoxLayout(conexionesPanel, BoxLayout.Y_AXIS));
@@ -292,6 +308,13 @@ public class PanelMundo extends JPanel {
 
         refrescarDatos();
         sincronizarEstadoRenderCompartido();
+
+        addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
+            if (!isDisplayable()) {
+                DebugMode.removePropertyChangeListener(debugModeListener);
+            }
+        });
     }
 
     private JPanel crearTarjetaPrincipal() {
@@ -453,8 +476,40 @@ public class PanelMundo extends JPanel {
     private JPanel crearTarjetaConexiones() {
         CardPanel card = new CardPanel("Últimas conexiones");
 
+        conexionesHeaderActionsPanel = card.getHeaderActionsPanel();
+        actualizarAccionesDebugConexiones();
+
         card.getContentPanel().add(conexionesPanel, BorderLayout.CENTER);
         return card;
+    }
+
+    private void configurarBotonDebug(JButton boton, String tooltip, String iconPath, Runnable onClick) {
+        boton.setToolTipText(tooltip);
+        AppTheme.applyHeaderIconButtonStyle(boton);
+        SvgIconFactory.apply(boton, iconPath, 18, 18, AppTheme::getForeground);
+        boton.addActionListener(e -> {
+            if (!DebugMode.isEnabled()) return;
+            onClick.run();
+        });
+    }
+
+    private void actualizarAccionesDebugConexiones() {
+        if (conexionesHeaderActionsPanel == null) return;
+        conexionesHeaderActionsPanel.removeAll();
+        if (DebugMode.isEnabled()) {
+            conexionesHeaderActionsPanel.add(btnDebugAddConnection);
+            conexionesHeaderActionsPanel.add(btnDebugRemoveConnection);
+        }
+        conexionesHeaderActionsPanel.revalidate();
+        conexionesHeaderActionsPanel.repaint();
+    }
+
+    private void actualizarModoDebugConexiones() {
+        if (!DebugMode.isEnabled() && !conexionesDebug.isEmpty()) {
+            conexionesDebug.clear();
+            actualizarConexionesRecientes();
+        }
+        actualizarAccionesDebugConexiones();
     }
 
     private JPanel crearTarjetaAjusteBooleano(String labelText, JCheckBox checkBox) {
@@ -1176,10 +1231,42 @@ public class PanelMundo extends JPanel {
     private void actualizarConexionesRecientes() {
         Server server = gestorServidores.getServidorSeleccionado();
         if (server == null) {
-            renderConexiones(List.of());
+            renderConexiones(aplicarConexionesDebug(List.of()));
             return;
         }
-        renderConexiones(obtenerUltimasConexiones(server, getMundoSeleccionadoOActivo()));
+        renderConexiones(aplicarConexionesDebug(obtenerUltimasConexiones(server, getMundoSeleccionadoOActivo())));
+    }
+
+    private List<RecentConnection> aplicarConexionesDebug(List<RecentConnection> conexiones) {
+        if (!DebugMode.isEnabled() || conexionesDebug.isEmpty()) {
+            return conexiones;
+        }
+
+        ArrayList<RecentConnection> combinadas = new ArrayList<>(conexionesDebug);
+        if (conexiones != null) {
+            combinadas.addAll(conexiones);
+        }
+        return combinadas.stream()
+                .limit(MAX_DEBUG_RECENT_CONNECTIONS)
+                .toList();
+    }
+
+    private void addFakeConnection() {
+        if (conexionesDebug.size() >= MAX_DEBUG_RECENT_CONNECTIONS) return;
+
+        fakeConnectionSequence++;
+        String username = String.format(Locale.ROOT, "DebugPlayer%03d", fakeConnectionSequence);
+        String timestamp = FORMATO_CONEXION.format(java.time.LocalDateTime.now());
+        String location = "X: " + (fakeConnectionSequence * 37) + " Z: " + (fakeConnectionSequence * -19);
+        conexionesDebug.add(0, new RecentConnection(username, timestamp, location, System.currentTimeMillis()));
+        actualizarConexionesRecientes();
+    }
+
+    private void removeFakeConnection() {
+        if (conexionesDebug.isEmpty()) return;
+
+        conexionesDebug.remove(0);
+        actualizarConexionesRecientes();
     }
 
     private List<RecentConnection> obtenerUltimasConexiones(Server server, World mundo) {

@@ -63,6 +63,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
@@ -2471,7 +2472,7 @@ public class GestorServidores {
         cards.add(createWizardStepPanel("Carpeta de destino", parentStep), "parent");
 
         JTextField folderNameField = new JTextField(24);
-        JLabel parentPrefixLabel = new JLabel();
+        LeftEllipsisLabel parentPrefixLabel = new LeftEllipsisLabel();
         JButton resetFolderButton = new JButton();
         AppTheme.applyHeaderIconButtonStyle(resetFolderButton);
         resetFolderButton.setToolTipText("Restablecer nombre");
@@ -2486,8 +2487,8 @@ public class GestorServidores {
         Font pathFont = new Font(Font.MONOSPACED, Font.PLAIN, 16);
         parentPrefixLabel.setFont(pathFont);
         folderNameField.setFont(pathFont);
-        folderNameField.setHorizontalAlignment(JTextField.CENTER);
-        JPanel folderPathPanel = new JPanel(new BorderLayout(0, 0));
+        folderNameField.setHorizontalAlignment(JTextField.LEFT);
+        FolderPathPanel folderPathPanel = new FolderPathPanel(parentPrefixLabel, folderNameField, resetFolderButton);
         Color folderNameBorderColor = UIManager.getColor("Component.borderColor") == null
                 ? Color.GRAY
                 : UIManager.getColor("Component.borderColor");
@@ -2496,9 +2497,6 @@ public class GestorServidores {
         folderPathPanel.setOpaque(true);
         folderNameField.setOpaque(false);
         folderNameField.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-        folderPathPanel.add(parentPrefixLabel, BorderLayout.WEST);
-        folderPathPanel.add(folderNameField, BorderLayout.CENTER);
-        folderPathPanel.add(resetFolderButton, BorderLayout.EAST);
         folderPathPanel.setPreferredSize(new Dimension(620, 42));
         JPanel folderNameWrap = new JPanel(new GridBagLayout());
         folderNameWrap.add(folderPathPanel, new GridBagConstraints());
@@ -2688,6 +2686,8 @@ public class GestorServidores {
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
                 state.folderName = folderNameField.getText();
                 state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
+                folderPathPanel.revalidate();
+                folderPathPanel.repaint();
                 refreshNextState[0].run();
             }
 
@@ -2695,6 +2695,8 @@ public class GestorServidores {
             public void removeUpdate(javax.swing.event.DocumentEvent e) {
                 state.folderName = folderNameField.getText();
                 state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
+                folderPathPanel.revalidate();
+                folderPathPanel.repaint();
                 refreshNextState[0].run();
             }
 
@@ -2702,6 +2704,8 @@ public class GestorServidores {
             public void changedUpdate(javax.swing.event.DocumentEvent e) {
                 state.folderName = folderNameField.getText();
                 state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
+                folderPathPanel.revalidate();
+                folderPathPanel.repaint();
                 refreshNextState[0].run();
             }
         });
@@ -3133,6 +3137,156 @@ public class GestorServidores {
     }
 
     record ConversionWarning(String message, boolean crossEcosystem) {
+    }
+
+    private static final class FolderPathPanel extends JPanel {
+        private static final int RESET_GAP = 6;
+        private static final int EMPTY_FIELD_COLUMNS = 8;
+        private static final int FIELD_TEXT_PADDING = 18;
+        private static final int MIN_FIELD_WIDTH = 150;
+
+        private final JLabel prefixLabel;
+        private final JTextField folderNameField;
+        private final JButton resetButton;
+
+        private FolderPathPanel(JLabel prefixLabel, JTextField folderNameField, JButton resetButton) {
+            super(null);
+            this.prefixLabel = prefixLabel;
+            this.folderNameField = folderNameField;
+            this.resetButton = resetButton;
+            add(prefixLabel);
+            add(folderNameField);
+            add(resetButton);
+        }
+
+        @Override
+        public void doLayout() {
+            Insets insets = getInsets();
+            int contentX = insets.left;
+            int contentY = insets.top;
+            int contentW = Math.max(0, getWidth() - insets.left - insets.right);
+            int contentH = Math.max(0, getHeight() - insets.top - insets.bottom);
+
+            Dimension resetSize = resetButton.getPreferredSize();
+            int resetW = Math.min(resetSize.width, contentW);
+            int resetH = Math.min(resetSize.height, contentH);
+            int resetX = contentX + contentW - resetW;
+            int resetY = contentY + Math.max(0, (contentH - resetH) / 2);
+            resetButton.setBounds(resetX, resetY, resetW, resetH);
+
+            int availableTextW = Math.max(0, contentW - resetW - RESET_GAP);
+            int fieldW = calcularAnchoCampo(availableTextW);
+            int maxPrefixW = Math.max(0, availableTextW - fieldW);
+            int prefixW = Math.min(anchoPrefijoCompleto(), maxPrefixW);
+
+            prefixLabel.setVisible(prefixW > 0);
+            prefixLabel.setBounds(contentX, contentY, prefixW, contentH);
+            folderNameField.setBounds(contentX + prefixW, contentY, Math.max(0, availableTextW - prefixW), contentH);
+        }
+
+        private int calcularAnchoCampo(int availableTextW) {
+            if (availableTextW <= 0) {
+                return 0;
+            }
+            FontMetrics metrics = folderNameField.getFontMetrics(folderNameField.getFont());
+            String text = folderNameField.getText();
+            int emptyWidth = metrics.charWidth('m') * EMPTY_FIELD_COLUMNS + FIELD_TEXT_PADDING;
+            int desiredWidth = text == null || text.isBlank()
+                    ? emptyWidth
+                    : metrics.stringWidth(text) + FIELD_TEXT_PADDING;
+            int minWidth = Math.min(MIN_FIELD_WIDTH, availableTextW);
+            return Math.min(availableTextW, Math.max(minWidth, desiredWidth));
+        }
+
+        private int anchoPrefijoCompleto() {
+            String text = prefixLabel.getText();
+            if (text == null || text.isEmpty()) {
+                return 0;
+            }
+            FontMetrics metrics = prefixLabel.getFontMetrics(prefixLabel.getFont());
+            return metrics.stringWidth(text);
+        }
+    }
+
+    private static final class LeftEllipsisLabel extends JLabel {
+        private static final String ELLIPSIS = "...";
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            String text = getText();
+            if (text == null || text.isEmpty()) {
+                super.paintComponent(g);
+                return;
+            }
+
+            FontMetrics componentMetrics = getFontMetrics(getFont());
+            int componentAvailableW = Math.max(0, getWidth() - getInsets().left - getInsets().right);
+            if (componentMetrics.stringWidth(text) <= componentAvailableW) {
+                super.paintComponent(g);
+                return;
+            }
+
+            if (isOpaque()) {
+                g.setColor(getBackground());
+                g.fillRect(0, 0, getWidth(), getHeight());
+            }
+
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                applyTextRenderingHints(g2);
+                Insets insets = getInsets();
+                int availableW = Math.max(0, getWidth() - insets.left - insets.right);
+                if (availableW <= 0) {
+                    return;
+                }
+                g2.setFont(getFont());
+                g2.setColor(getForeground());
+                FontMetrics metrics = g2.getFontMetrics();
+                String visibleText = ellipsizeLeft(text, metrics, availableW);
+                int y = insets.top + Math.max(0, (getHeight() - insets.top - insets.bottom - metrics.getHeight()) / 2) + metrics.getAscent();
+                g2.setClip(insets.left, insets.top, availableW, Math.max(0, getHeight() - insets.top - insets.bottom));
+                g2.drawString(visibleText, insets.left, y);
+            } finally {
+                g2.dispose();
+            }
+        }
+
+        private void applyTextRenderingHints(Graphics2D g2) {
+            Object desktopHints = Toolkit.getDefaultToolkit().getDesktopProperty("awt.font.desktophints");
+            if (desktopHints instanceof Map<?, ?> hints) {
+                for (Map.Entry<?, ?> hint : hints.entrySet()) {
+                    if (hint.getKey() instanceof RenderingHints.Key key) {
+                        g2.setRenderingHint(key, hint.getValue());
+                    }
+                }
+                return;
+            }
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        }
+
+        private String ellipsizeLeft(String text, FontMetrics metrics, int maxWidth) {
+            if (metrics.stringWidth(text) <= maxWidth) {
+                return text;
+            }
+            int ellipsisWidth = metrics.stringWidth(ELLIPSIS);
+            if (maxWidth <= ellipsisWidth) {
+                return ELLIPSIS;
+            }
+
+            int available = maxWidth - ellipsisWidth;
+            int low = 0;
+            int high = text.length();
+            while (low < high) {
+                int mid = (low + high + 1) >>> 1;
+                String suffix = text.substring(text.length() - mid);
+                if (metrics.stringWidth(suffix) <= available) {
+                    low = mid;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            return ELLIPSIS + text.substring(text.length() - low);
+        }
     }
 
     private static final class ServerCreationWizardState {
