@@ -2,11 +2,15 @@
 
 This folder stores solved issue notes. Treat it as a practical memory bank for recurring bug shapes and implementation patterns.
 
+Only document fixes here: bug fixes, regressions, broken behavior, risky inconsistencies, or cleanup that directly resolves a documented issue. Do not add new features, feature planning, or general documentation/process changes to this folder unless they are part of resolving a specific fix.
+
 Use one Markdown file per solved issue. File names should be easy to recognize and usually mirror the original pending-fix name:
 
 ```text
 area-short-problem.md
 ```
+
+Detailed step-by-step process notes for fixes live in `process/`. Create one process file per solved fix and link it from the solved note.
 
 ## Standard Solved-Issue Format
 
@@ -37,6 +41,10 @@ What changed and where.
 
 Commands, tests, or manual checks performed.
 
+## Detailed Process
+
+- `docs/fixes/process/area-short-problem.md`
+
 ## Regression Notes
 
 What to watch for if a similar issue returns.
@@ -50,8 +58,10 @@ Relevant files in `docs/pipelines/` or `docs/pending-fixes/`.
 
 When an issue is solved:
 
-1. Add a solved note here using the standard format.
-2. Mention the exact root cause and the durable lesson.
-3. Link the related docs and pending issue if one existed.
-4. Keep code snippets short; prefer file/class/method references.
-5. If the fix changes a pipeline, update the matching file in `docs/pipelines/`.
+1. Create or update a detailed process file in `process/` while working.
+2. Keep the process file's step tracker current with `DONE`, `IN PROGRESS`, and `TO DO` labels.
+3. Add a solved note here using the standard format.
+4. Mention the exact root cause and the durable lesson.
+5. Link the detailed process file, related docs, and pending issue if one existed.
+6. Keep code snippets short; prefer file/class/method references.
+7. If the fix changes a pipeline, update the matching file in `docs/pipelines/`.

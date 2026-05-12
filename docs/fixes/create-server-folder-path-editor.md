@@ -31,6 +31,10 @@ The row used a `BorderLayout` with the parent path label in `WEST` and the edita
 - `mvn -q -DskipTests compile`
 - Manual UI feedback confirmed the font-shift case and follow-up fix.
 
+## Detailed Process
+
+- `docs/fixes/process/create-server-folder-path-editor.md`
+
 ## Regression Notes
 
 If the path appears visually detached again, check:

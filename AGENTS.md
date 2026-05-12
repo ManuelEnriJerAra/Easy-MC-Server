@@ -15,7 +15,8 @@ Primary source areas:
 - `src/test/java`: unit and integration-style tests.
 - `docs`: implementation guides for important program pipelines.
 - `docs/pending-fixes`: known issues and cleanup candidates, one Markdown file per issue.
-- `docs/fixes`: solved issue notes and regression tips, one Markdown file per fixed issue.
+- `docs/fixes`: solved issue notes and regression tips, one Markdown file per fixed issue; do not use it for standalone new features.
+- `docs/fixes/process`: detailed step-by-step process files linked from solved fixes; do not use it for standalone new features.
 
 Main class: `controlador.Main`.
 
@@ -37,7 +38,9 @@ It is normal for Maven output to include a Lombok warning about `sun.misc.Unsafe
 
 - Before touching an established pipeline, read `docs/README.md`, then the matching guide in `docs/pipelines/`; update docs when behavior changes.
 - When the user reports a problem, create or update a file in `docs/pending-fixes/` using its README standard unless the fix is completed immediately.
-- When a bug is fixed, add a note in `docs/fixes/` using its README standard so similar regressions have a reference.
+- When solving a fix, create or update a detailed process file in `docs/fixes/process/` using its README standard, with each step marked `DONE`, `IN PROGRESS`, or `TO DO`.
+- When a bug is fixed, add a note in `docs/fixes/` using its README standard and link the matching process file so similar regressions have a reference.
+- Do not document standalone new features as fixes. Only write to `docs/fixes/` or `docs/fixes/process/` for bug fixes, regressions, broken behavior, risky inconsistencies, or cleanup that directly resolves a documented issue.
 - Prefer existing patterns in nearby classes over new abstractions.
 - Keep edits scoped to the requested behavior.
 - Do not reformat unrelated files.

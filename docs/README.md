@@ -13,6 +13,7 @@ This folder is the project playbook for coding agents. Before editing an establi
 
 - `pending-fixes/README.md`: standard for documenting unresolved issues and user-reported bugs.
 - `fixes/README.md`: standard for documenting solved issues, root causes, and regression tips.
+- `fixes/process/README.md`: standard for detailed step-by-step process files linked from solved fixes.
 
 ## By Task
 

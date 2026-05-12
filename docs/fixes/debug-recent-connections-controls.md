@@ -31,6 +31,10 @@ Debug mode needed plus/minus controls in "Ultimas conexiones" so recent-connecti
 
 - `mvn -q -DskipTests compile`
 
+## Detailed Process
+
+- `docs/fixes/process/debug-recent-connections-controls.md`
+
 ## Regression Notes
 
 If fake connections persist after disabling Debug mode, inspect `actualizarModoDebugConexiones()`.
