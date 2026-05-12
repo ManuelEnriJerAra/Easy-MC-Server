@@ -9,11 +9,14 @@ This folder is the project playbook for coding agents. Before editing an establi
 - `pipelines/build-test-pipeline.md`: Maven commands, test layout, expected warnings.
 - `pipelines/ui-component-pipeline.md`: Swing/FlatLaf visual patterns and shared UI helpers.
 
-## Issue Notebooks
+## Work Notebooks
 
 - `pending-fixes/README.md`: standard for documenting unresolved issues and user-reported bugs.
 - `fixes/README.md`: standard for documenting solved issues, root causes, and regression tips.
 - `fixes/process/README.md`: standard for detailed step-by-step process files linked from solved fixes.
+- `pending-features/README.md`: standard for documenting requested features that are not implemented yet.
+- `features/README.md`: standard for documenting completed features.
+- `features/process/README.md`: standard for detailed step-by-step process files linked from features.
 
 ## By Task
 

@@ -15,8 +15,11 @@ Primary source areas:
 - `src/test/java`: unit and integration-style tests.
 - `docs`: implementation guides for important program pipelines.
 - `docs/pending-fixes`: known issues and cleanup candidates, one Markdown file per issue.
+- `docs/pending-features`: requested features and behavior expansions that are not implemented yet, one Markdown file per feature request.
 - `docs/fixes`: solved issue notes and regression tips, one Markdown file per fixed issue; do not use it for standalone new features.
 - `docs/fixes/process`: detailed step-by-step process files linked from solved fixes; do not use it for standalone new features.
+- `docs/features`: completed feature notes, one Markdown file per implemented feature; do not use it for fixes.
+- `docs/features/process`: detailed step-by-step process files linked from implemented features; do not use it for fixes.
 
 Main class: `controlador.Main`.
 
@@ -42,6 +45,10 @@ It is normal for Maven output to include a Lombok warning about `sun.misc.Unsafe
 - When a bug is fixed, add a note in `docs/fixes/` using its README standard and link the matching process file so similar regressions have a reference.
 - When a pending fix is solved, move all relevant information into `docs/fixes/` and `docs/fixes/process/`, then delete the matching file from `docs/pending-fixes/`.
 - Do not document standalone new features as fixes. Only write to `docs/fixes/` or `docs/fixes/process/` for bug fixes, regressions, broken behavior, risky inconsistencies, or cleanup that directly resolves a documented issue.
+- When the user requests a feature that is not completed immediately, create or update a file in `docs/pending-features/` using its README standard.
+- When implementing a standalone feature, create or update a detailed process file in `docs/features/process/` using its README standard, then add a completed feature note in `docs/features/` and link the process file.
+- When a pending feature is implemented, move all relevant information into `docs/features/` and `docs/features/process/`, then delete the matching file from `docs/pending-features/`.
+- Do not document fixes as features. Use `docs/features/` only for product additions, behavior expansions, and documentation/process features that are not bug fixes.
 - Prefer existing patterns in nearby classes over new abstractions.
 - Keep edits scoped to the requested behavior.
 - Do not reformat unrelated files.
