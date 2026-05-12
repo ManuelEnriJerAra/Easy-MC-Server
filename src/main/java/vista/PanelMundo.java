@@ -706,7 +706,7 @@ public class PanelMundo extends JPanel {
             previewPreferences.writeTo(metadata);
             WorldFilesService.writeWorldMetadata(mundo, metadata);
         } catch (IOException ex) {
-            System.out.println("[PanelMundo] No se ha podido guardar la configuracion de preview del mundo: " + ex.getMessage());
+            System.out.println("[PanelMundo] No se ha podido guardar la configuración de preview del mundo: " + ex.getMessage());
         }
     }
 
@@ -873,7 +873,7 @@ public class PanelMundo extends JPanel {
         metadataReadPanel.add(crearInfoRow("Comandos:", allowCommandsValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(10));
 
-        agregarSeccionMetadata("Generacion y packs");
+        agregarSeccionMetadata("Generación y packs");
         metadataReadPanel.add(crearInfoRow("Generator settings:", generatorSettingsValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(4));
         metadataReadPanel.add(crearInfoRow("Generar estructuras:", estructurasValueLabel));
@@ -2893,9 +2893,9 @@ public class PanelMundo extends JPanel {
         }
         if (ultimoTiempoRenderPreview != null && !ultimoTiempoRenderPreview.isBlank()) {
             previewRenderStatusLabel.setVisible(true);
-            previewRenderStatusLabel.setText("Ultimo render: " + ultimoTiempoRenderPreview);
+            previewRenderStatusLabel.setText("Último render: " + ultimoTiempoRenderPreview);
             previewRenderStatusLabel.setToolTipText(ultimoDetalleTiempoRenderPreview == null || ultimoDetalleTiempoRenderPreview.isBlank()
-                    ? "Tiempo de la ultima generacion de preview."
+                    ? "Tiempo de la última generación de preview."
                     : ultimoDetalleTiempoRenderPreview);
             return;
         }
@@ -2955,7 +2955,7 @@ public class PanelMundo extends JPanel {
 
     private String construirDetalleTiempoRender(MCARenderer.RenderStats stats, double elapsedSeconds) {
         if (stats == null) {
-            return "Tiempo total de la ultima generacion de preview: " + formatearDuracionRender(elapsedSeconds);
+            return "Tiempo total de la última generación de preview: " + formatearDuracionRender(elapsedSeconds);
         }
         return "<html>"
                 + "Total: " + formatearDuracionRender(elapsedSeconds) + "<br>"
@@ -3076,7 +3076,7 @@ public class PanelMundo extends JPanel {
         });
 
         stylePreviewOptionCheckBox(usarTodoMenuItem);
-        usarTodoMenuItem.setToolTipText("<html><b>Que hace:</b> renderiza todo el mundo disponible en vez de recortar una ventana alrededor del centro.<br><b>Rendimiento:</b> puede disparar mucho tiempo, memoria y tamano de salida.<br><b>Visual:</b> ofrece contexto completo.<br><b>Efectos secundarios:</b> desactiva centro y limite porque dejan de tener sentido.</html>");
+        usarTodoMenuItem.setToolTipText("<html><b>Qué hace:</b> renderiza todo el mundo disponible en vez de recortar una ventana alrededor del centro.<br><b>Rendimiento:</b> puede disparar mucho tiempo, memoria y tamaño de salida.<br><b>Visual:</b> ofrece contexto completo.<br><b>Efectos secundarios:</b> desactiva centro y límite porque dejan de tener sentido.</html>");
         usarTodoMenuItem.addActionListener(e -> {
             previewPreferences = previewPreferences.withUseWholeMap(usarTodoMenuItem.isSelected());
             actualizarEstadoControlesRender();
@@ -3084,14 +3084,14 @@ public class PanelMundo extends JPanel {
         });
 
         stylePreviewOptionCheckBox(tiempoRealPreviewMenuItem);
-        tiempoRealPreviewMenuItem.setToolTipText("<html><b>Que hace:</b> actualiza el lienzo conforme se van componiendo regiones durante la generacion.<br><b>Rendimiento:</b> anade repintados Swing y copias de imagen; el coste es de CPU/UI, no de GPU del renderer.<br><b>Visual:</b> permite ver progreso real.<br><b>Efectos secundarios:</b> puede hacer la generacion algo menos estable en equipos justos.</html>");
+        tiempoRealPreviewMenuItem.setToolTipText("<html><b>Qué hace:</b> actualiza el lienzo conforme se van componiendo regiones durante la generación.<br><b>Rendimiento:</b> añade repintados Swing y copias de imagen; el coste es de CPU/UI, no de GPU del renderer.<br><b>Visual:</b> permite ver progreso real.<br><b>Efectos secundarios:</b> puede hacer la generación algo menos estable en equipos justos.</html>");
         tiempoRealPreviewMenuItem.addActionListener(e -> {
             previewPreferences = previewPreferences.withRenderRealtime(tiempoRealPreviewMenuItem.isSelected());
             guardarPreferenciasPreviewServidorActual();
         });
 
         stylePreviewOptionCheckBox(mostrarSpawnMenuItem);
-        mostrarSpawnMenuItem.setToolTipText("<html><b>Que hace:</b> superpone la marca del spawn usando metadata de overlay de la preview.<br><b>Rendimiento:</b> impacto minimo; solo dibujo de overlay en la UI.<br><b>Visual:</b> facilita orientarse en el mapa.<br><b>Efectos secundarios:</b> si la preview no tiene metadata de overlay hay que regenerarla una vez.</html>");
+        mostrarSpawnMenuItem.setToolTipText("<html><b>Qué hace:</b> superpone la marca del spawn usando metadata de overlay de la preview.<br><b>Rendimiento:</b> impacto mínimo; solo dibujo de overlay en la UI.<br><b>Visual:</b> facilita orientarse en el mapa.<br><b>Efectos secundarios:</b> si la preview no tiene metadata de overlay hay que regenerarla una vez.</html>");
         mostrarSpawnMenuItem.addActionListener(e -> {
             previewPreferences = previewPreferences.withShowSpawn(mostrarSpawnMenuItem.isSelected());
             aplicarPreferenciasPreviewAOverlay();
@@ -3100,7 +3100,7 @@ public class PanelMundo extends JPanel {
         });
 
         stylePreviewOptionCheckBox(mostrarJugadoresMenuItem);
-        mostrarJugadoresMenuItem.setToolTipText("<html><b>Que hace:</b> muestra sobre la preview las ultimas posiciones de jugadores conocidas.<br><b>Rendimiento:</b> impacto minimo; solo overlay 2D en la interfaz.<br><b>Visual:</b> ayuda a localizar actividad reciente.<br><b>Efectos secundarios:</b> depende de playerdata y metadata de overlay disponibles.</html>");
+        mostrarJugadoresMenuItem.setToolTipText("<html><b>Qué hace:</b> muestra sobre la preview las últimas posiciones de jugadores conocidas.<br><b>Rendimiento:</b> impacto mínimo; solo overlay 2D en la interfaz.<br><b>Visual:</b> ayuda a localizar actividad reciente.<br><b>Efectos secundarios:</b> depende de playerdata y metadata de overlay disponibles.</html>");
         mostrarJugadoresMenuItem.addActionListener(e -> {
             previewPreferences = previewPreferences.withShowPlayers(mostrarJugadoresMenuItem.isSelected());
             aplicarPreferenciasPreviewAOverlay();
@@ -3109,7 +3109,7 @@ public class PanelMundo extends JPanel {
         });
 
         stylePreviewOptionCheckBox(limitesChunksMenuItem);
-        limitesChunksMenuItem.setToolTipText("<html><b>Que hace:</b> dibuja la reticula de chunks sobre la preview cargada.<br><b>Rendimiento:</b> impacto minimo; solo overlay local en la UI.<br><b>Visual:</b> facilita depurar alineacion, estructuras y medidas.<br><b>Efectos secundarios:</b> puede ensuciar mapas muy densos.</html>");
+        limitesChunksMenuItem.setToolTipText("<html><b>Qué hace:</b> dibuja la retícula de chunks sobre la preview cargada.<br><b>Rendimiento:</b> impacto mínimo; solo overlay local en la UI.<br><b>Visual:</b> facilita depurar alineación, estructuras y medidas.<br><b>Efectos secundarios:</b> puede ensuciar mapas muy densos.</html>");
         limitesChunksMenuItem.addActionListener(e -> {
             previewPreferences = previewPreferences.withShowChunkGrid(limitesChunksMenuItem.isSelected());
             aplicarPreferenciasPreviewAOverlay();
@@ -3125,12 +3125,12 @@ public class PanelMundo extends JPanel {
         configurarCentroRenderCombo();
         actualizarEstadoControlesRender();
 
-        JPanel generationSection = createPreviewOptionsSectionPanel("Generacion");
-        generationSection.add(createPreviewStackedOptionRow("Area máxima", limiteRenderCombo,
-                "<html><b>Que hace:</b> define el tamano maximo de la ventana de bloques que se intentara renderizar alrededor del centro.<br><b>Rendimiento:</b> cuanto mayor sea, mas regiones/chunks se leeran y mas tiempo consumira.<br><b>Visual:</b> mas contexto a cambio de previews mas pesadas.<br><b>Efectos secundarios:</b> valores altos pueden disparar memoria y tiempo.</html>"));
+        JPanel generationSection = createPreviewOptionsSectionPanel("Generación");
+        generationSection.add(createPreviewStackedOptionRow("Área máxima", limiteRenderCombo,
+                "<html><b>Qué hace:</b> define el tamaño máximo de la ventana de bloques que se intentará renderizar alrededor del centro.<br><b>Rendimiento:</b> cuanto mayor sea, más regiones/chunks se leerán y más tiempo consumirá.<br><b>Visual:</b> más contexto a cambio de previews más pesadas.<br><b>Efectos secundarios:</b> valores altos pueden disparar memoria y tiempo.</html>"));
         generationSection.add(Box.createVerticalStrut(4));
         generationSection.add(createPreviewStackedOptionRow("Centro de generación", centroRenderCombo,
-                "<html><b>Que hace:</b> elige el punto alrededor del que se recorta la preview cuando no se genera el mundo completo.<br><b>Rendimiento:</b> no cambia el coste por pixel, pero si que zona se procesa.<br><b>Visual:</b> cambia totalmente el encuadre final.<br><b>Efectos secundarios:</b> si el jugador ya no existe o no tiene datos recientes se vuelve al spawn.</html>"));
+                "<html><b>Qué hace:</b> elige el punto alrededor del que se recorta la preview cuando no se genera el mundo completo.<br><b>Rendimiento:</b> no cambia el coste por píxel, pero sí qué zona se procesa.<br><b>Visual:</b> cambia totalmente el encuadre final.<br><b>Efectos secundarios:</b> si el jugador ya no existe o no tiene datos recientes se vuelve al spawn.</html>"));
         generationSection.add(Box.createVerticalStrut(4));
         generationSection.add(createPreviewCheckBoxRow(usarTodoMenuItem, usarTodoMenuItem.getToolTipText()));
         generationSection.add(Box.createVerticalStrut(4));

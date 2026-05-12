@@ -72,7 +72,7 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
             throw new IOException("No se ha indicado la carpeta de instalacion.");
         }
         if (request.minecraftVersion() == null || request.minecraftVersion().isBlank()) {
-            throw new IOException("No se ha indicado la version de Minecraft.");
+            throw new IOException("No se ha indicado la versión de Minecraft.");
         }
         FileDownloader downloader = request.downloader();
         if (downloader == null) {
@@ -82,7 +82,7 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
         Files.createDirectories(request.targetDirectory());
         String url = mojangApi.obtenerUrlServerJar(request.minecraftVersion());
         if (url == null || url.isBlank()) {
-            throw new IOException("No se ha podido obtener la URL del servidor para la version " + request.minecraftVersion());
+            throw new IOException("No se ha podido obtener la URL del servidor para la versión " + request.minecraftVersion());
         }
 
         Path destinationJar = request.targetDirectory().resolve(request.minecraftVersion() + "_server.jar");

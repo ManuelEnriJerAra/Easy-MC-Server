@@ -45,7 +45,7 @@ final class PanelExtensiones extends JPanel {
     private final Map<String, InstalledExtensionStatus> statusCache = new HashMap<>();
     private final JLabel summaryLabel = new JLabel();
     private final JLabel directoriesLabel = new JLabel();
-    private final JLabel detailsTitleLabel = new JLabel("Ninguna extension seleccionada");
+    private final JLabel detailsTitleLabel = new JLabel("Ninguna extensión seleccionada");
     private final JLabel detailsVersionLabel = new JLabel("-");
     private final JLabel detailsStatusBadgeLabel = new ExtensionDetailsLayout.StatusBadgeLabel("Sin seleccion");
     private final JLabel detailsSideLabel = new JLabel("-");
@@ -405,8 +405,8 @@ final class PanelExtensiones extends JPanel {
 
     private JPanel buildInstalledMetadataSection() {
         return ExtensionDetailsLayout.buildInfoGrid(List.of(
-                ExtensionDetailsLayout.buildInfoRow("Version instalada", detailsInstalledVersionLabel),
-                ExtensionDetailsLayout.buildInfoRow("Version remota", detailsRemoteVersionLabel),
+                ExtensionDetailsLayout.buildInfoRow("Versión instalada", detailsInstalledVersionLabel),
+                ExtensionDetailsLayout.buildInfoRow("Versión remota", detailsRemoteVersionLabel),
                 ExtensionDetailsLayout.buildInfoRow("Actualizacion", detailsUpdateLabel),
                 ExtensionDetailsLayout.buildInfoRow("Archivo", detailsFileLabel),
                 ExtensionDetailsLayout.buildInfoRow("Ruta", detailsPathLabel),
@@ -502,7 +502,7 @@ final class PanelExtensiones extends JPanel {
         InstalledExtensionStatus status = assessInstalledStatus(extension);
         heroIconLabel.setIcon(resolveExtensionIcon(extension, 52));
         detailsTitleLabel.setText(resolveExtensionName(extension));
-        detailsVersionLabel.setText("Version " + resolveVersion(extension) + "  |  " + resolveAuthor(extension));
+        detailsVersionLabel.setText("Versión " + resolveVersion(extension) + "  |  " + resolveAuthor(extension));
         detailsActionButton.setIcon(SvgIconFactory.create("easymcicons/trash-unselected.svg", 48, 48, AppTheme::getForeground));
         detailsActionButton.setEnabled(!loadingExtensions && !mutatingExtensions);
         updateDetailsStatusBadge(extension, status);
@@ -561,7 +561,7 @@ final class PanelExtensiones extends JPanel {
                 JOptionPane.showMessageDialog(
                         this,
                         compatibility.summary(),
-                        "Instalacion incompatible",
+                        "Instalación incompatible",
                         JOptionPane.ERROR_MESSAGE
                 );
                 return;
@@ -774,7 +774,7 @@ final class PanelExtensiones extends JPanel {
         return switch (currentEcosystem()) {
             case MODS -> "Lado del mod";
             case PLUGINS -> "Entorno del plugin";
-            default -> "Lado de la extension";
+            default -> "Lado de la extensión";
         };
     }
 
@@ -790,7 +790,7 @@ final class PanelExtensiones extends JPanel {
         return switch (currentEcosystem()) {
             case MODS -> "Selecciona un mod (.jar)";
             case PLUGINS -> "Selecciona un plugin (.jar)";
-            default -> "Selecciona una extension (.jar)";
+            default -> "Selecciona una extensión (.jar)";
         };
     }
 
@@ -798,7 +798,7 @@ final class PanelExtensiones extends JPanel {
         return switch (currentEcosystem()) {
             case MODS -> "mod";
             case PLUGINS -> "plugin";
-            default -> "extension";
+            default -> "extensión";
         };
     }
 
@@ -849,7 +849,7 @@ final class PanelExtensiones extends JPanel {
 
     private String resolveExtensionName(ServerExtension extension) {
         if (extension == null || extension.getDisplayName() == null || extension.getDisplayName().isBlank()) {
-            return "Extension";
+            return "Extensión";
         }
         return extension.getDisplayName();
     }
@@ -859,7 +859,7 @@ final class PanelExtensiones extends JPanel {
                 extension == null ? null : extension.getVersion(),
                 extension == null || extension.getLocalMetadata() == null ? null : extension.getLocalMetadata().getInstalledVersion()
         );
-        return version == null ? "sin version" : version;
+        return version == null ? "sin versión" : version;
     }
 
     private String resolveAuthor(ServerExtension extension) {
@@ -900,7 +900,7 @@ final class PanelExtensiones extends JPanel {
 
     private String baseDescription(ServerExtension extension) {
         if (extension == null || extension.getDescription() == null || extension.getDescription().isBlank()) {
-            return "Sin descripcion disponible para esta extension.";
+            return "Sin descripción disponible para esta extensión.";
         }
         return extension.getDescription();
     }
@@ -939,7 +939,7 @@ final class PanelExtensiones extends JPanel {
     }
 
     private void setDescriptionText(String text) {
-        descriptionArea.setText(text == null || text.isBlank() ? "Sin descripcion disponible." : text);
+        descriptionArea.setText(text == null || text.isBlank() ? "Sin descripción disponible." : text);
         descriptionArea.setCaretPosition(0);
     }
 
@@ -994,7 +994,7 @@ final class PanelExtensiones extends JPanel {
             return "Desconocido";
         }
         return switch (source.getType()) {
-            case MANUAL -> "Instalacion manual";
+            case MANUAL -> "Instalación manual";
             case LOCAL_FILE -> "Archivo local";
             case MODRINTH -> "Modrinth";
             case CURSEFORGE -> "CurseForge";
@@ -1066,7 +1066,7 @@ final class PanelExtensiones extends JPanel {
 
     private void importarModpack() {
         if (!supportsModpackActions(currentEcosystem())) {
-            JOptionPane.showMessageDialog(this, "La importacion de modpacks solo esta disponible para servidores de mods.", "Mods", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "La importación de modpacks solo está disponible para servidores de mods.", "Mods", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -1082,7 +1082,7 @@ final class PanelExtensiones extends JPanel {
             CurseForgeModpackService.ImportManifest manifest = gestorServidores.leerManifestModpackCurseForge(sourceZip);
             int confirm = JOptionPane.showConfirmDialog(
                     this,
-                    "Se importara el manifest \"" + manifest.name() + "\" con " + manifest.files().size() + " archivos.\n\nEsto descargara e instalara los mods en el servidor actual.",
+                    "Se importará el manifest \"" + manifest.name() + "\" con " + manifest.files().size() + " archivos.\n\nEsto descargará e instalará los mods en el servidor actual.",
                     "Importar modpack",
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.WARNING_MESSAGE
@@ -1472,20 +1472,20 @@ final class PanelExtensiones extends JPanel {
 
     private void handleManualInstallCompatibility(Path selectedPath, ManualInstallCompatibilityException exception) {
         ExtensionCompatibilityReport compatibility = exception.report();
-        summaryLabel.setText("Instalacion manual pendiente.");
+        summaryLabel.setText("Instalación manual pendiente.");
         directoriesLabel.setText(selectedPath == null || selectedPath.getFileName() == null ? "-" : selectedPath.getFileName().toString());
         if (!exception.canOverride()) {
             JOptionPane.showMessageDialog(
                     this,
                     compatibility.summary(),
-                    "Instalacion incompatible",
+                    "Instalación incompatible",
                     JOptionPane.ERROR_MESSAGE
             );
             return;
         }
         int confirm = JOptionPane.showConfirmDialog(
                 this,
-                        compatibility.summary() + "\n\nÂ¿Quieres instalar " + articleForExtension() + " " + extensionSingularLower() + " de todas formas?",
+                        compatibility.summary() + "\n\n¿Quieres instalar " + articleForExtension() + " " + extensionSingularLower() + " de todas formas?",
                 "Compatibilidad dudosa",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE

@@ -1036,15 +1036,15 @@ public class GestorServidores {
                 && targetEcosystem != ServerEcosystemType.NONE;
         String warningText;
         if (crossEcosystem && sourceEcosystem == ServerEcosystemType.MODS && targetEcosystem == ServerEcosystemType.PLUGINS) {
-            warningText = "Mods y plugins son ecosistemas distintos. Los .jar de mods que ya existan se conservaran en la carpeta mods, pero no se migraran ni se trataran como plugins.";
+            warningText = "Mods y plugins son ecosistemas distintos. Los .jar de mods que ya existan se conservarán en la carpeta mods, pero no se migrarán ni se tratarán como plugins.";
         } else if (crossEcosystem && sourceEcosystem == ServerEcosystemType.PLUGINS && targetEcosystem == ServerEcosystemType.MODS) {
-            warningText = "Plugins y mods son ecosistemas distintos. Los .jar de plugins que ya existan se conservaran en la carpeta plugins, pero no se migraran ni se trataran como mods.";
+            warningText = "Plugins y mods son ecosistemas distintos. Los .jar de plugins que ya existan se conservarán en la carpeta plugins, pero no se migrarán ni se tratarán como mods.";
         } else if (sourceEcosystem == ServerEcosystemType.MODS && targetEcosystem == ServerEcosystemType.MODS) {
-            warningText = "Vas a cambiar de cargador de mods. Los mods instalados se conservaran, pero pueden no ser compatibles con el nuevo loader.";
+            warningText = "Vas a cambiar de cargador de mods. Los mods instalados se conservarán, pero pueden no ser compatibles con el nuevo loader.";
         } else if (sourceEcosystem == ServerEcosystemType.PLUGINS && targetEcosystem == ServerEcosystemType.PLUGINS) {
-            warningText = "Vas a cambiar de plataforma de plugins. La mayoria de plugins Bukkit/Paper suelen ser compatibles, pero conviene revisar el resultado.";
+            warningText = "Vas a cambiar de plataforma de plugins. La mayoría de plugins Bukkit/Paper suelen ser compatibles, pero conviene revisar el resultado.";
         } else {
-            warningText = "Easy-MC-Server instalara la plataforma seleccionada y creara la carpeta de extensiones correspondiente.";
+            warningText = "Easy-MC-Server instalará la plataforma seleccionada y creará la carpeta de extensiones correspondiente.";
         }
         return new ConversionWarning(warningText, crossEcosystem);
     }
@@ -1072,8 +1072,8 @@ public class GestorServidores {
 
                 %s
 
-                Easy-MC-Server creara un backup completo antes de continuar.
-                Los mundos, server.properties, EULA, icono y carpetas de extensiones existentes se conservaran cuando sea posible.
+                Easy-MC-Server creará un backup completo antes de continuar.
+                Los mundos, server.properties, EULA, icono y carpetas de extensiones existentes se conservarán cuando sea posible.
                 """
                         .formatted(sourceName, targetName, warningText),
                 "Convertir servidor",

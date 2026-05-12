@@ -40,6 +40,7 @@ It is normal for Maven output to include a Lombok warning about `sun.misc.Unsafe
 - When the user reports a problem, create or update a file in `docs/pending-fixes/` using its README standard unless the fix is completed immediately.
 - When solving a fix, create or update a detailed process file in `docs/fixes/process/` using its README standard, with each step marked `DONE`, `IN PROGRESS`, or `TO DO`.
 - When a bug is fixed, add a note in `docs/fixes/` using its README standard and link the matching process file so similar regressions have a reference.
+- When a pending fix is solved, move all relevant information into `docs/fixes/` and `docs/fixes/process/`, then delete the matching file from `docs/pending-fixes/`.
 - Do not document standalone new features as fixes. Only write to `docs/fixes/` or `docs/fixes/process/` for bug fixes, regressions, broken behavior, risky inconsistencies, or cleanup that directly resolves a documented issue.
 - Prefer existing patterns in nearby classes over new abstractions.
 - Keep edits scoped to the requested behavior.

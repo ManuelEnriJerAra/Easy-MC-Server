@@ -2,6 +2,8 @@
 
 This folder tracks known issues, inconsistencies, and cleanup candidates that are not solved yet.
 
+Only unresolved issues belong here. When a fix is completed, move all relevant context into `docs/fixes/` and `docs/fixes/process/`, then delete the pending-fix file.
+
 Use one Markdown file per issue. File names should be easy to recognize:
 
 ```text
@@ -63,5 +65,5 @@ When the user reports a bug:
 1. Create or update a pending-fix file using the standard format.
 2. Keep the issue concrete: current behavior vs desired behavior.
 3. Link relevant project docs from `docs/pipelines/`.
-4. When fixed, move the learning into `docs/fixes/` as a solved-issue note.
-5. Remove or mark the pending issue as resolved only after the fix is implemented and verified.
+4. When fixed, move the learning into `docs/fixes/` as a solved-issue note and keep detailed steps in `docs/fixes/process/`.
+5. Delete the pending-fix file after the fix is implemented, verified, and documented. Do not keep resolved issues in this folder.

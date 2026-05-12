@@ -45,7 +45,7 @@ public final class CurseForgeModpackService {
 
         String minecraftVersion = normalize(server.getVersion());
         if (minecraftVersion == null) {
-            throw new IOException("El servidor no tiene una version de Minecraft conocida.");
+            throw new IOException("El servidor no tiene una versión de Minecraft conocida.");
         }
 
         String loaderId = buildLoaderId(server);

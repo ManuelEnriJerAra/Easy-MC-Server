@@ -47,10 +47,10 @@ class FabricMetaClient {
     String downloadUrl(String minecraftVersion, String platformVersion) throws IOException {
         FabricSelection selection = decodePlatformVersion(platformVersion);
         if (selection.loaderVersion() == null || selection.loaderVersion().isBlank()) {
-            throw new IOException("No se ha indicado la version de Fabric Loader.");
+            throw new IOException("No se ha indicado la versión de Fabric Loader.");
         }
         if (selection.installerVersion() == null || selection.installerVersion().isBlank()) {
-            throw new IOException("No se ha indicado la version del instalador de Fabric.");
+            throw new IOException("No se ha indicado la versión del instalador de Fabric.");
         }
         return BASE_URL + "/loader/"
                 + path(minecraftVersion) + "/"

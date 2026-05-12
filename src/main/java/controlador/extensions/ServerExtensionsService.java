@@ -191,13 +191,13 @@ public final class ServerExtensionsService {
                                                   ExtensionDownloadPlan downloadPlan,
                                                   FileDownloader downloader) throws IOException {
         if (downloadPlan == null || !downloadPlan.ready()) {
-            throw new IOException("No hay un plan de descarga valido para la extension.");
+            throw new IOException("No hay un plan de descarga válido para la extensión.");
         }
         if (downloadPlan.downloadUrl() == null || downloadPlan.downloadUrl().isBlank()) {
-            throw new IOException("La extension externa no incluye una URL de descarga valida.");
+            throw new IOException("La extensión externa no incluye una URL de descarga válida.");
         }
         if (downloader == null) {
-            throw new IOException("No se ha indicado un descargador para instalar la extension externa.");
+            throw new IOException("No se ha indicado un descargador para instalar la extensión externa.");
         }
         ensureCatalogPlanCompatibleWithServer(server, downloadPlan);
         ensureCatalogExtensionNotAlreadyInstalled(server, downloadPlan);
@@ -233,7 +233,7 @@ public final class ServerExtensionsService {
                 entry.versionId(),
                 entry.version(),
                 null,
-                firstNonBlank(entry.displayName(), entry.projectId(), "La extension")
+                firstNonBlank(entry.displayName(), entry.projectId(), "La extensión")
         );
     }
 
@@ -260,7 +260,7 @@ public final class ServerExtensionsService {
                 downloadPlan.versionId(),
                 downloadPlan.versionNumber(),
                 downloadPlan.fileName(),
-                firstNonBlank(downloadPlan.projectId(), "La extension")
+                firstNonBlank(downloadPlan.projectId(), "La extensión")
         );
     }
 
@@ -306,7 +306,7 @@ public final class ServerExtensionsService {
                         metadata.getKnownRemoteVersionId(),
                         now,
                         ExtensionUpdateState.UNKNOWN,
-                        "No se ha podido determinar una version remota compatible.");
+                        "No se ha podido determinar una versión remota compatible.");
                 continue;
             }
 
@@ -339,7 +339,7 @@ public final class ServerExtensionsService {
             throw new IOException("No se ha indicado el servidor.");
         }
         if (sourceJar == null || !Files.isRegularFile(sourceJar)) {
-            throw new IOException("No se ha indicado un .jar de extension valido.");
+            throw new IOException("No se ha indicado un .jar de extensión válido.");
         }
         String fileName = resolveInstallFileName(sourceJar, downloadPlan);
         if (!fileName.toLowerCase(Locale.ROOT).endsWith(".jar")) {
@@ -401,14 +401,14 @@ public final class ServerExtensionsService {
             return new ExtensionCompatibilityReport(
                     ExtensionCompatibilityStatus.INCOMPATIBLE,
                     "No se ha indicado el servidor de destino.",
-                    List.of("No existe contexto del servidor para validar la extension.")
+                    List.of("No existe contexto del servidor para validar la extensión.")
             );
         }
         if (extensionJar == null || !Files.isRegularFile(extensionJar)) {
             return new ExtensionCompatibilityReport(
                     ExtensionCompatibilityStatus.INCOMPATIBLE,
-                    "No se ha indicado un .jar de extension valido.",
-                    List.of("El archivo de la extension no existe o no es accesible.")
+                    "No se ha indicado un .jar de extensión válido.",
+                    List.of("El archivo de la extensión no existe o no es accesible.")
             );
         }
 
@@ -433,14 +433,14 @@ public final class ServerExtensionsService {
             return new ExtensionCompatibilityReport(
                     ExtensionCompatibilityStatus.INCOMPATIBLE,
                     "No se ha indicado el servidor de destino.",
-                    List.of("No existe contexto del servidor para validar la extension.")
+                    List.of("No existe contexto del servidor para validar la extensión.")
             );
         }
         if (extension == null) {
             return new ExtensionCompatibilityReport(
                     ExtensionCompatibilityStatus.INCOMPATIBLE,
-                    "No se ha podido leer la extension.",
-                    List.of("No se han detectado metadatos suficientes para validar la extension.")
+                    "No se ha podido leer la extensión.",
+                    List.of("No se han detectado metadatos suficientes para validar la extensión.")
             );
         }
 
@@ -461,9 +461,9 @@ public final class ServerExtensionsService {
         } else if (serverEcosystem == ServerEcosystemType.UNKNOWN) {
             incompatibilities.add("No se ha podido determinar el ecosistema del servidor. Revisa o convierte la plataforma antes de instalar extensiones.");
         } else if (serverEcosystem == ServerEcosystemType.MODS && extensionType == ServerExtensionType.PLUGIN) {
-            incompatibilities.add("El servidor usa Mods y la extension se ha detectado como Plugin.");
+            incompatibilities.add("El servidor usa Mods y la extensión se ha detectado como Plugin.");
         } else if (serverEcosystem == ServerEcosystemType.PLUGINS && extensionType == ServerExtensionType.MOD) {
-            incompatibilities.add("El servidor usa Plugins y la extension se ha detectado como Mod.");
+            incompatibilities.add("El servidor usa Plugins y la extensión se ha detectado como Mod.");
         } else if (extensionType == ServerExtensionType.UNKNOWN) {
             incompatibilities.add("No se ha podido determinar si el archivo es un mod o un plugin.");
         }
@@ -471,20 +471,20 @@ public final class ServerExtensionsService {
         if (extensionPlatform != ServerPlatform.UNKNOWN
                 && serverPlatform != ServerPlatform.UNKNOWN
                 && !arePlatformsCompatible(serverPlatform, extensionPlatform)) {
-            incompatibilities.add("La extension se ha detectado para " + extensionPlatform.getLegacyTypeName()
+            incompatibilities.add("La extensión se ha detectado para " + extensionPlatform.getLegacyTypeName()
                     + " y el servidor actual es " + serverPlatform.getLegacyTypeName() + ".");
         } else if (extensionPlatform == ServerPlatform.UNKNOWN) {
-            warnings.add("La plataforma objetivo de la extension no se ha podido determinar.");
+            warnings.add("La plataforma objetivo de la extensión no se ha podido determinar.");
         }
 
         String serverVersion = normalizeMinecraftVersion(server.getVersion());
         String minecraftConstraint = extension.getLocalMetadata() == null ? null : extension.getLocalMetadata().getMinecraftVersionConstraint();
         if (serverVersion == null || serverVersion.isBlank()) {
-            warnings.add("No se conoce la version de Minecraft del servidor.");
+            warnings.add("No se conoce la versión de Minecraft del servidor.");
         } else if (minecraftConstraint == null || minecraftConstraint.isBlank()) {
-            warnings.add("La extension no declara una regla de compatibilidad para la version de Minecraft.");
+            warnings.add("La extensión no declara una regla de compatibilidad para la versión de Minecraft.");
         } else if (!matchesMinecraftConstraint(serverVersion, minecraftConstraint)) {
-            incompatibilities.add("La extension declara compatibilidad con '" + minecraftConstraint
+            incompatibilities.add("La extensión declara compatibilidad con '" + minecraftConstraint
                     + "' y el servidor usa Minecraft " + serverVersion + ".");
         }
 
@@ -530,7 +530,7 @@ public final class ServerExtensionsService {
         if (installState == ExtensionInstallState.FAILED) {
             problems.add("La instalacion quedo marcada como fallida.");
         } else if (installState == ExtensionInstallState.UNKNOWN) {
-            warnings.add("No se conoce el estado de instalacion local.");
+            warnings.add("No se conoce el estado de instalación local.");
         }
 
         List<String> missingDependencies = findMissingDependencies(server, extension);
@@ -691,7 +691,7 @@ public final class ServerExtensionsService {
                                                            ExtensionDownloadPlan downloadPlan) throws IOException {
         ExtensionInstallResolution resolution = evaluateCatalogInstallation(server, downloadPlan);
         if (resolution.blocksInstall()) {
-            throw new IOException(firstNonBlank(resolution.message(), "La extension ya esta instalada o entra en conflicto con otra existente."));
+            throw new IOException(firstNonBlank(resolution.message(), "La extensión ya está instalada o entra en conflicto con otra existente."));
         }
     }
 
@@ -710,7 +710,7 @@ public final class ServerExtensionsService {
                 downloadPlan == null ? Set.of() : minecraftVersionsFromConstraint(downloadPlan.minecraftVersionConstraint())
         );
         if (compatibility != null && compatibility.blocksInstall()) {
-            throw new IOException(firstNonBlank(compatibility.message(), "La extension no es compatible con este servidor."));
+            throw new IOException(firstNonBlank(compatibility.message(), "La extensión no es compatible con este servidor."));
         }
     }
 
@@ -790,7 +790,7 @@ public final class ServerExtensionsService {
             return incompatibleCatalogResolution("No se ha podido determinar el ecosistema del servidor. Revisa o convierte la plataforma antes de instalar extensiones.");
         }
         if (requestedType == ServerExtensionType.UNKNOWN) {
-            return incompatibleCatalogResolution("La extension no declara si es mod o plugin.");
+            return incompatibleCatalogResolution("La extensión no declara si es mod o plugin.");
         }
         if (serverEcosystem == ServerEcosystemType.MODS && requestedType == ServerExtensionType.PLUGIN) {
             return incompatibleCatalogResolution("Este servidor acepta mods. No se pueden instalar plugins en su carpeta de mods.");
@@ -804,7 +804,7 @@ public final class ServerExtensionsService {
                     .filter(platform -> platform != ServerPlatform.UNKNOWN)
                     .anyMatch(platform -> arePlatformsCompatible(serverPlatform, platform));
             if (!platformMatch) {
-                return incompatibleCatalogResolution("La extension no declara compatibilidad con la plataforma del servidor.");
+                return incompatibleCatalogResolution("La extensión no declara compatibilidad con la plataforma del servidor.");
             }
         }
         String serverVersion = normalizeMinecraftVersion(server == null ? null : server.getVersion());
@@ -814,7 +814,7 @@ public final class ServerExtensionsService {
                 .filter(Objects::nonNull)
                 .filter(version -> !version.isBlank())
                 .noneMatch(version -> matchesMinecraftConstraint(serverVersion, version))) {
-            return incompatibleCatalogResolution("La extension no declara compatibilidad con Minecraft " + serverVersion + ".");
+            return incompatibleCatalogResolution("La extensión no declara compatibilidad con Minecraft " + serverVersion + ".");
         }
         return null;
     }
@@ -867,7 +867,7 @@ public final class ServerExtensionsService {
         String normalizedVersionId = firstNonBlank(versionId);
         String normalizedVersionNumber = firstNonBlank(versionNumber);
         String requestedFileName = normalizeFileName(fileName);
-        String displayName = firstNonBlank(fallbackName, normalizedProjectId, "La extension");
+        String displayName = firstNonBlank(fallbackName, normalizedProjectId, "La extensión");
         String requestedVersion = firstNonBlank(normalizedVersionNumber, normalizedVersionId);
 
         ServerExtension projectMatch = null;
@@ -924,10 +924,10 @@ public final class ServerExtensionsService {
                     requestedFileName,
                     requestedVersion,
                     installedVersion,
-                    installedName + " ya esta instalada con la version "
+                    installedName + " ya está instalada con la versión "
                             + firstNonBlank(installedVersion, "desconocida")
                             + ". El marketplace ofrece "
-                            + firstNonBlank(requestedVersion, "otra version")
+                            + firstNonBlank(requestedVersion, "otra versión")
                             + "."
             );
         }
@@ -1097,10 +1097,10 @@ public final class ServerExtensionsService {
             if (metadata.getInstalledVersion() != null
                     && metadata.getInstalledVersion().equalsIgnoreCase(firstNonBlank(downloadPlan.versionNumber(), metadata.getInstalledVersion()))) {
                 metadata.setUpdateState(ExtensionUpdateState.UP_TO_DATE);
-                metadata.setUpdateMessage("La extension se ha instalado desde su version remota conocida.");
+                metadata.setUpdateMessage("La extensión se ha instalado desde su versión remota conocida.");
             } else {
                 metadata.setUpdateState(ExtensionUpdateState.UNKNOWN);
-                metadata.setUpdateMessage("La extension conserva origen remoto, pero su estado de actualizacion todavia no se ha verificado.");
+                metadata.setUpdateMessage("La extensión conserva origen remoto, pero su estado de actualización todavía no se ha verificado.");
             }
         }
     }
@@ -1300,7 +1300,7 @@ public final class ServerExtensionsService {
             offset++;
         }
         if (offset >= prefix.length) {
-            throw new IOException("El archivo descargado esta vacio.");
+            throw new IOException("El archivo descargado está vacío.");
         }
         int first = prefix[offset] & 0xff;
         if (first == '<' || first == '{' || first == '[') {
@@ -1314,14 +1314,14 @@ public final class ServerExtensionsService {
         }
         long size = Files.size(jarPath);
         if (size <= 0L) {
-            throw new IOException("El archivo descargado esta vacio.");
+            throw new IOException("El archivo descargado está vacío.");
         }
         byte[] header;
         try (InputStream input = Files.newInputStream(jarPath)) {
             header = input.readNBytes(4);
         }
         if (header.length < 2 || header[0] != 'P' || header[1] != 'K') {
-            throw new IOException("El archivo descargado no tiene formato ZIP/JAR valido.");
+            throw new IOException("El archivo descargado no tiene formato ZIP/JAR válido.");
         }
         try (JarFile jarFile = new JarFile(jarPath.toFile())) {
             boolean hasEntries = jarFile.entries().hasMoreElements();
@@ -1329,7 +1329,7 @@ public final class ServerExtensionsService {
                 throw new IOException("El archivo descargado no contiene entradas JAR.");
             }
         } catch (ZipException ex) {
-            throw new IOException("El archivo descargado esta corrupto o no es un JAR valido.", ex);
+            throw new IOException("El archivo descargado está corrupto o no es un JAR válido.", ex);
         }
     }
 
@@ -1509,7 +1509,7 @@ public final class ServerExtensionsService {
 
     private String defaultUpdateMessage(ExtensionSource source) {
         return hasTrackedRemoteOrigin(source)
-                ? "La extension tiene origen remoto, pero su estado de actualizacion aun no se ha comprobado."
+                ? "La extensión tiene origen remoto, pero su estado de actualización aún no se ha comprobado."
                 : "Instalada sin origen remoto conocido.";
     }
 
@@ -2471,7 +2471,7 @@ public final class ServerExtensionsService {
 
     private String stripJarExtension(String fileName) {
         if (fileName == null || fileName.isBlank()) {
-            return "Extension";
+            return "Extensión";
         }
         String normalized = fileName.trim();
         return normalized.toLowerCase(Locale.ROOT).endsWith(".jar")

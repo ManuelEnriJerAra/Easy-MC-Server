@@ -2611,7 +2611,7 @@ public final class MCARenderer {
                 throw new IllegalArgumentException("El archivo .mca esta vacio: " + normalizedPath.getFileName());
             }
         } catch (IOException ex) {
-            throw new IllegalArgumentException("No se ha podido comprobar el tamano del .mca: " + normalizedPath.getFileName(), ex);
+            throw new IllegalArgumentException("No se ha podido comprobar el tamaño del .mca: " + normalizedPath.getFileName(), ex);
         }
         if(!normalizedPath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mca")) {
             throw new IllegalArgumentException("El archivo no tiene extension .mca: " + normalizedPath);

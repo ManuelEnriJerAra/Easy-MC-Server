@@ -23,11 +23,11 @@ final class ServerPlatformInstallSupport {
             throw new IOException("No se ha indicado la carpeta de instalacion.");
         }
         if (request.minecraftVersion() == null || request.minecraftVersion().isBlank()) {
-            throw new IOException("No se ha indicado la version de Minecraft.");
+            throw new IOException("No se ha indicado la versión de Minecraft.");
         }
         if (platformVersionName != null && !platformVersionName.isBlank()
                 && (request.platformVersion() == null || request.platformVersion().isBlank())) {
-            throw new IOException("No se ha indicado la version de " + platformVersionName + ".");
+            throw new IOException("No se ha indicado la versión de " + platformVersionName + ".");
         }
         if (request.downloader() == null) {
             throw new IOException("No se ha proporcionado un descargador de archivos.");

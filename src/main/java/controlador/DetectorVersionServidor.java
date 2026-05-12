@@ -29,7 +29,7 @@ public class DetectorVersionServidor {
                 return profile.minecraftVersion();
             }
         } catch (RuntimeException e) {
-            System.out.println("No se ha podido detectar la version del servidor: " + e.getMessage());
+            System.out.println("No se ha podido detectar la versión del servidor: " + e.getMessage());
             return null;
         }
         return null;

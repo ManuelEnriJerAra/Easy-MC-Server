@@ -130,7 +130,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private final JComboBox<SearchSortOption> sortCombo = new JComboBox<>(sortModel);
     private final DefaultComboBoxModel<ResultLimitOption> resultLimitModel = new DefaultComboBoxModel<>();
     private final JComboBox<ResultLimitOption> resultLimitCombo = new JComboBox<>(resultLimitModel);
-    private final JLabel catalogStatusLabel = new JLabel("Busca una extension para empezar.");
+    private final JLabel catalogStatusLabel = new JLabel("Busca una extensión para empezar.");
     private final JLabel queueStatusLabel = new JLabel("La cola esta vacia.");
     private final JLabel queueSummaryLabel = new JLabel("");
     private final DefaultListModel<DownloadQueueItem> queueModel = new DefaultListModel<>();
@@ -156,7 +156,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             SvgIconFactory.create("easymcicons/check.svg", 18, 18, () -> Color.WHITE);
     private final Timer catalogLoadingTimer;
 
-    private final JLabel detailTitleLabel = new JLabel("Selecciona una extension");
+    private final JLabel detailTitleLabel = new JLabel("Selecciona una extensión");
     private final JLabel detailSubtitleLabel = new JLabel("-");
     private final JLabel detailStatusBadgeLabel = new ExtensionDetailsLayout.StatusBadgeLabel("Sin seleccion");
     private final JLabel detailIconLabel = new JLabel();
@@ -184,7 +184,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private long detailRequestSequence;
     private long previewRequestSequence;
     private long installedSyncSequence;
-    private SearchViewState searchState = new SearchViewState(ViewState.IDLE, "Busca una extension para empezar.", 0L);
+    private SearchViewState searchState = new SearchViewState(ViewState.IDLE, "Busca una extensión para empezar.", 0L);
     private DetailViewState detailState = new DetailViewState(ViewState.IDLE, "-", null, 0L);
     private PreviewViewState previewState = new PreviewViewState(ViewState.IDLE, "-", null, 0L);
     private QueueViewState queueState = new QueueViewState(ViewState.EMPTY, "La cola esta vacia.");
@@ -1338,7 +1338,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         if (admission.existingItem() != null) {
             admission.existingItem().state = QueueState.PENDING;
-            admission.existingItem().message = immediate ? "Instalacion inmediata" : "Pendiente de descarga";
+            admission.existingItem().message = immediate ? "Instalación inmediata" : "Pendiente de descarga";
             admission.existingItem().requiredDependencyKeys = List.copyOf(requiredDependencyKeys);
             if (immediate) {
                 moveQueueItemToFront(admission.existingItem());
@@ -1346,14 +1346,14 @@ final class ExtensionMarketplaceDialog extends JDialog {
             repaintQueueLists();
             setQueueFeedback("La descarga ya estaba registrada.", entry.displayName() + " queda lista para instalarse desde la cola.");
         } else {
-            DownloadQueueItem requested = createQueueItem(entry, plan, immediate ? "Instalacion inmediata" : "Pendiente de descarga");
+            DownloadQueueItem requested = createQueueItem(entry, plan, immediate ? "Instalación inmediata" : "Pendiente de descarga");
             requested.requiredDependencyKeys = List.copyOf(requiredDependencyKeys);
             if (immediate) {
                 queueModel.add(Math.min(insertIndex, queueModel.size()), requested);
             } else {
                 queueModel.addElement(requested);
             }
-            setQueueFeedback(immediate ? "Instalacion prioritaria." : "Agregada a la cola.",
+            setQueueFeedback(immediate ? "Instalación prioritaria." : "Agregada a la cola.",
                     entry.displayName() + (immediate ? " se ha colocado al frente de la cola." : " espera su turno para instalarse."));
         }
         setQueueFeedback("Añadida a la cola.", entry.displayName() + " queda lista para descargarse.");
@@ -1474,27 +1474,26 @@ final class ExtensionMarketplaceDialog extends JDialog {
         message.append(label).append(":\n");
         for (ResolvedDependency dependency : resolved) {
             message.append("- ").append(dependencyDisplayName(dependency.dependency()))
-                    .append(" para ").append(defaultString(dependency.parentDisplayName(), "la extension seleccionada"))
+                    .append(" para ").append(defaultString(dependency.parentDisplayName(), "la extensión seleccionada"))
                     .append(findQueuedDependency(dependency.dependency()) == null
-                            ? " (se agregara a la cola)\n"
-                            : " (ya esta en cola)\n");
+                            ? " (se agregará a la cola)\n"
+                            : " (ya está en cola)\n");
         }
         for (DependencyNotice dependency : unresolved) {
             message.append("- ").append(dependencyDisplayName(dependency.dependency()))
-                    .append(" para ").append(defaultString(dependency.parentDisplayName(), "la extension seleccionada"))
-                    .append(" (no se pudo resolver automaticamente)\n");
+                    .append(" para ").append(defaultString(dependency.parentDisplayName(), "la extensión seleccionada"))
+                    .append(" (no se pudo resolver automáticamente)\n");
         }
     }
 
     private void showUnresolvedRequiredDependencies(ExtensionCatalogEntry entry, DependencyResolutionResult dependencies) {
         StringBuilder message = new StringBuilder();
         message.append("No se pueden resolver todas las dependencias obligatorias de ")
-                .append(defaultString(entry == null ? null : entry.displayName(), "la extension seleccionada"))
+                .append(defaultString(entry == null ? null : entry.displayName(), "la extensión seleccionada"))
                 .append(".\n\nInstala o revisa manualmente estos paquetes antes de continuar:\n\n");
         for (DependencyNotice dependency : dependencies.unresolvedRequired()) {
             message.append("- ").append(dependencyDisplayName(dependency.dependency()))
-                    .append(" para ")
-                    .append(defaultString(dependency.parentDisplayName(), "la extension seleccionada"))
+                    .append(" para ").append(defaultString(dependency.parentDisplayName(), "la extensión seleccionada"))
                     .append('\n');
         }
         JOptionPane.showMessageDialog(
@@ -1872,7 +1871,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             return;
         }
         if (queueState.state() == ViewState.LOADING) {
-            queueSummaryLabel.setText("Instalacion en curso");
+            queueSummaryLabel.setText("Instalación en curso");
             queueStatusLabel.setText(queueState.message());
             return;
         }
@@ -1976,20 +1975,20 @@ final class ExtensionMarketplaceDialog extends JDialog {
             try {
                 onInstallCompleted.run();
             } catch (RuntimeException ex) {
-                LOGGER.log(Level.WARNING, "Fallo al refrescar la vista de extensiones tras completar la instalacion.", ex);
+                LOGGER.log(Level.WARNING, "Fallo al refrescar la vista de extensiones tras completar la instalación.", ex);
             }
         });
     }
 
     private String buildQueueHeadline(long pending, long completed, long failed) {
         if (failed > 0L && pending == 0L) {
-            return failed == 1L ? "Hay 1 instalacion con incidencia" : "Hay " + failed + " instalaciones con incidencia";
+            return failed == 1L ? "Hay 1 instalación con incidencia" : "Hay " + failed + " instalaciones con incidencia";
         }
         if (pending > 0L) {
-            return pending == 1L ? "1 instalacion pendiente" : pending + " instalaciones pendientes";
+            return pending == 1L ? "1 instalación pendiente" : pending + " instalaciones pendientes";
         }
         if (completed > 0L) {
-            return completed == 1L ? "1 instalacion completada" : completed + " instalaciones completadas";
+            return completed == 1L ? "1 instalación completada" : completed + " instalaciones completadas";
         }
         return "Cola actualizada";
     }
@@ -1999,7 +1998,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             throw new IllegalStateException("No hay un servidor activo para procesar la cola.");
         }
         if (item == null) {
-            throw new IllegalArgumentException("La cola contiene un elemento invalido.");
+            throw new IllegalArgumentException("La cola contiene un elemento inválido.");
         }
         if (item.providerId == null || item.providerId.isBlank() || item.projectId == null || item.projectId.isBlank()) {
             throw new IllegalArgumentException("Faltan datos del paquete para resolver la descarga.");
@@ -2069,18 +2068,18 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private String friendlyQueueFailureMessage(String rawMessage) {
-        String message = defaultString(rawMessage, "No se pudo completar la descarga o instalacion.");
-        if (message.contains("ya esta instalada")) {
-            return "La extension ya estaba instalada en el servidor.";
+        String message = defaultString(rawMessage, "No se pudo completar la descarga o instalación.");
+        if (message.contains("ya esta instalada") || message.contains("ya está instalada")) {
+            return "La extensión ya estaba instalada en el servidor.";
         }
         if (message.contains("No se ha podido resolver una descarga compatible")) {
             return "No se encontro una descarga compatible con este servidor.";
         }
-        if (message.contains("URL de descarga valida")) {
-            return "El proveedor no ha devuelto una descarga valida.";
+        if (message.contains("URL de descarga valida") || message.contains("URL de descarga válida")) {
+            return "El proveedor no ha devuelto una descarga válida.";
         }
         if (message.contains("formato ZIP/JAR") || message.contains("corrupto") || message.contains("no contiene entradas")) {
-            return "La descarga recibida no parece un archivo .jar valido.";
+            return "La descarga recibida no parece un archivo .jar válido.";
         }
         if (message.contains("interrumpida")) {
             return "La descarga se interrumpio antes de completarse.";
@@ -2188,7 +2187,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             return new ActionAvailability(false, false, detailState.message());
         }
         if (syncState.state() == ViewState.LOADING) {
-            return new ActionAvailability(false, false, "Se esta sincronizando la biblioteca instalada del servidor.");
+            return new ActionAvailability(false, false, "Se está sincronizando la biblioteca instalada del servidor.");
         }
         if (detailState.state() == ViewState.LOADING) {
             return new ActionAvailability(false, false, detailState.message());
@@ -2225,7 +2224,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
     private QueueAdmission evaluateQueueAdmission(ExtensionCatalogEntry entry, ExtensionDownloadPlan downloadPlan) {
         if (entry == null) {
-            return new QueueAdmission(false, null, "Selecciona una extension.");
+            return new QueueAdmission(false, null, "Selecciona una extensión.");
         }
         if (downloadPlan == null || !downloadPlan.ready()) {
             return new QueueAdmission(false, null, "Todavia no hay una descarga compatible preparada.");
@@ -2250,7 +2249,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             if (item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING) {
                 String message = item.matchesExactVersion(entry.providerId(), entry.projectId(), downloadPlan.versionId())
                         ? "Esta version ya esta en cola."
-                        : "Ya hay otra version de esta extension en cola.";
+                        : "Ya hay otra versión de esta extensión en cola.";
                 return new QueueAdmission(false, item, message);
             }
         }
@@ -2663,7 +2662,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             return new MarketplaceCompatibilityAssessment(
                     ExtensionCompatibilityStatus.WARNING,
                     "Compatibilidad sin datos suficientes",
-                    List.of("No hay informacion suficiente del proveedor para evaluar esta extension.")
+                    List.of("No hay información suficiente del proveedor para evaluar esta extensión.")
             );
         }
         return new MarketplaceCompatibilityAssessment(
@@ -3621,9 +3620,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 ? ServerEcosystemType.UNKNOWN
                 : server.getEcosystemType();
         return switch (ecosystem) {
-            case MODS -> "Catalogo de mods";
-            case PLUGINS -> "Catalogo de plugins";
-            default -> "Catalogo de extensiones";
+            case MODS -> "Catálogo de mods";
+            case PLUGINS -> "Catálogo de plugins";
+            default -> "Catálogo de extensiones";
         };
     }
 
@@ -3644,7 +3643,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private String searchPlaceholderText() {
-        return "Buscar " + extensionPluralLower() + " por nombre, autor o funcion";
+        return "Buscar " + extensionPluralLower() + " por nombre, autor o función";
     }
 
     private String platformFilterLabel() {
@@ -3696,7 +3695,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             return new MarketplaceCompatibilityAssessment(
                     ExtensionCompatibilityStatus.WARNING,
                     "Compatibilidad sin datos suficientes",
-                    List.of("No hay informacion suficiente del proveedor para evaluar esta extension.")
+                    List.of("No hay información suficiente del proveedor para evaluar esta extensión.")
             );
         }
         String key = defaultString(entry.providerId(), "") + "|" + defaultString(entry.projectId(), "")
@@ -3722,7 +3721,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             return new MarketplaceCompatibilityAssessment(
                     ExtensionCompatibilityStatus.WARNING,
                     "Version sin datos suficientes",
-                    List.of("No hay informacion suficiente para validar esta version.")
+                    List.of("No hay información suficiente para validar esta versión.")
             );
         }
         ServerExtensionType type = resolveServerExtensionType();
@@ -3744,11 +3743,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
         String serverVersion = normalized(server == null ? null : server.getVersion());
 
         if (serverEcosystem == ServerEcosystemType.MODS && extensionType == ServerExtensionType.PLUGIN) {
-            blockers.add("Esta extension es un plugin y el servidor actual acepta mods.");
+            blockers.add("Esta extensión es un plugin y el servidor actual acepta mods.");
         } else if (serverEcosystem == ServerEcosystemType.PLUGINS && extensionType == ServerExtensionType.MOD) {
-            blockers.add("Esta extension es un mod y el servidor actual acepta plugins.");
+            blockers.add("Esta extensión es un mod y el servidor actual acepta plugins.");
         } else if (extensionType == null || extensionType == ServerExtensionType.UNKNOWN) {
-            warnings.add("El proveedor no declara el tipo de extension.");
+            warnings.add("El proveedor no declara el tipo de extensión.");
         }
 
         if (serverPlatform == ServerPlatform.UNKNOWN) {
@@ -3761,20 +3760,20 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     .map(this::canonicalizePlatform)
                     .anyMatch(platform -> platform == serverPlatform);
             if (!platformMatch) {
-                blockers.add("La extension declara compatibilidad con " + joinPreview(
+                blockers.add("La extensión declara compatibilidad con " + joinPreview(
                         declaredPlatforms.stream().map(this::labelForPlatform).toList(), 4
                 ) + ", pero el servidor actual usa " + labelForPlatform(serverPlatform) + ".");
             }
         }
 
         if (serverVersion == null) {
-            warnings.add("No se conoce la version de Minecraft del servidor.");
+            warnings.add("No se conoce la versión de Minecraft del servidor.");
         } else if (declaredVersions == null || declaredVersions.isEmpty()) {
             warnings.add("El proveedor no declara versiones de Minecraft compatibles.");
         } else {
             VersionMatchType versionMatch = matchMinecraftVersion(serverVersion, declaredVersions);
             if (versionMatch == VersionMatchType.NONE) {
-                blockers.add("La extension no declara compatibilidad para Minecraft " + serverVersion + ".");
+                blockers.add("La extensión no declara compatibilidad para Minecraft " + serverVersion + ".");
             } else if (versionMatch == VersionMatchType.FAMILY) {
                 warnings.add("La compatibilidad solo coincide por familia de version (" + serverVersionFamily(serverVersion) + ").");
             }
@@ -3797,7 +3796,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return new MarketplaceCompatibilityAssessment(
                 ExtensionCompatibilityStatus.COMPATIBLE,
                 "Compatible con este servidor.",
-                List.of("Plataforma, tipo de extension y version de Minecraft coinciden con el servidor actual.")
+                List.of("Plataforma, tipo de extensión y versión de Minecraft coinciden con el servidor actual.")
         );
     }
 
@@ -4059,18 +4058,18 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (root.contains("interrump")) {
             return "La preparacion de la descarga se ha interrumpido.";
         }
-        return "No se ha podido preparar la instalacion de forma segura.";
+        return "No se ha podido preparar la instalación de forma segura.";
     }
 
     private String friendlyPreviewRecoveryHint(Throwable error) {
         String root = rootMessage(error).toLowerCase(Locale.ROOT);
         if (root.contains("compatible")) {
-            return "Prueba otra version del listado o revisa una build declarada para otro loader o version.";
+            return "Prueba otra versión del listado o revisa una build declarada para otro loader o versión.";
         }
         if (root.contains("http") || root.contains("consult")) {
-            return "La instalacion queda bloqueada hasta poder contactar otra vez con el proveedor remoto.";
+            return "La instalación queda bloqueada hasta poder contactar otra vez con el proveedor remoto.";
         }
-        return "La accion queda bloqueada para evitar una instalacion incompleta o incoherente.";
+        return "La acción queda bloqueada para evitar una instalación incompleta o incoherente.";
     }
 
     private String friendlySyncError(Throwable error) {
@@ -5478,7 +5477,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 detailFileLabel.setText(defaultString(selectedDownloadPlan.fileName(), "-"));
                 refreshSelectionActionState();
             } catch (Exception ex) {
-                LOGGER.log(Level.WARNING, "Fallo al preparar la instalacion del marketplace para " + entry.projectId(), ex);
+                LOGGER.log(Level.WARNING, "Fallo al preparar la instalación del marketplace para " + entry.projectId(), ex);
                 previewState = new PreviewViewState(ViewState.ERROR, friendlyPreviewError(ex), versionId, requestId);
                 detailVersionLabel.setText("-");
                 detailFileLabel.setText("-");
@@ -5583,8 +5582,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     notifyInstallCompletedSafely();
                 }
             } catch (Exception ex) {
-                LOGGER.log(Level.WARNING, "No se ha podido desinstalar la extension.", ex);
-                showUserError("No se ha podido desinstalar la extension.");
+                LOGGER.log(Level.WARNING, "No se ha podido desinstalar la extensión.", ex);
+                showUserError("No se ha podido desinstalar la extensión.");
             } finally {
                 refreshSelectionActionState();
             }
@@ -5615,7 +5614,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 invalidateInstallResolutionCache();
                 syncState = new QueueViewState(ViewState.READY, capitalize(extensionPluralLower()) + " instalados sincronizados.");
                 notifyInstallCompletedSafely();
-                setQueueFeedback("Sincronizacion completada.", "La informacion local del marketplace vuelve a estar al dia.");
+                setQueueFeedback("Sincronización completada.", "La información local del marketplace vuelve a estar al día.");
                 refreshResultDecorationsAsync();
             } catch (Exception ex) {
                 LOGGER.log(Level.WARNING, "Fallo al sincronizar extensiones instaladas.", ex);
@@ -5678,8 +5677,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     queueState = new QueueViewState(ViewState.LOADING, "Procesando cola de descargas...");
                     clearQueueFeedback();
                     item.state = QueueState.DOWNLOADING;
-                    item.message = "Descargando archivos y preparando instalacion...";
-                    setQueueFeedback("Instalando " + item.displayName + "...", "Se esta descargando y validando la extension seleccionada.");
+                    item.message = "Descargando archivos y preparando instalación...";
+                    setQueueFeedback("Instalando " + item.displayName + "...", "Se está descargando y validando la extensión seleccionada.");
                 } else if (progress.phase() == QueueProgressPhase.COMPLETED) {
                     if (progress.plan() != null) {
                         item.downloadPlan = progress.plan();
@@ -5692,7 +5691,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                                 : evaluateInstallResolution(selectedEntry);
                         previewState = new PreviewViewState(ViewState.BLOCKED, "Instalada correctamente en este servidor.", item.versionId, previewRequestSequence);
                     }
-                    setQueueFeedback("Instalacion completada.", item.displayName + " ya esta disponible en el servidor.");
+                    setQueueFeedback("Instalación completada.", item.displayName + " ya está disponible en el servidor.");
                 } else if (progress.phase() == QueueProgressPhase.FAILED) {
                     if (progress.plan() != null) {
                         item.downloadPlan = progress.plan();
@@ -5702,7 +5701,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     if (selectedEntry != null && item.matchesProject(selectedEntry.providerId(), selectedEntry.projectId())) {
                         previewState = new PreviewViewState(ViewState.ERROR, "No se ha podido instalar: " + item.message, item.versionId, previewRequestSequence);
                     }
-                    setQueueFeedback("No se pudo completar la instalacion.", item.message);
+                    setQueueFeedback("No se pudo completar la instalación.", item.message);
                 }
                 repaintQueueLists();
                 refreshQueueControls();
