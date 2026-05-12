@@ -43,7 +43,7 @@ mvn -q -DskipTests compile
 ## Run
 
 ```bash
-java -jar target/easy_mc_server_0.6-alpha.jar
+java -jar target/easy_mc_server_0.6-beta.jar
 ```
 
 You can also run the application directly from your IDE using the main class:

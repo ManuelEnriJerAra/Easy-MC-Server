@@ -131,5 +131,5 @@ Fix: Keep folder path editor aligned with long names
 Refactor: Extract extension queue state from marketplace dialog
 Docs: Add pipeline guide for platform adapters
 Test: Cover world storage analyzer edge cases
-Chore: Update project version to 0.6-alpha
+Chore: Update project version to 0.6-beta
 ```
