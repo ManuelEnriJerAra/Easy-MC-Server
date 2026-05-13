@@ -21,7 +21,6 @@ import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
@@ -1142,28 +1141,7 @@ public class PanelServidores extends FlatScrollPane {
         String full = (fullObj == null) ? "" : String.valueOf(fullObj);
         full = full.strip();
 
-        FontMetrics fm = label.getFontMetrics(label.getFont());
-        label.setText(ellipsizePx(full, fm, maxWidthPx));
-    }
-
-    // Si el texto no entra (en píxeles) añade "..."
-    private String ellipsizePx(String s, FontMetrics fm, int maxWidthPx){
-        if(s == null) return "";
-        if(maxWidthPx <= 0) return "";
-
-        String dots = "...";
-        if(fm.stringWidth(s) <= maxWidthPx) return s;
-        if(fm.stringWidth(dots) >= maxWidthPx) return dots;
-
-        int lo = 0;
-        int hi = s.length();
-        while(lo < hi){
-            int mid = (lo + hi + 1) >>> 1;
-            String candidate = s.substring(0, mid) + dots;
-            if(fm.stringWidth(candidate) <= maxWidthPx) lo = mid;
-            else hi = mid - 1;
-        }
-        return s.substring(0, lo) + dots;
+        label.setText(TextEllipsizer.right(full, label.getFontMetrics(label.getFont()), maxWidthPx));
     }
 
     @Override

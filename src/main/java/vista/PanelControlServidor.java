@@ -15,7 +15,6 @@ import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -200,28 +199,7 @@ public class PanelControlServidor extends JPanel {
 
         Insets ins = button.getInsets();
         int available = Math.max(0, button.getWidth() - ins.left - ins.right - 12);
-        FontMetrics fm = button.getFontMetrics(button.getFont());
-        button.setText(ellipsizePx(fullText, fm, available));
-    }
-
-    private String ellipsizePx(String text, FontMetrics fm, int maxWidth){
-        if(text == null) return "";
-        if(fm == null) return text;
-        if(maxWidth <= 0) return "...";
-        if(fm.stringWidth(text) <= maxWidth) return text;
-
-        String ell = "...";
-        int ellW = fm.stringWidth(ell);
-        int target = Math.max(0, maxWidth - ellW);
-
-        int lo = 0;
-        int hi = text.length();
-        while(lo < hi){
-            int mid = (lo + hi + 1) >>> 1;
-            String sub = text.substring(0, mid);
-            if(fm.stringWidth(sub) <= target) lo = mid; else hi = mid - 1;
-        }
-        return text.substring(0, lo) + ell;
+        button.setText(TextEllipsizer.right(fullText, button.getFontMetrics(button.getFont()), available));
     }
 
 @Override

@@ -9,7 +9,6 @@ import java.awt.Dimension;
 import java.awt.FileDialog;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.Frame;
 import java.awt.Graphics2D;
 import java.awt.GridBagLayout;
@@ -552,8 +551,7 @@ public class PanelPrevisualizacion extends JPanel {
         if(full == null) full = "";
         label.setToolTipText(full);
 
-        FontMetrics fm = label.getFontMetrics(label.getFont());
-        label.setText(ellipsizePx(full, fm, maxWidth));
+        label.setText(TextEllipsizer.right(full, label.getFontMetrics(label.getFont()), maxWidth));
     }
 
     private ImageSelectionResult seleccionarImagenServidor(Server server) throws IOException {
@@ -1073,8 +1071,7 @@ public class PanelPrevisualizacion extends JPanel {
         String fullName = fullNameObj == null ? "" : String.valueOf(fullNameObj);
         fullName = fullName.strip();
 
-        FontMetrics fmName = nombreField.getFontMetrics(nombreField.getFont());
-        nombreField.setText(ellipsizePx(fullName, fmName, maxWidth));
+        nombreField.setText(TextEllipsizer.right(fullName, nombreField.getFontMetrics(nombreField.getFont()), maxWidth));
         nombreField.setToolTipText(fullName);
 
         Object fullMotdObj = motdLabel.getClientProperty("fullText");
@@ -1082,22 +1079,4 @@ public class PanelPrevisualizacion extends JPanel {
         motdLabel.setToolTipText(fullMotd);
     }
 
-    private static String ellipsizePx(String s, FontMetrics fm, int maxWidthPx){
-        if(s == null) return "";
-        if(maxWidthPx <= 0) return "";
-
-        String dots = "...";
-        if(fm.stringWidth(s) <= maxWidthPx) return s;
-        if(fm.stringWidth(dots) >= maxWidthPx) return dots;
-
-        int lo = 0;
-        int hi = s.length();
-        while(lo < hi){
-            int mid = (lo + hi + 1) >>> 1;
-            String candidate = s.substring(0, mid) + dots;
-            if(fm.stringWidth(candidate) <= maxWidthPx) lo = mid;
-            else hi = mid - 1;
-        }
-        return s.substring(0, lo) + dots;
-    }
 }

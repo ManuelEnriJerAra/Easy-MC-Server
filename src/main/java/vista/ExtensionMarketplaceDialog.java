@@ -4737,22 +4737,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (maxWidth <= 0 || value.isBlank() || value.length() <= 1) {
             return value;
         }
-        FontMetrics metrics = getFontMetrics(font == null ? getFont() : font);
-        if (metrics.stringWidth(value) <= maxWidth) {
-            return value;
-        }
-        String ellipsis = "...";
-        int ellipsisWidth = metrics.stringWidth(ellipsis);
-        if (maxWidth <= ellipsisWidth) {
-            return metrics.stringWidth(".") <= maxWidth ? "." : "";
-        }
-        int available = Math.max(0, maxWidth - ellipsisWidth);
-        StringBuilder sb = new StringBuilder(value);
-        while (sb.length() > 0 && metrics.stringWidth(sb.toString()) > available) {
-            sb.setLength(sb.length() - 1);
-        }
-        String prefix = sb.toString().stripTrailing();
-        return prefix.isEmpty() ? ellipsis : prefix + ellipsis;
+        return TextEllipsizer.rightStrict(value, getFontMetrics(font == null ? getFont() : font), maxWidth);
     }
 
     private String compatibilityBadgeText(MarketplaceCompatibilityAssessment assessment) {

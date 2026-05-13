@@ -2152,29 +2152,7 @@ final class PanelExtensiones extends JPanel {
         if (value.length() <= 1 || maxWidth <= 0) {
             return value;
         }
-        FontMetrics metrics = getFontMetrics(font == null ? getFont() : font);
-        if (metrics.stringWidth(value) <= maxWidth) {
-            return value;
-        }
-        String ellipsis = "...";
-        int ellipsisWidth = metrics.stringWidth(ellipsis);
-        if (maxWidth <= ellipsisWidth) {
-            return metrics.stringWidth(".") <= maxWidth ? "." : "";
-        }
-        int low = 0;
-        int high = value.length();
-        while (low < high) {
-            int mid = (low + high + 1) / 2;
-            if (metrics.stringWidth(value.substring(0, mid)) + ellipsisWidth <= maxWidth) {
-                low = mid;
-            } else {
-                high = mid - 1;
-            }
-        }
-        if (low <= 0) {
-            return ellipsis;
-        }
-        return value.substring(0, Math.min(value.length(), low)) + ellipsis;
+        return TextEllipsizer.rightStrict(value, getFontMetrics(font == null ? getFont() : font), maxWidth);
     }
 
     private Color neutralBadgeBackground() {

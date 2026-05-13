@@ -48,6 +48,7 @@ import vista.AppTheme;
 import vista.PlatformSelectorPanel;
 import vista.ProcessWizardDialog;
 import vista.SvgIconFactory;
+import vista.TextEllipsizer;
 
 import javax.swing.*;
 import java.awt.*;
@@ -2841,6 +2842,11 @@ public class GestorServidores {
                 wizard.refresh();
             }
         };
+        Runnable refreshNextStateLater = () -> {
+            if (refreshNextState[0] != null) {
+                SwingUtilities.invokeLater(refreshNextState[0]);
+            }
+        };
         checkSelectedVersionDownload[0] = () -> {
             ServerCreationOption selected = state.option;
             if (state.adapter == null
@@ -2963,29 +2969,25 @@ public class GestorServidores {
         folderNameField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                state.folderName = folderNameField.getText();
-                state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
-                folderPathPanel.revalidate();
-                folderPathPanel.repaint();
-                refreshNextState[0].run();
+                actualizarNombreCarpeta();
             }
 
             @Override
             public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                state.folderName = folderNameField.getText();
-                state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
-                folderPathPanel.revalidate();
-                folderPathPanel.repaint();
-                refreshNextState[0].run();
+                actualizarNombreCarpeta();
             }
 
             @Override
             public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                actualizarNombreCarpeta();
+            }
+
+            private void actualizarNombreCarpeta() {
                 state.folderName = folderNameField.getText();
                 state.folderNameEdited = !Objects.equals(normalizarNombreCarpeta(state.folderName), state.suggestedFolderName);
                 folderPathPanel.revalidate();
                 folderPathPanel.repaint();
-                refreshNextState[0].run();
+                refreshNextStateLater.run();
             }
         });
         parentChooser.addPropertyChangeListener(evt -> {
@@ -3400,7 +3402,6 @@ public class GestorServidores {
         boolean shouldReplace = forceReplace
                 || !state.folderNameEdited
                 || state.folderName == null
-                || state.folderName.isBlank()
                 || Objects.equals(normalizarNombreCarpeta(state.folderName), previousSuggestion);
         if (!shouldReplace) {
             return;
@@ -3499,8 +3500,6 @@ public class GestorServidores {
     }
 
     private static final class LeftEllipsisLabel extends JLabel {
-        private static final String ELLIPSIS = "...";
-
         @Override
         protected void paintComponent(Graphics g) {
             String text = getText();
@@ -3532,7 +3531,7 @@ public class GestorServidores {
                 g2.setFont(getFont());
                 g2.setColor(getForeground());
                 FontMetrics metrics = g2.getFontMetrics();
-                String visibleText = ellipsizeLeft(text, metrics, availableW);
+                String visibleText = TextEllipsizer.left(text, metrics, availableW);
                 int y = insets.top + Math.max(0, (getHeight() - insets.top - insets.bottom - metrics.getHeight()) / 2) + metrics.getAscent();
                 g2.setClip(insets.left, insets.top, availableW, Math.max(0, getHeight() - insets.top - insets.bottom));
                 g2.drawString(visibleText, insets.left, y);
@@ -3554,29 +3553,6 @@ public class GestorServidores {
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         }
 
-        private String ellipsizeLeft(String text, FontMetrics metrics, int maxWidth) {
-            if (metrics.stringWidth(text) <= maxWidth) {
-                return text;
-            }
-            int ellipsisWidth = metrics.stringWidth(ELLIPSIS);
-            if (maxWidth <= ellipsisWidth) {
-                return ELLIPSIS;
-            }
-
-            int available = maxWidth - ellipsisWidth;
-            int low = 0;
-            int high = text.length();
-            while (low < high) {
-                int mid = (low + high + 1) >>> 1;
-                String suffix = text.substring(text.length() - mid);
-                if (metrics.stringWidth(suffix) <= available) {
-                    low = mid;
-                } else {
-                    high = mid - 1;
-                }
-            }
-            return ELLIPSIS + text.substring(text.length() - low);
-        }
     }
 
     private static final class ServerCreationWizardState {

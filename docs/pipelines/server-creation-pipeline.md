@@ -36,7 +36,7 @@ When the user edits the folder name manually:
 - Update `state.folderName`.
 - Update `state.folderNameEdited`.
 - Revalidate/repaint the folder path editor if its layout depends on text width.
-- Refresh the Next/Create button enabled state.
+- Refresh the Next/Create button enabled state after the document event finishes, for example with `SwingUtilities.invokeLater(...)`, because Swing text documents cannot be mutated while notifying listeners.
 
 ## Validation Rules
 

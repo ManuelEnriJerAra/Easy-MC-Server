@@ -41,6 +41,7 @@ Common components:
 - `BoxCategory`: compact boolean, field, and info rows.
 - `ProcessWizardDialog`: reusable shell for multi-step processes with left/right arrow navigation, per-step validation, and final action handling. The last right-navigation button must switch to `rocket.svg` inside the wizard shell.
 - `WizardDialog`: deprecated compatibility facade for old compiled references. Do not use it for new process flows.
+- `TextEllipsizer`: shared pixel-width right and left ellipsis helpers for labels, buttons, rows, and path editors.
 - `WrapLayout`: wrapping action/player layouts.
 - `RoundedBackgroundPanel`: rounded surfaces.
 
