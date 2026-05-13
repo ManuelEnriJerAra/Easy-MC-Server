@@ -45,6 +45,8 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import vista.AppTheme;
+import vista.PlatformSelectorPanel;
+import vista.ProcessWizardDialog;
 import vista.SvgIconFactory;
 
 import javax.swing.*;
@@ -1540,23 +1542,15 @@ public class GestorServidores {
         if (creatableAdapters.isEmpty()) {
             return null;
         }
-        JComboBox<ServerPlatformAdapter> platformBox = new JComboBox<>(creatableAdapters.toArray(ServerPlatformAdapter[]::new));
-        platformBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
-            JLabel label = new JLabel(value == null ? "" : value.getCreationDisplayName());
-            label.setOpaque(true);
-            if (isSelected) {
-                label.setBackground(list.getSelectionBackground());
-                label.setForeground(list.getSelectionForeground());
-            } else {
-                label.setBackground(list.getBackground());
-                label.setForeground(list.getForeground());
-            }
-            return label;
-        });
+        PlatformSelectorPanel platformSelector = new PlatformSelectorPanel(
+                creatableAdapters,
+                null,
+                null
+        );
 
         int option = JOptionPane.showConfirmDialog(
                 null,
-                platformBox,
+                platformSelector,
                 "Selecciona una plataforma",
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE
@@ -1564,7 +1558,7 @@ public class GestorServidores {
         if (option != JOptionPane.OK_OPTION) {
             return null;
         }
-        return (ServerPlatformAdapter) platformBox.getSelectedItem();
+        return platformSelector.getSelectedAdapter();
     }
 
     private List<ServerCreationOption> cargarOpcionesCreacion(ServerPlatformAdapter adapter) {
@@ -1600,27 +1594,15 @@ public class GestorServidores {
         if (targetAdapters.isEmpty()) {
             return null;
         }
-        JComboBox<ServerPlatformAdapter> platformBox = new JComboBox<>(targetAdapters.toArray(ServerPlatformAdapter[]::new));
-        platformBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
-            String text = value == null ? "" : value.getCreationDisplayName();
-            if (value != null && !value.supportsAutomatedCreation()) {
-                text += " - no automatizable";
-            }
-            JLabel label = new JLabel(text);
-            label.setOpaque(true);
-            if (isSelected) {
-                label.setBackground(list.getSelectionBackground());
-                label.setForeground(list.getSelectionForeground());
-            } else {
-                label.setBackground(list.getBackground());
-                label.setForeground(list.getForeground());
-            }
-            return label;
-        });
+        PlatformSelectorPanel platformSelector = new PlatformSelectorPanel(
+                targetAdapters,
+                null,
+                null
+        );
 
         int option = JOptionPane.showConfirmDialog(
                 null,
-                platformBox,
+                platformSelector,
                 "Selecciona una plataforma destino",
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE
@@ -1628,12 +1610,13 @@ public class GestorServidores {
         if (option != JOptionPane.OK_OPTION) {
             return null;
         }
-        return (ServerPlatformAdapter) platformBox.getSelectedItem();
+        return platformSelector.getSelectedAdapter();
     }
 
     private List<ServerPlatformAdapter> plataformasObjetivoConversion(ServerPlatform sourcePlatform) {
         ServerPlatform resolvedSource = sourcePlatform == null ? ServerPlatform.UNKNOWN : sourcePlatform;
         return ServerPlatformAdapters.all().stream()
+                .filter(ServerPlatformAdapter::supportsAutomatedCreation)
                 .filter(adapter -> adapter.getPlatform() != ServerPlatform.VANILLA)
                 .filter(adapter -> adapter.getPlatform() != ServerPlatform.UNKNOWN)
                 .filter(adapter -> adapter.getPlatform() != resolvedSource)
@@ -2747,21 +2730,9 @@ public class GestorServidores {
 
         ServerCreationWizardState state = new ServerCreationWizardState();
         Window owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
-        JDialog dialog = new JDialog(owner, "Crear servidor", Dialog.ModalityType.APPLICATION_MODAL);
-        dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 
-        CardLayout cardLayout = new CardLayout();
-        JPanel cards = new JPanel(cardLayout);
-        JLabel statusLabel = new JLabel(" ");
-        statusLabel.setForeground(Color.RED);
-
-        JComboBox<ServerPlatformAdapter> platformBox = new JComboBox<>(adapters.toArray(ServerPlatformAdapter[]::new));
-        platformBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> createWizardComboLabel(
-                list,
-                value == null ? "" : value.getCreationDisplayName(),
-                isSelected
-        ));
-        cards.add(createWizardStepPanel("Plataforma", platformBox), "platform");
+        PlatformSelectorPanel platformSelector = new PlatformSelectorPanel(adapters, null, null);
+        platformSelector.setPreferredSize(new Dimension(620, 330));
 
         DefaultListModel<ServerCreationOption> versionListModel = new DefaultListModel<>();
         JList<ServerCreationOption> versionList = new JList<>(versionListModel);
@@ -2794,7 +2765,6 @@ public class GestorServidores {
         JPanel versionStep = new JPanel(new BorderLayout(0, 8));
         versionStep.add(versionScroll, BorderLayout.CENTER);
         versionStep.add(versionControls, BorderLayout.SOUTH);
-        cards.add(createWizardStepPanel("Version", versionStep), "version");
 
         JTextField parentField = new JTextField(32);
         JFileChooser parentChooser = new JFileChooser();
@@ -2821,7 +2791,6 @@ public class GestorServidores {
         JPanel parentStep = new JPanel(new BorderLayout(0, 8));
         parentStep.add(parentHint, BorderLayout.NORTH);
         parentStep.add(parentChooser, BorderLayout.CENTER);
-        cards.add(createWizardStepPanel("Carpeta de destino", parentStep), "parent");
 
         JTextField folderNameField = new JTextField(24);
         LeftEllipsisLabel parentPrefixLabel = new LeftEllipsisLabel();
@@ -2852,38 +2821,9 @@ public class GestorServidores {
         folderPathPanel.setPreferredSize(new Dimension(620, 42));
         JPanel folderNameWrap = new JPanel(new GridBagLayout());
         folderNameWrap.add(folderPathPanel, new GridBagConstraints());
-        cards.add(createWizardStepPanel("Nombre de carpeta", folderNameWrap), "folderName");
 
-        JButton backButton = new JButton();
-        JButton nextButton = new JButton();
-        Icon nextIcon = SvgIconFactory.create("easymcicons/arrow-right.svg", 28, 28, AppTheme::getForeground);
-        Icon finishIcon = SvgIconFactory.create("easymcicons/rocket.svg", 28, 28, AppTheme::getForeground);
-        AppTheme.applyHeaderIconButtonStyle(backButton);
-        AppTheme.applyHeaderIconButtonStyle(nextButton);
-        backButton.setIcon(SvgIconFactory.create("easymcicons/arrow-left.svg", 28, 28, AppTheme::getForeground));
-        nextButton.setIcon(nextIcon);
-        backButton.setToolTipText("Anterior");
-        nextButton.setToolTipText("Siguiente");
-        Dimension arrowButtonSize = new Dimension(44, 44);
-        backButton.setPreferredSize(arrowButtonSize);
-        nextButton.setPreferredSize(arrowButtonSize);
-
-        JPanel footer = new JPanel(new BorderLayout(8, 0));
-        JPanel nav = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        nav.add(backButton);
-        nav.add(nextButton);
-        footer.add(statusLabel, BorderLayout.CENTER);
-        footer.add(nav, BorderLayout.EAST);
-
-        JPanel root = new JPanel(new BorderLayout(0, 12));
-        root.setBorder(BorderFactory.createEmptyBorder(18, 18, 14, 18));
-        root.add(cards, BorderLayout.CENTER);
-        root.add(footer, BorderLayout.SOUTH);
-        dialog.setContentPane(root);
-
-        String[] stepNames = {"platform", "version", "parent", "folderName"};
-        int[] stepIndex = {0};
         AtomicReference<ServerCreationWizardResult> result = new AtomicReference<>();
+        AtomicReference<ProcessWizardDialog> wizardRef = new AtomicReference<>();
         AtomicInteger versionDownloadCheckGeneration = new AtomicInteger();
         Runnable[] refreshNextState = new Runnable[1];
         Runnable[] checkSelectedVersionDownload = new Runnable[1];
@@ -2895,27 +2835,11 @@ public class GestorServidores {
                 refreshNextState[0].run();
             }
         };
-        refreshNextState[0] = () -> nextButton.setEnabled(puedeAvanzarPasoCreacionServidor(
-                stepIndex[0],
-                state,
-                platformBox,
-                versionList,
-                parentField,
-                folderNameField,
-                eulaCheck
-        ));
-        Runnable refreshNav = () -> {
-            boolean lastStep = stepIndex[0] == stepNames.length - 1;
-            backButton.setEnabled(stepIndex[0] > 0);
-            nextButton.setIcon(lastStep ? finishIcon : nextIcon);
-            nextButton.setToolTipText(lastStep ? "Crear servidor" : "Siguiente");
-            statusLabel.setText(" ");
-            cardLayout.show(cards, stepNames[stepIndex[0]]);
-            refreshEulaState.run();
-            if (stepIndex[0] == 3) {
-                actualizarVistaNombreCarpeta(state, parentPrefixLabel, folderNameField);
+        refreshNextState[0] = () -> {
+            ProcessWizardDialog wizard = wizardRef.get();
+            if (wizard != null) {
+                wizard.refresh();
             }
-            refreshNextState[0].run();
         };
         checkSelectedVersionDownload[0] = () -> {
             ServerCreationOption selected = state.option;
@@ -2964,8 +2888,7 @@ public class GestorServidores {
             });
         };
 
-        platformBox.addActionListener(e -> {
-            ServerPlatformAdapter selected = (ServerPlatformAdapter) platformBox.getSelectedItem();
+        platformSelector.setSelectionListener(selected -> {
             if (selected != state.adapter) {
                 state.adapter = selected;
                 state.options = null;
@@ -3093,74 +3016,94 @@ public class GestorServidores {
             refreshEulaState.run();
         });
 
-        backButton.addActionListener(e -> {
-            if (stepIndex[0] <= 0) return;
-            stepIndex[0]--;
-            refreshNav.run();
-        });
-        nextButton.addActionListener(e -> {
-            String error = validarPasoCreacionServidor(
-                    stepIndex[0],
-                    state,
-                    platformBox,
-                    versionList,
-                    parentField,
-                    folderNameField,
-                    eulaCheck
-            );
-            if (error != null) {
-                statusLabel.setText(" ");
-                refreshNextState[0].run();
-                return;
-            }
-            if (stepIndex[0] == 1 && !esOpcionCreacionDescargable(state)) {
-                SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
-                statusLabel.setText(" ");
-                refreshNextState[0].run();
-                return;
-            }
-            if (stepIndex[0] == 0 && !cargarOpcionesCreacionWizard(dialog, state, versionListModel, versionList)) {
-                statusLabel.setText(" ");
-                refreshNextState[0].run();
-                return;
-            }
-            if (stepIndex[0] == 0) {
-                SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
-            }
-            if (stepIndex[0] == stepNames.length - 1) {
-                result.set(new ServerCreationWizardResult(
-                        state.adapter,
-                        state.option,
-                        new File(state.parentDirectory, normalizarNombreCarpeta(state.folderName))
-                ));
-                dialog.dispose();
-                return;
-            }
-            stepIndex[0]++;
-            refreshNav.run();
-        });
-        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowClosing(java.awt.event.WindowEvent e) {
-                if (confirmarCancelacionAsistenteCreacion(dialog)) {
-                    result.set(null);
-                    dialog.dispose();
-                }
-            }
-        });
-
-        state.adapter = adapters.getFirst();
+        state.adapter = null;
         includeSnapshotsCheck.setEnabled(soportaSnapshotsCreacion(state.adapter));
         state.includeSnapshots = includeSnapshotsCheck.isSelected();
         state.includeReleases = includeReleasesCheck.isSelected();
         state.parentDirectory = initialParentDirectory == null ? null : initialParentDirectory.getAbsoluteFile();
-        platformBox.setSelectedItem(state.adapter);
-        dialog.pack();
-        dialog.setMinimumSize(new Dimension(760, Math.max(520, dialog.getHeight())));
-        dialog.setLocationRelativeTo(null);
-        refreshNav.run();
-        dialog.setVisible(true);
-        return result.get();
+        platformSelector.setSelectedAdapter(state.adapter);
+
+        List<ProcessWizardDialog.Step> steps = ProcessWizardDialog.steps(
+                new ProcessWizardDialog.Step(
+                        "platform",
+                        "Plataforma",
+                        platformSelector,
+                        () -> puedeAvanzarPasoCreacionServidor(0, state, platformSelector, versionList, parentField, folderNameField, eulaCheck),
+                        ignored -> {
+                            String error = validarPasoCreacionServidor(0, state, platformSelector, versionList, parentField, folderNameField, eulaCheck);
+                            if (error != null) {
+                                return error;
+                            }
+                            ProcessWizardDialog wizard = wizardRef.get();
+                            Component parent = wizard == null ? null : wizard.getDialog();
+                            if (!cargarOpcionesCreacionWizard(parent, state, versionListModel, versionList)) {
+                                return "No se han podido cargar versiones para la plataforma seleccionada.";
+                            }
+                            SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
+                            return null;
+                        }
+                ),
+                new ProcessWizardDialog.Step(
+                        "version",
+                        "Version",
+                        versionStep,
+                        () -> puedeAvanzarPasoCreacionServidor(1, state, platformSelector, versionList, parentField, folderNameField, eulaCheck),
+                        ignored -> {
+                            String error = validarPasoCreacionServidor(1, state, platformSelector, versionList, parentField, folderNameField, eulaCheck);
+                            if (error != null) {
+                                return error;
+                            }
+                            if (!esOpcionCreacionDescargable(state)) {
+                                SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
+                                return "Comprobando descarga de servidor...";
+                            }
+                            return null;
+                        }
+                ),
+                new ProcessWizardDialog.Step(
+                        "parent",
+                        "Carpeta de destino",
+                        parentStep,
+                        () -> puedeAvanzarPasoCreacionServidor(2, state, platformSelector, versionList, parentField, folderNameField, eulaCheck),
+                        ignored -> validarPasoCreacionServidor(2, state, platformSelector, versionList, parentField, folderNameField, eulaCheck)
+                ),
+                new ProcessWizardDialog.Step(
+                        "folderName",
+                        "Nombre de carpeta",
+                        folderNameWrap,
+                        () -> puedeAvanzarPasoCreacionServidor(3, state, platformSelector, versionList, parentField, folderNameField, eulaCheck),
+                        ignored -> {
+                            String error = validarPasoCreacionServidor(3, state, platformSelector, versionList, parentField, folderNameField, eulaCheck);
+                            if (error != null) {
+                                return error;
+                            }
+                            result.set(new ServerCreationWizardResult(
+                                    state.adapter,
+                                    state.option,
+                                    new File(state.parentDirectory, normalizarNombreCarpeta(state.folderName))
+                            ));
+                            return null;
+                        }
+                )
+        );
+        ProcessWizardDialog wizard = ProcessWizardDialog.create(
+                owner,
+                "Crear servidor",
+                steps,
+                new ProcessWizardDialog.Options(
+                        new Dimension(760, 520),
+                        "Crear servidor",
+                        () -> confirmarCancelacionAsistenteCreacion(wizardRef.get() == null ? null : wizardRef.get().getDialog()),
+                        step -> {
+                            if (step == 3) {
+                                actualizarVistaNombreCarpeta(state, parentPrefixLabel, folderNameField);
+                            }
+                        }
+                )
+        );
+        wizardRef.set(wizard);
+        wizard.refresh();
+        return wizard.showDialog() ? result.get() : null;
     }
 
     private JLabel createWizardComboLabel(JList<?> list, String text, boolean isSelected) {
@@ -3175,15 +3118,6 @@ public class GestorServidores {
             label.setForeground(list.getForeground());
         }
         return label;
-    }
-
-    private JPanel createWizardStepPanel(String title, JComponent content) {
-        JPanel panel = new JPanel(new BorderLayout(0, 12));
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 18f));
-        panel.add(titleLabel, BorderLayout.NORTH);
-        panel.add(content, BorderLayout.CENTER);
-        return panel;
     }
 
     private boolean cargarOpcionesCreacionWizard(Component parent,
@@ -3314,7 +3248,7 @@ public class GestorServidores {
 
     private boolean puedeAvanzarPasoCreacionServidor(int stepIndex,
                                                      ServerCreationWizardState state,
-                                                     JComboBox<ServerPlatformAdapter> platformBox,
+                                                     PlatformSelectorPanel platformSelector,
                                                      JList<ServerCreationOption> versionList,
                                                      JTextField parentField,
                                                      JTextField folderNameField,
@@ -3323,7 +3257,7 @@ public class GestorServidores {
             return false;
         }
         return switch (stepIndex) {
-            case 0 -> platformBox.getSelectedItem() instanceof ServerPlatformAdapter;
+            case 0 -> platformSelector.getSelectedAdapter() != null;
             case 1 -> {
                 ServerCreationOption selected = versionList.getSelectedValue();
                 boolean hasEnabledFilter = state.includeSnapshots || state.includeReleases;
@@ -3386,7 +3320,7 @@ public class GestorServidores {
 
     private String validarPasoCreacionServidor(int stepIndex,
                                                ServerCreationWizardState state,
-                                               JComboBox<ServerPlatformAdapter> platformBox,
+                                               PlatformSelectorPanel platformSelector,
                                                JList<ServerCreationOption> versionList,
                                                JTextField parentField,
                                                JTextField folderNameField,
@@ -3396,7 +3330,7 @@ public class GestorServidores {
         }
         return switch (stepIndex) {
             case 0 -> {
-                state.adapter = (ServerPlatformAdapter) platformBox.getSelectedItem();
+                state.adapter = platformSelector.getSelectedAdapter();
                 yield state.adapter == null ? "Selecciona una plataforma." : null;
             }
             case 1 -> {

@@ -51,9 +51,24 @@ public final class ProcessWizardDialog {
         if (steps == null || steps.isEmpty()) {
             return false;
         }
-        ProcessWizardDialog wizard = new ProcessWizardDialog(owner, title, steps, options);
-        wizard.dialog.setVisible(true);
-        return wizard.accepted;
+        ProcessWizardDialog wizard = create(owner, title, steps, options);
+        return wizard.showDialog();
+    }
+
+    public static ProcessWizardDialog create(Window owner, String title, List<Step> steps, Options options) {
+        if (steps == null || steps.isEmpty()) {
+            throw new IllegalArgumentException("Process wizard requires at least one step.");
+        }
+        return new ProcessWizardDialog(owner, title, steps, options);
+    }
+
+    public boolean showDialog() {
+        dialog.setVisible(true);
+        return accepted;
+    }
+
+    public JDialog getDialog() {
+        return dialog;
     }
 
     private void build() {
