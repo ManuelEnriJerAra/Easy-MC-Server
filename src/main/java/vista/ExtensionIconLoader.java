@@ -274,6 +274,10 @@ final class ExtensionIconLoader {
         return IN_FLIGHT.size();
     }
 
+    static Icon loadIconForTesting(String iconUrl, int size) {
+        return loadIcon(iconUrl, size);
+    }
+
     private static BufferedImage readRemoteImageWithRetry(String iconUrl) throws IOException {
         IOException lastError = null;
         for (int attempt = 1; attempt <= MAX_REMOTE_ATTEMPTS; attempt++) {
@@ -294,6 +298,7 @@ final class ExtensionIconLoader {
     private static BufferedImage readRemoteImage(String iconUrl) throws IOException {
         URI uri = URI.create(iconUrl);
         URLConnection connection = uri.toURL().openConnection();
+        connection.setUseCaches(false);
         connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
         connection.setReadTimeout(READ_TIMEOUT_MILLIS);
         connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://modrinth.com)");
@@ -352,6 +357,7 @@ final class ExtensionIconLoader {
         logIconEventOnce("webp-proxy-request", iconUrl, 0, "png-fallback");
         try {
             URLConnection connection = proxyUri.toURL().openConnection();
+            connection.setUseCaches(false);
             connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
             connection.setReadTimeout(READ_TIMEOUT_MILLIS);
             connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://modrinth.com)");
@@ -427,7 +433,8 @@ final class ExtensionIconLoader {
                 Files.deleteIfExists(cachedFile);
                 return null;
             }
-            BufferedImage image = ImageIO.read(cachedFile.toFile());
+            byte[] bytes = Files.readAllBytes(cachedFile);
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
             if (image == null) {
                 Files.deleteIfExists(cachedFile);
             }

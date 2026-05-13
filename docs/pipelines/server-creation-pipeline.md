@@ -54,4 +54,6 @@ Use existing app UI helpers:
 - `SvgIconFactory`
 - existing FlatLaf/Swing components
 
+The local wizard should match shared process wizard navigation behavior: use the right-arrow icon for intermediate steps and switch the final right-side action to `easymcicons/rocket.svg` when the active step creates the server.
+
 Keep Spanish user-facing text consistent with the rest of the wizard.

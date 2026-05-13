@@ -12,6 +12,7 @@ Controller services:
 - `controlador.extensions.ModrinthExtensionCatalogProvider`
 - `controlador.extensions.HangarExtensionCatalogProvider`
 - `controlador.extensions.CurseForgeModpackService`
+- `controlador.extensions.ModrinthModpackService`
 - `controlador.extensions.InstalledExtensionsCacheService`
 - `controlador.extensions.ExtensionArtifactDownloader`
 
@@ -24,6 +25,7 @@ UI:
 - `vista.ExtensionIconLoader`
 - `vista.ExtensionStatusPresentation`
 - `vista.MarketplaceEntryViewModel`
+- `vista.ProcessWizardDialog`
 
 Models:
 
@@ -54,6 +56,8 @@ Metadata sources include:
 - manifests and inferred metadata
 
 The service merges detected metadata with persisted cache data so catalog origin/update data survives rescans.
+
+Do not let extension display metadata keep live handles to installed jars. Embedded icon references may use `jar:file:` URLs, but icon loading must disable URL caches and eagerly decode the image into memory before UI rendering so users can delete or rename stopped-server jars while the app is open.
 
 ## Manual Install Pipeline
 
@@ -93,15 +97,25 @@ Keep UI dependency decisions and service-level validation consistent. Service va
 
 ## Modpack Import/Export
 
-`CurseForgeModpackService` handles CurseForge-style pack manifests and export modes.
+`ModrinthModpackService` is the practical modpack path for mod servers. It writes and reads Modrinth `.mrpack` archives with `modrinth.index.json`, validates ZIP/index paths defensively, verifies downloads against indexed hashes, installs indexed jars through `ServerExtensionsService`, and extracts path-validated overrides. Current import override policy still permits top-level `mods/*.jar` overrides and is tracked in `docs/pending-fixes/extensions-modrinth-import-mod-jar-overrides.md`. Modrinth-origin installed mods are exported as indexed files when their persisted `projectId` and `versionId` resolve and local hashes match. Manual/local installed jars may be exported as indexed Modrinth files only when Modrinth `/version_file/{hash}` resolves an exact version file and the returned hashes match the local jar; the recovered Modrinth source metadata should be persisted afterward. Non-Modrinth/local jars that cannot be resolved this way must be skipped instead of exported as overrides. Hashes should be calculated once per local jar during an export and reused for all SHA-1/SHA-512 checks.
 
-Be careful about side classification and skipped entries. Do not silently include client-only files in server exports.
+Modrinth import must ask the user which content side to install: server, client, or complete, defaulting the selection to complete. Do not silently infer this choice. `PanelExtensiones` shows a modal loading dialog while the import worker downloads, verifies, installs, and extracts selected content. Loading dialogs should use the shared `AppTheme.createLoadingProgressBar(...)` style so progress bars remain visually consistent across import/download flows.
+
+When importing a modpack into a server that already has managed mods, the UI must ask how to handle the current mods. Keep mode skips already installed/conflicting entries with warnings. Replace mode is destructive: after the pack metadata and planned downloads are resolved, delete only non-symlink regular `.jar` files inside adapter-managed extension directories under the server folder, refresh extension state, then install the modpack entries. Do not delete unmanaged files, nested folders, symlinks, or files outside the server directory.
+
+Modpack import uses `ProcessWizardDialog` so content selection, existing-mod handling, and final review happen in one guided process. When existing mods are detected, keep existing-mod handling below modpack content in the same step. Reuse pre-read pack metadata and already-synchronized extension state when starting the import worker; avoid parsing the same pack or rescanning extension directories again after the wizard.
+
+`CurseForgeModpackService` remains as legacy support for CurseForge-style `manifest.json` ZIPs. CurseForge import still depends on a configured CurseForge API key to resolve manifest file IDs.
+
+Be careful about side classification, optional files, and skipped entries. Do not silently include client-only files in server exports or server imports.
 
 ## Tests
 
 Relevant tests:
 
 - `ServerExtensionsServiceTest`
+- `ModrinthModpackServiceTest`
+- `GestorServidoresTest`
 - `ExtensionCatalogServiceTest`
 - `ModrinthExtensionCatalogProviderTest`
 - `HangarExtensionCatalogProviderTest`

@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
@@ -129,16 +130,20 @@ public final class ServerExtensionsService {
                     if (relativePath != null) {
                         detectedRelativePaths.add(relativePath);
                     }
-                    detected.add(readExtensionMetadata(
-                            candidate,
-                            relativePath,
-                            existing,
-                            platform,
-                            ecosystemType,
-                            ExtensionInstallState.DISCOVERED,
-                            ExtensionSourceType.LOCAL_FILE,
-                            now
-                    ));
+                    try {
+                        detected.add(readExtensionMetadata(
+                                candidate,
+                                relativePath,
+                                existing,
+                                platform,
+                                ecosystemType,
+                                ExtensionInstallState.DISCOVERED,
+                                ExtensionSourceType.LOCAL_FILE,
+                                now
+                        ));
+                    } catch (NoSuchFileException ex) {
+                        evictJarMetadataCache(candidate);
+                    }
                 }
             }
         }
@@ -1280,6 +1285,14 @@ public final class ServerExtensionsService {
                 + (serverPlatform == null ? ServerPlatform.UNKNOWN : serverPlatform).name()
                 + "|"
                 + (ecosystemType == null ? ServerEcosystemType.UNKNOWN : ecosystemType).name();
+    }
+
+    private void evictJarMetadataCache(Path jarPath) {
+        if (jarPath == null) {
+            return;
+        }
+        String prefix = jarPath.toAbsolutePath().normalize() + "|";
+        jarMetadataCache.keySet().removeIf(key -> key != null && key.startsWith(prefix));
     }
 
     private void validateDownloadedJar(Path jarPath, ExtensionDownloadPlan downloadPlan) throws IOException {

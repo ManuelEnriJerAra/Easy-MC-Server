@@ -7,6 +7,7 @@ import controlador.extensions.ExtensionCompatibilityStatus;
 import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import controlador.extensions.CurseForgeModpackService;
+import controlador.extensions.ModrinthModpackService;
 import controlador.extensions.InstalledExtensionStatus;
 import modelo.Server;
 import modelo.extensions.ExtensionInstallState;
@@ -1036,23 +1037,23 @@ final class PanelExtensiones extends JPanel {
             return;
         }
 
-        CurseForgeModpackService.ExportMode mode = switch (selected.toString()) {
-            case "Servidor" -> CurseForgeModpackService.ExportMode.SERVER;
-            case "Cliente" -> CurseForgeModpackService.ExportMode.CLIENT;
-            default -> CurseForgeModpackService.ExportMode.COMPLETE;
+        ModrinthModpackService.ExportMode mode = switch (selected.toString()) {
+            case "Servidor" -> ModrinthModpackService.ExportMode.SERVER;
+            case "Cliente" -> ModrinthModpackService.ExportMode.CLIENT;
+            default -> ModrinthModpackService.ExportMode.COMPLETE;
         };
 
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Exportar modpack CurseForge");
-        chooser.setSelectedFile(new File(safeServerNameForFile() + ".zip"));
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Archivo ZIP", "zip"));
+        chooser.setDialogTitle("Exportar modpack Modrinth");
+        chooser.setSelectedFile(new File(safeServerNameForFile() + ".mrpack"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modpack Modrinth (.mrpack)", "mrpack"));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
             return;
         }
 
         Path target = chooser.getSelectedFile().toPath();
-        if (!target.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            target = target.resolveSibling(target.getFileName() + ".zip");
+        if (!target.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mrpack")) {
+            target = target.resolveSibling(target.getFileName() + ".mrpack");
         }
 
         mutatingExtensions = true;
@@ -1071,35 +1072,301 @@ final class PanelExtensiones extends JPanel {
         }
 
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Importar modpack CurseForge");
-        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Archivo ZIP", "zip"));
+        chooser.setDialogTitle("Importar modpack");
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Modpacks Modrinth o CurseForge", "mrpack", "zip"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
             return;
         }
         Path sourceZip = chooser.getSelectedFile().toPath();
+        boolean modrinthPack = sourceZip.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mrpack");
+        ModpackPreflightWorker worker = new ModpackPreflightWorker(sourceZip, modrinthPack);
+        JDialog loadingDialog = createModpackLoadingDialog(
+                "Preparando modpack",
+                "Preparando modpack...",
+                sourceZip.getFileName().toString(),
+                "Leyendo metadata y revisando los mods actuales."
+        );
+        worker.setLoadingDialog(loadingDialog);
+        worker.execute();
+        loadingDialog.setVisible(true);
+    }
 
-        try {
-            CurseForgeModpackService.ImportManifest manifest = gestorServidores.leerManifestModpackCurseForge(sourceZip);
-            int confirm = JOptionPane.showConfirmDialog(
-                    this,
-                    "Se importará el manifest \"" + manifest.name() + "\" con " + manifest.files().size() + " archivos.\n\nEsto descargará e instalará los mods en el servidor actual.",
-                    "Importar modpack",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
-            );
-            if (confirm != JOptionPane.YES_OPTION) {
-                return;
-            }
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "No se ha podido leer el modpack: " + ex.getMessage(), "Importar modpack", JOptionPane.ERROR_MESSAGE);
+    private void startModpackImport(ModpackImportWizardResult wizardResult) {
+        if (wizardResult == null) {
             return;
         }
-
         mutatingExtensions = true;
         summaryLabel.setText("Importando modpack...");
-        directoriesLabel.setText(sourceZip.getFileName().toString());
+        directoriesLabel.setText(wizardResult.sourceZip().getFileName().toString());
         updateActionState();
-        new ImportModpackWorker(sourceZip).execute();
+        ImportModpackWorker worker = new ImportModpackWorker(wizardResult);
+        JDialog loadingDialog = createModpackLoadingDialog(
+                "Importando modpack",
+                "Importando modpack...",
+                wizardResult.sourceZip().getFileName().toString(),
+                "Descargando y verificando archivos."
+        );
+        worker.setLoadingDialog(loadingDialog);
+        worker.execute();
+        loadingDialog.setVisible(true);
+    }
+
+    private ModpackImportWizardState loadModpackImportWizardState(Path sourceZip, boolean modrinthPack) throws IOException {
+        ModpackImportWizardState state = new ModpackImportWizardState(sourceZip, modrinthPack);
+        if (modrinthPack) {
+            state.index = gestorServidores.leerIndiceModpackModrinth(sourceZip);
+            state.importOptions = new ModrinthModpackService.ImportOptions(ModrinthModpackService.ImportMode.COMPLETE);
+        } else {
+            state.manifest = gestorServidores.leerManifestModpackCurseForge(sourceZip);
+        }
+        state.existingMods = gestorServidores.sincronizarExtensionesInstaladas(server).stream()
+                .filter(extension -> extension != null)
+                .filter(extension -> extension.getExtensionType() != ServerExtensionType.PLUGIN)
+                .count();
+
+        return state;
+    }
+
+    private ModpackImportWizardResult showModpackImportWizard(ModpackImportWizardState state) {
+        JLabel reviewLabel = new JLabel();
+        Runnable refreshReview = () -> reviewLabel.setText(buildModpackImportReviewHtml(state));
+        List<ProcessWizardDialog.Step> steps = new ArrayList<>();
+        steps.add(ProcessWizardDialog.Step.of(
+                "content",
+                "Contenido del modpack",
+                createModpackContentStep(state, refreshReview)
+        ));
+        refreshReview.run();
+        steps.add(ProcessWizardDialog.Step.of("review", "Revisar importación", createModpackReviewStep(reviewLabel)));
+
+        boolean accepted = ProcessWizardDialog.show(
+                SwingUtilities.getWindowAncestor(this),
+                "Importar modpack",
+                steps,
+                new ProcessWizardDialog.Options(
+                        new Dimension(720, 460),
+                        "Importar modpack",
+                        () -> true,
+                        ignored -> refreshReview.run()
+                )
+        );
+        if (!accepted) {
+            return null;
+        }
+        return new ModpackImportWizardResult(
+                state.sourceZip,
+                state.modrinthPack,
+                state.index,
+                state.manifest,
+                state.importOptions,
+                state.conflictPolicy
+        );
+    }
+
+    private JComponent createModpackContentStep(ModpackImportWizardState state, Runnable refreshReview) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+
+        JPanel modpackContent = new JPanel(new BorderLayout(0, 12));
+        int fileCount = modpackFileCount(state);
+        JLabel intro = new JLabel("<html><b>" + escapeHtml(modpackName(state)) + "</b><br>"
+                + fileCount + (fileCount == 1 ? " archivo detectado." : " archivos detectados.") + "</html>");
+        modpackContent.add(intro, BorderLayout.NORTH);
+
+        if (!state.modrinthPack) {
+            JLabel note = new JLabel("<html>Formato CurseForge. Easy MC Server resolverá las descargas usando la API key configurada.</html>");
+            note.setForeground(AppTheme.getMutedForeground());
+            modpackContent.add(note, BorderLayout.CENTER);
+            panel.add(modpackContent);
+            addExistingModsSection(panel, state, refreshReview);
+            return panel;
+        }
+
+        ModrinthImportModeOption serverOption = new ModrinthImportModeOption(
+                ModrinthModpackService.ImportMode.SERVER,
+                "Servidor",
+                "Instalar solo archivos declarados para servidor."
+        );
+        ModrinthImportModeOption clientOption = new ModrinthImportModeOption(
+                ModrinthModpackService.ImportMode.CLIENT,
+                "Cliente",
+                "Instalar solo archivos declarados para cliente."
+        );
+        ModrinthImportModeOption completeOption = new ModrinthImportModeOption(
+                ModrinthModpackService.ImportMode.COMPLETE,
+                "Completo",
+                "Instalar archivos de cliente y servidor."
+        );
+        JComboBox<ModrinthImportModeOption> modeCombo = new JComboBox<>(new ModrinthImportModeOption[]{
+                serverOption,
+                clientOption,
+                completeOption
+        });
+        modeCombo.setSelectedItem(completeOption);
+        modeCombo.addActionListener(e -> {
+            ModrinthImportModeOption selected = (ModrinthImportModeOption) modeCombo.getSelectedItem();
+            state.importOptions = new ModrinthModpackService.ImportOptions(
+                    selected == null ? ModrinthModpackService.ImportMode.COMPLETE : selected.mode()
+            );
+            refreshReview.run();
+        });
+
+        JPanel fields = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.LINE_START;
+        gbc.insets = new Insets(0, 0, 8, 8);
+        fields.add(new JLabel("Contenido:"), gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1d;
+        fields.add(modeCombo, gbc);
+        modpackContent.add(fields, BorderLayout.CENTER);
+
+        JLabel note = new JLabel("<html>Se importará todo el contenido de la selección salvo archivos marcados como no compatibles.</html>");
+        note.setForeground(AppTheme.getMutedForeground());
+        modpackContent.add(note, BorderLayout.SOUTH);
+
+        panel.add(modpackContent);
+        addExistingModsSection(panel, state, refreshReview);
+        return panel;
+    }
+
+    private void addExistingModsSection(JPanel parent, ModpackImportWizardState state, Runnable refreshReview) {
+        if (state.existingMods <= 0) {
+            return;
+        }
+        parent.add(Box.createVerticalStrut(18));
+        parent.add(createModpackExistingModsStep(state, refreshReview));
+    }
+
+    private JComponent createModpackExistingModsStep(ModpackImportWizardState state, Runnable refreshReview) {
+        JPanel panel = new JPanel(new BorderLayout(0, 12));
+        panel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, AppTheme.getSubtleBorderColor()));
+        JLabel intro = new JLabel("<html>Este servidor ya tiene <b>" + state.existingMods + "</b>"
+                + (state.existingMods == 1 ? " mod instalado." : " mods instalados.")
+                + "<br>Elige qué hacer con ellos antes de instalar el modpack.</html>");
+        intro.setBorder(BorderFactory.createEmptyBorder(14, 0, 0, 0));
+        panel.add(intro, BorderLayout.NORTH);
+
+        JRadioButton keepButton = new JRadioButton("Mantener mods actuales y añadir solo los que falten", true);
+        JRadioButton replaceButton = new JRadioButton("Eliminar mods actuales e importar el modpack");
+        ButtonGroup group = new ButtonGroup();
+        group.add(keepButton);
+        group.add(replaceButton);
+
+        JPanel choices = new JPanel();
+        choices.setLayout(new BoxLayout(choices, BoxLayout.Y_AXIS));
+        choices.add(keepButton);
+        choices.add(Box.createVerticalStrut(8));
+        choices.add(replaceButton);
+        panel.add(choices, BorderLayout.CENTER);
+
+        JLabel note = new JLabel("<html>Reemplazar eliminará solo los .jar actuales de las carpetas de mods gestionadas antes de importar.</html>");
+        note.setForeground(AppTheme.getMutedForeground());
+        panel.add(note, BorderLayout.SOUTH);
+
+        keepButton.addActionListener(e -> {
+            state.conflictPolicy = GestorServidores.ModpackImportConflictPolicy.KEEP_EXISTING;
+            refreshReview.run();
+        });
+        replaceButton.addActionListener(e -> {
+            state.conflictPolicy = GestorServidores.ModpackImportConflictPolicy.REPLACE_EXISTING;
+            refreshReview.run();
+        });
+        return panel;
+    }
+
+    private JComponent createModpackReviewStep(JLabel reviewLabel) {
+        JPanel panel = new JPanel(new BorderLayout(0, 12));
+        panel.add(reviewLabel, BorderLayout.CENTER);
+        JLabel note = new JLabel("Al avanzar comenzará la descarga, verificación e instalación.");
+        note.setForeground(AppTheme.getMutedForeground());
+        panel.add(note, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private String buildModpackImportReviewHtml(ModpackImportWizardState state) {
+        return "<html><b>" + escapeHtml(modpackName(state)) + "</b><br>"
+                + "Formato: " + (state.modrinthPack ? "Modrinth .mrpack" : "CurseForge ZIP") + "<br>"
+                + "Archivos: " + modpackFileCount(state) + "<br>"
+                + escapeHtml(describeImportOptions(state.importOptions)).replace("\n", "<br>") + "<br>"
+                + escapeHtml(describeModpackConflictPolicy(state.conflictPolicy)).replace("\n", "<br>")
+                + "</html>";
+    }
+
+    private String modpackName(ModpackImportWizardState state) {
+        if (state == null) {
+            return "Modpack";
+        }
+        if (state.modrinthPack && state.index != null) {
+            return firstUsableText(state.index.name(), state.sourceZip.getFileName().toString());
+        }
+        if (!state.modrinthPack && state.manifest != null) {
+            return firstUsableText(state.manifest.name(), state.sourceZip.getFileName().toString());
+        }
+        return state.sourceZip.getFileName().toString();
+    }
+
+    private int modpackFileCount(ModpackImportWizardState state) {
+        if (state == null) {
+            return 0;
+        }
+        if (state.modrinthPack && state.index != null) {
+            return state.index.files().size();
+        }
+        if (!state.modrinthPack && state.manifest != null) {
+            return state.manifest.files().size();
+        }
+        return 0;
+    }
+
+    private String describeImportOptions(ModrinthModpackService.ImportOptions options) {
+        ModrinthModpackService.ImportMode mode = options == null || options.mode() == null
+                ? ModrinthModpackService.ImportMode.COMPLETE
+                : options.mode();
+        String content = switch (mode) {
+            case CLIENT -> "Contenido seleccionado: cliente.";
+            case COMPLETE -> "Contenido seleccionado: completo.";
+            case SERVER -> "Contenido seleccionado: servidor.";
+        };
+        return content + "\nSe incluirá todo lo compatible con esa selección.";
+    }
+
+    private String describeModpackConflictPolicy(GestorServidores.ModpackImportConflictPolicy conflictPolicy) {
+        if (conflictPolicy == GestorServidores.ModpackImportConflictPolicy.REPLACE_EXISTING) {
+            return "Los mods actuales se eliminarán de las carpetas gestionadas antes de importar el modpack.";
+        }
+        return "Se mantendrán los mods actuales y se omitirán los que ya existan.";
+    }
+
+    private JDialog createModpackLoadingDialog(String dialogTitle, String titleText, String fileName, String fallbackDetail) {
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        JDialog dialog = new JDialog(owner, dialogTitle, Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        JPanel panel = new JPanel(new BorderLayout(12, 12));
+        panel.setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));
+        JLabel title = new JLabel(titleText == null || titleText.isBlank() ? "Procesando modpack..." : titleText);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 1f));
+        JLabel detail = new JLabel(fileName == null || fileName.isBlank() ? fallbackDetail : fileName);
+        detail.setForeground(AppTheme.getMutedForeground());
+        JPanel text = new JPanel();
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        text.add(title);
+        text.add(Box.createVerticalStrut(6));
+        text.add(detail);
+        text.add(Box.createVerticalStrut(6));
+        JLabel wait = new JLabel("Por favor espera. La ventana se cerrará al terminar.");
+        wait.setForeground(AppTheme.getMutedForeground());
+        text.add(wait);
+        panel.add(text, BorderLayout.CENTER);
+        panel.add(AppTheme.createLoadingProgressBar(true), BorderLayout.SOUTH);
+        dialog.setContentPane(panel);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(360, dialog.getHeight()));
+        dialog.setLocationRelativeTo(this);
+        return dialog;
     }
 
     private void updateActionState() {
@@ -1348,6 +1615,40 @@ final class PanelExtensiones extends JPanel {
     private record ImportSummary(int installed, List<String> warnings) {
     }
 
+    private record ModpackImportWizardResult(
+            Path sourceZip,
+            boolean modrinthPack,
+            ModrinthModpackService.ImportIndex index,
+            CurseForgeModpackService.ImportManifest manifest,
+            ModrinthModpackService.ImportOptions importOptions,
+            GestorServidores.ModpackImportConflictPolicy conflictPolicy
+    ) {
+    }
+
+    private record ModrinthImportModeOption(ModrinthModpackService.ImportMode mode, String label, String description) {
+        @Override
+        public String toString() {
+            return label + " - " + description;
+        }
+    }
+
+    private static final class ModpackImportWizardState {
+        private final Path sourceZip;
+        private final boolean modrinthPack;
+        private ModrinthModpackService.ImportIndex index;
+        private CurseForgeModpackService.ImportManifest manifest;
+        private ModrinthModpackService.ImportOptions importOptions =
+                new ModrinthModpackService.ImportOptions(ModrinthModpackService.ImportMode.COMPLETE);
+        private GestorServidores.ModpackImportConflictPolicy conflictPolicy =
+                GestorServidores.ModpackImportConflictPolicy.KEEP_EXISTING;
+        private long existingMods;
+
+        private ModpackImportWizardState(Path sourceZip, boolean modrinthPack) {
+            this.sourceZip = sourceZip;
+            this.modrinthPack = modrinthPack;
+        }
+    }
+
     private record ReloadResult(List<ServerExtension> extensions, Map<String, InstalledExtensionStatus> statuses) {
     }
 
@@ -1551,18 +1852,18 @@ final class PanelExtensiones extends JPanel {
         }
     }
 
-    private final class ExportModpackWorker extends SwingWorker<CurseForgeModpackService.ExportResult, Void> {
+    private final class ExportModpackWorker extends SwingWorker<ModrinthModpackService.ExportResult, Void> {
         private final Path exportTarget;
-        private final CurseForgeModpackService.ExportMode mode;
+        private final ModrinthModpackService.ExportMode mode;
 
-        private ExportModpackWorker(Path exportTarget, CurseForgeModpackService.ExportMode mode) {
+        private ExportModpackWorker(Path exportTarget, ModrinthModpackService.ExportMode mode) {
             this.exportTarget = exportTarget;
             this.mode = mode;
         }
 
         @Override
-        protected CurseForgeModpackService.ExportResult doInBackground() throws Exception {
-            return gestorServidores.exportarModpackCurseForge(server, exportTarget, mode);
+        protected ModrinthModpackService.ExportResult doInBackground() throws Exception {
+            return gestorServidores.exportarModpackModrinth(server, exportTarget, mode);
         }
 
         @Override
@@ -1570,12 +1871,15 @@ final class PanelExtensiones extends JPanel {
             mutatingExtensions = false;
             updateActionState();
             try {
-                CurseForgeModpackService.ExportResult result = get();
+                ModrinthModpackService.ExportResult result = get();
                 summaryLabel.setText("Modpack exportado");
                 directoriesLabel.setText(result.archivePath().getFileName().toString());
                 StringBuilder message = new StringBuilder("Se ha exportado el modpack con ")
                         .append(result.exportedFiles())
                         .append(result.exportedFiles() == 1 ? " mod." : " mods.");
+                if (result.overrideFiles() > 0) {
+                    message.append("\nOverrides incluidos: ").append(result.overrideFiles()).append(".");
+                }
                 if (!result.skippedEntries().isEmpty()) {
                     message.append("\n\nNo se han podido incluir algunas entradas:\n- ")
                             .append(String.join("\n- ", result.skippedEntries()));
@@ -1589,22 +1893,85 @@ final class PanelExtensiones extends JPanel {
         }
     }
 
-    private final class ImportModpackWorker extends SwingWorker<ImportSummary, Void> {
+    private final class ModpackPreflightWorker extends SwingWorker<ModpackImportWizardState, Void> {
         private final Path sourceZip;
+        private final boolean modrinthPack;
+        private JDialog loadingDialog;
 
-        private ImportModpackWorker(Path sourceZip) {
+        private ModpackPreflightWorker(Path sourceZip, boolean modrinthPack) {
             this.sourceZip = sourceZip;
+            this.modrinthPack = modrinthPack;
+        }
+
+        private void setLoadingDialog(JDialog loadingDialog) {
+            this.loadingDialog = loadingDialog;
+        }
+
+        @Override
+        protected ModpackImportWizardState doInBackground() throws Exception {
+            return loadModpackImportWizardState(sourceZip, modrinthPack);
+        }
+
+        @Override
+        protected void done() {
+            if (loadingDialog != null) {
+                loadingDialog.dispose();
+            }
+            try {
+                ModpackImportWizardResult wizardResult = showModpackImportWizard(get());
+                startModpackImport(wizardResult);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(
+                        PanelExtensiones.this,
+                        "No se ha podido leer el modpack: " + rootMessage(ex),
+                        "Importar modpack",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
+    }
+
+    private final class ImportModpackWorker extends SwingWorker<ImportSummary, Void> {
+        private final ModpackImportWizardResult importResult;
+        private JDialog loadingDialog;
+
+        private ImportModpackWorker(ModpackImportWizardResult importResult) {
+            this.importResult = importResult;
+        }
+
+        private void setLoadingDialog(JDialog loadingDialog) {
+            this.loadingDialog = loadingDialog;
         }
 
         @Override
         protected ImportSummary doInBackground() throws Exception {
             List<String> warnings = new ArrayList<>();
-            int installed = gestorServidores.importarModpackCurseForge(server, sourceZip, warnings);
+            int installed = importResult.modrinthPack()
+                    ? gestorServidores.importarModpackModrinth(
+                    server,
+                    importResult.sourceZip(),
+                    importResult.index(),
+                    importResult.importOptions(),
+                    importResult.conflictPolicy(),
+                    warnings,
+                    true
+            )
+                    : gestorServidores.importarModpackCurseForge(
+                    server,
+                    importResult.sourceZip(),
+                    importResult.manifest(),
+                    importResult.conflictPolicy(),
+                    warnings,
+                    true
+            );
             return new ImportSummary(installed, List.copyOf(warnings));
         }
 
         @Override
         protected void done() {
+            if (loadingDialog != null) {
+                loadingDialog.dispose();
+            }
             mutatingExtensions = false;
             updateActionState();
             try {

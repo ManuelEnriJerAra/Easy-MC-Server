@@ -3,6 +3,7 @@ package vista;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
@@ -13,6 +14,7 @@ import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
@@ -339,6 +341,26 @@ public final class AppTheme {
         component.setBackground(getSurfaceBackground());
         Border border = createRoundedBorder(resolvedPadding, 1f);
         component.setBorder(border);
+    }
+
+    public static JProgressBar createLoadingProgressBar(boolean indeterminate) {
+        JProgressBar progressBar = new JProgressBar();
+        applyLoadingProgressBarStyle(progressBar, indeterminate);
+        return progressBar;
+    }
+
+    public static void applyLoadingProgressBarStyle(JProgressBar progressBar, boolean indeterminate) {
+        if (progressBar == null) return;
+        progressBar.setMinimum(0);
+        progressBar.setMaximum(100);
+        progressBar.setValue(0);
+        progressBar.setIndeterminate(indeterminate);
+        progressBar.setStringPainted(false);
+        progressBar.setForeground(getMainAccent());
+        progressBar.setBackground(getSurfaceBackground());
+        progressBar.setBorder(BorderFactory.createEmptyBorder());
+        progressBar.setPreferredSize(new Dimension(1, 10));
+        progressBar.putClientProperty("JProgressBar.largeHeight", Boolean.TRUE);
     }
 
     public static void applyHandCursor(Component component) {

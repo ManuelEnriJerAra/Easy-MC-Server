@@ -6,7 +6,7 @@ Pending
 
 ## Area
 
-`controlador.GestorServidores`, server creation wizard platform step, server conversion platform selector, `vista.SvgIconFactory`, and `src/main/resources/easymcicons`.
+`vista.ProcessWizardDialog`, server creation wizard platform step, server conversion platform selector, `controlador.GestorServidores`, `vista.SvgIconFactory`, and `src/main/resources/easymcicons`.
 
 ## Feature Request
 
@@ -29,6 +29,8 @@ Each platform option should render as an interactive SVG icon with its platform 
 
 The current platform selector is a plain `JComboBox`, which makes platform choice feel like a form field instead of a visual, first-class wizard decision. The requested icon grid makes the creation/conversion flow clearer, more recognizable, and easier to scan.
 
+Now that `vista.ProcessWizardDialog` exists as the shared shell for multi-step processes, this selector should also help move server creation toward that reusable wizard structure instead of keeping the platform step coupled to the older local wizard implementation inside `GestorServidores`.
+
 ## Desired Behavior
 
 The platform selector should look and behave like the stored mockup:
@@ -48,9 +50,10 @@ The platform selector should look and behave like the stored mockup:
 
 ## Notes
 
+- `ProcessWizardDialog` is the reusable wizard shell for new multi-step processes. It owns left/right navigation and the final-step `rocket.svg` action. The current server creation wizard mirrors the final rocket action while it waits for a full migration to the shared shell.
 - Current creation selector code uses `JComboBox<ServerPlatformAdapter>` in `GestorServidores.seleccionarAdaptadorCreacion()`.
 - Current conversion selector code uses `JComboBox<ServerPlatformAdapter>` in `GestorServidores.seleccionarAdaptadorConversion(...)`.
-- The modern creation wizard also uses `JComboBox<ServerPlatformAdapter>` for step 0 in `GestorServidores.mostrarAsistenteCreacionServidor()`.
+- The current creation wizard still uses a local wizard implementation and a `JComboBox<ServerPlatformAdapter>` for step 0 in `GestorServidores.mostrarAsistenteCreacionServidor()`.
 - Wizard validation and navigation currently depend on the combo box through `puedeAvanzarPasoCreacionServidor(...)` and `validarPasoCreacionServidor(...)`.
 - Platform options come from `ServerPlatformAdapters.creatable()` for creation and `plataformasObjetivoConversion(...)` for conversion.
 - `ServerPlatform` already exposes platform/ecosystem information through `isVanillaPlatform()`, `isModPlatform()`, and `isPluginPlatform()`.
@@ -65,6 +68,8 @@ The platform selector should look and behave like the stored mockup:
 
 Extract a reusable Swing component for selecting a `ServerPlatformAdapter`, for example a `PlatformSelectorPanel` or similarly scoped helper.
 
+Use `ProcessWizardDialog` as the target wizard shell for the creation flow. The platform selector should be designed as a normal wizard-step component that can be embedded in `ProcessWizardDialog.Step`, with selection callbacks refreshing the creation state and navigation validation.
+
 The component should:
 
 - Accept the list of available adapters and an initial selection.
@@ -75,7 +80,7 @@ The component should:
 - Resolve icon paths from platform names, e.g. `easymcicons/vanilla.svg`, with a fallback icon until the platform SVG set exists.
 - Reuse the same component for creation and conversion, while allowing unavailable/non-automatable conversion targets to be hidden or marked according to the existing conversion rules.
 
-After replacing the component, update creation wizard methods that currently accept `JComboBox<ServerPlatformAdapter>` so they read from the new selector state instead.
+After replacing the component, update creation wizard methods that currently accept `JComboBox<ServerPlatformAdapter>` so they read from the new selector state instead. If server creation is migrated in the same change, wire its steps through `ProcessWizardDialog` so the shared navigation, validation hooks, and final rocket action are used by the creation wizard too.
 
 ## Verification
 
@@ -95,5 +100,7 @@ After replacing the component, update creation wizard methods that currently acc
 - `docs/pipelines/server-creation-pipeline.md`
 - `docs/pipelines/platform-adapters-pipeline.md`
 - `docs/pipelines/ui-component-pipeline.md`
+- `docs/features/process-wizard.md`
+- `docs/features/process/process-wizard.md`
 - `docs/pipelines/application-shell-pipeline.md`
 - `docs/mockups/server_platform_mockup.png`

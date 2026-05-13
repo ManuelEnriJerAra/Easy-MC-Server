@@ -24,6 +24,7 @@ Prefer existing icon assets:
 
 - `plus.svg`, `minus.svg`
 - `reset.svg`, `refresh.svg`
+- `rocket.svg` for final execute/create/import actions in wizard flows
 - navigation arrows
 - user/shield/folder/shop/settings icons
 
@@ -35,6 +36,8 @@ Common components:
 
 - `CardPanel`: titled cards, header actions, footer actions, content panel.
 - `BoxCategory`: compact boolean, field, and info rows.
+- `ProcessWizardDialog`: reusable shell for multi-step processes with left/right arrow navigation, per-step validation, and final action handling. The last right-navigation button must switch to `rocket.svg` inside the wizard shell.
+- `WizardDialog`: deprecated compatibility facade for old compiled references. Do not use it for new process flows.
 - `WrapLayout`: wrapping action/player layouts.
 - `RoundedBackgroundPanel`: rounded surfaces.
 

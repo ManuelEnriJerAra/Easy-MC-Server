@@ -14,7 +14,7 @@ Add modpack searching to the catalog/marketplace.
 
 This must be exclusive to mod servers only. Plugin servers should not show modpack search or modpack install actions.
 
-The modpack catalog should behave like users expect from a modpack browser: searchable results, detailed descriptions, images/screenshots, supported Minecraft versions/loaders, downloadable versions, and an install/import flow. If the selected server already has installed mods, the app should ask whether the user wants to keep the existing mods and add the modpack content on top, or replace the existing mods with the modpack content.
+The modpack catalog should behave like users expect from a modpack browser: searchable results, detailed descriptions, images/screenshots, supported Minecraft versions/loaders, downloadable versions, and an install/import flow. If the selected server already has installed mods, the app should ask whether the user wants to keep the existing mods and add the modpack content on top, or delete current managed mods and import the selected modpack.
 
 ## Motivation
 
@@ -42,9 +42,9 @@ Installing a modpack from the catalog should:
 - Before installing, detect whether the current server already has mods in managed mod directories.
 - If mods already exist, ask the user whether to:
   - keep current mods and install the modpack alongside them;
-  - replace current mods with the modpack contents;
+  - delete current managed mods and import the modpack contents;
   - cancel.
-- If replacing, avoid destructive silent deletion. Prefer a backup/quarantine folder or an explicit preservation step before removing old managed mod jars.
+- If replacing, delete only managed `.jar` files in managed extension directories after preflight validation. Do not delete unmanaged files, symlinks, nested folders, or files outside the server directory.
 - If keeping, warn about possible incompatibilities or duplicate mods and rely on compatibility checks where possible.
 - Refresh installed extensions and persisted metadata after install.
 
@@ -70,12 +70,12 @@ Possible implementation path:
 - Add gallery/image fields to the detail model used by the UI, or create a modpack-specific details record.
 - Add a modpack mode/tab/toggle in `ExtensionMarketplaceDialog` that is visible only for mod servers.
 - Keep individual mod search as the default for mod servers unless UX decides otherwise.
-- Use the future `ModrinthModpackService` from `extensions-modrinth-modpack-import-export.md` to install the selected pack file.
+- Use the implemented `ModrinthModpackService` documented in `docs/features/extensions-modrinth-modpack-import-export.md` to install the selected pack file.
 - Add an install preflight step that inspects existing managed mod directories and prompts for keep/replace/cancel.
-- Implement replace mode with a reversible backup/preservation strategy, not immediate silent deletion.
-- Keep all user-facing copy Spanish and clear about the consequences of replacing mods.
+- Implement replace mode with the same scoped deletion rules as direct modpack import.
+- Keep all user-facing copy Spanish and clear that replace deletes current managed mod jars.
 
-This feature likely depends on, or should be implemented alongside, the pending Modrinth modpack import/export work.
+This feature can build on the completed Modrinth modpack import/export work.
 
 ## Verification
 
@@ -92,7 +92,7 @@ This feature likely depends on, or should be implemented alongside, the pending 
   - failed `.mrpack` download or invalid pack file.
 - Manually search Modrinth modpacks from a Fabric/Forge/NeoForge/Quilt server and verify results, descriptions, images, versions, and install prompts.
 - Manually verify plugin servers do not expose modpack catalog search.
-- Manually verify replacing mods preserves or backs up previous managed jars before applying the pack.
+- Manually verify replacing mods deletes only managed `.jar` files and then installs the selected pack.
 
 ## Related Docs
 

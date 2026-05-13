@@ -13,6 +13,8 @@ import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
 import controlador.extensions.ExtensionCatalogProviderDescriptor;
+import controlador.extensions.ExtensionDownloadPlan;
+import controlador.extensions.ModrinthModpackService;
 import controlador.platform.ForgeServerPlatformAdapter;
 import controlador.platform.ServerCreationOption;
 import controlador.platform.ServerInstallationRequest;
@@ -27,11 +29,14 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -39,6 +44,7 @@ import java.util.Set;
 import java.util.Comparator;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GestorServidoresTest {
     @TempDir
@@ -333,6 +339,159 @@ class GestorServidoresTest {
         assertThat(installed.getLocalMetadata().getUpdateState()).isEqualTo(ExtensionUpdateState.UNTRACKED);
         assertThat(server.getExtensions()).hasSize(1);
         assertThat(server.getExtensions().getFirst().getLocalMetadata().getSha256()).isNotBlank();
+    }
+
+    @Test
+    void importarModpackModrinthManteniendoMods_debeOmitirConflictosExistentes() throws Exception {
+        FakeModrinthModpackService modpackService = new FakeModrinthModpackService("existing.jar");
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile(), modpackService);
+        Server server = modpackServer("modpack-keep-existing");
+        Path existingJar = Path.of(server.getServerDir()).resolve("mods").resolve("existing.jar");
+        writeFabricModJar(existingJar, "existing");
+
+        List<String> warnings = new ArrayList<>();
+        int installed = gestor.importarModpackModrinth(
+                server,
+                tempDir.resolve("pack.mrpack"),
+                ModrinthModpackService.ImportOptions.server(),
+                GestorServidores.ModpackImportConflictPolicy.KEEP_EXISTING,
+                warnings
+        );
+
+        assertThat(installed).isZero();
+        assertThat(existingJar).isRegularFile();
+        assertThat(modpackService.downloads).isZero();
+        assertThat(warnings).anySatisfy(warning -> assertThat(warning).contains("ya existe"));
+    }
+
+    @Test
+    void importarModpackModrinthReemplazandoMods_debeEliminarJarsExistentesEInstalarFaltantes() throws Exception {
+        FakeModrinthModpackService modpackService = new FakeModrinthModpackService("new.jar");
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile(), modpackService);
+        Server server = modpackServer("modpack-replace-existing");
+        Path serverDir = Path.of(server.getServerDir());
+        Path oldJar = serverDir.resolve("mods").resolve("old.jar");
+        Path notes = serverDir.resolve("mods").resolve("notes.txt");
+        Path nestedJar = serverDir.resolve("mods").resolve("nested").resolve("nested.jar");
+        writeFabricModJar(oldJar, "old");
+        Files.writeString(notes, "keep", StandardCharsets.UTF_8);
+        writeFabricModJar(nestedJar, "nested");
+
+        List<String> warnings = new ArrayList<>();
+        int installed = gestor.importarModpackModrinth(
+                server,
+                tempDir.resolve("pack.mrpack"),
+                ModrinthModpackService.ImportOptions.server(),
+                GestorServidores.ModpackImportConflictPolicy.REPLACE_EXISTING,
+                warnings
+        );
+
+        assertThat(installed).isEqualTo(1);
+        assertThat(oldJar).doesNotExist();
+        assertThat(notes).isRegularFile();
+        assertThat(nestedJar).isRegularFile();
+        assertThat(serverDir.resolve("mods").resolve("new.jar")).isRegularFile();
+        assertThat(modpackService.downloads).isEqualTo(1);
+        assertThat(warnings).noneSatisfy(warning -> assertThat(warning).contains("easy-mc-modpack-backups"));
+        assertThat(warnings).anySatisfy(warning -> assertThat(warning).contains("Se han eliminado 1 mod actual"));
+        assertThat(serverDir.resolve("easy-mc-modpack-backups")).doesNotExist();
+    }
+
+    @Test
+    void importarModpackModrinthReemplazandoMods_debeEliminarEInstalarModsAunqueYaExistieran() throws Exception {
+        FakeModrinthModpackService modpackService = new FakeModrinthModpackService("existing.jar");
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile(), modpackService);
+        Server server = modpackServer("modpack-replace-skip-existing");
+        Path serverDir = Path.of(server.getServerDir());
+        Path existingJar = serverDir.resolve("mods").resolve("existing.jar");
+        writeFabricModJar(existingJar, "existing");
+
+        List<String> warnings = new ArrayList<>();
+        int installed = gestor.importarModpackModrinth(
+                server,
+                tempDir.resolve("pack.mrpack"),
+                ModrinthModpackService.ImportOptions.server(),
+                GestorServidores.ModpackImportConflictPolicy.REPLACE_EXISTING,
+                warnings
+        );
+
+        assertThat(installed).isEqualTo(1);
+        assertThat(existingJar).isRegularFile();
+        assertThat(modpackService.downloads).isEqualTo(1);
+        assertThat(warnings).noneSatisfy(warning -> assertThat(warning).contains("ya existe"));
+        assertThat(warnings).anySatisfy(warning -> assertThat(warning).contains("Se han eliminado 1 mod actual"));
+        assertThat(serverDir.resolve("easy-mc-modpack-backups")).doesNotExist();
+    }
+
+    @Test
+    void importarModpackModrinthReemplazandoMods_noDebeEliminarSiServidorEstaEncendido() throws Exception {
+        FakeModrinthModpackService modpackService = new FakeModrinthModpackService("new.jar");
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile(), modpackService);
+        Server server = modpackServer("modpack-replace-running-server");
+        Path existingJar = Path.of(server.getServerDir()).resolve("mods").resolve("existing.jar");
+        writeFabricModJar(existingJar, "existing");
+        server.setServerProcess(new FakeProcess(true));
+
+        assertThatThrownBy(() -> gestor.importarModpackModrinth(
+                server,
+                tempDir.resolve("pack.mrpack"),
+                ModrinthModpackService.ImportOptions.server(),
+                GestorServidores.ModpackImportConflictPolicy.REPLACE_EXISTING,
+                new ArrayList<>()
+        ))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("Detén el servidor");
+
+        assertThat(existingJar).isRegularFile();
+        assertThat(modpackService.downloads).isZero();
+    }
+
+    @Test
+    void importarModpackModrinthConIndicePreleido_noDebeLeerElPackOtraVez() throws Exception {
+        FakeModrinthModpackService modpackService = new FakeModrinthModpackService("new.jar");
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile(), modpackService);
+        Server server = modpackServer("modpack-preloaded-index");
+        ModrinthModpackService.ImportIndex index = modpackService.readIndex(tempDir.resolve("pack.mrpack"));
+        modpackService.reads = 0;
+
+        int installed = gestor.importarModpackModrinth(
+                server,
+                tempDir.resolve("pack.mrpack"),
+                index,
+                ModrinthModpackService.ImportOptions.server(),
+                GestorServidores.ModpackImportConflictPolicy.KEEP_EXISTING,
+                new ArrayList<>()
+        );
+
+        assertThat(installed).isEqualTo(1);
+        assertThat(modpackService.reads).isZero();
+    }
+
+    @Test
+    void importarModpackModrinthConPreflightCompleto_noDebeResincronizarExtensiones() throws Exception {
+        FakeModrinthModpackService modpackService = new FakeModrinthModpackService("existing.jar");
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile(), modpackService);
+        Server server = modpackServer("modpack-synced-preflight");
+        Path existingJar = Path.of(server.getServerDir()).resolve("mods").resolve("existing.jar");
+        writeFabricModJar(existingJar, "existing");
+        gestor.sincronizarExtensionesInstaladas(server);
+        Files.delete(existingJar);
+        ModrinthModpackService.ImportIndex index = modpackService.readIndex(tempDir.resolve("pack.mrpack"));
+
+        List<String> warnings = new ArrayList<>();
+        int installed = gestor.importarModpackModrinth(
+                server,
+                tempDir.resolve("pack.mrpack"),
+                index,
+                ModrinthModpackService.ImportOptions.server(),
+                GestorServidores.ModpackImportConflictPolicy.KEEP_EXISTING,
+                warnings,
+                true
+        );
+
+        assertThat(installed).isZero();
+        assertThat(modpackService.downloads).isZero();
+        assertThat(warnings).anySatisfy(warning -> assertThat(warning).contains("ya existe"));
     }
 
     @Test
@@ -689,7 +848,7 @@ class GestorServidoresTest {
         GestorServidores.ConversionWarning sameEcosystemWarning = gestor.construirAvisoConversion(ServerPlatform.SPIGOT, ServerPlatform.PAPER);
 
         assertThat(warning.crossEcosystem()).isTrue();
-        assertThat(warning.message()).contains("ecosistemas distintos").contains("no se migraran");
+        assertThat(warning.message()).contains("ecosistemas distintos").contains("no se migrarán");
         assertThat(sameEcosystemWarning.crossEcosystem()).isFalse();
         assertThat(sameEcosystemWarning.message()).contains("plataforma de plugins");
     }
@@ -1176,6 +1335,105 @@ class GestorServidoresTest {
 
         assertThat(deleted).isFalse();
         assertThat(gestor.getListaServidores()).extracting(Server::getId).contains(server.getId());
+    }
+
+    private Server modpackServer(String name) throws Exception {
+        Path serverDir = tempDir.resolve(name);
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "server.jar",
+                "{\"id\":\"1.21.1\"}",
+                "net/fabricmc/loader/impl/launch/server/FabricServerLauncher.class"
+        );
+        Files.createDirectories(serverDir.resolve("mods"));
+        Server server = new Server();
+        server.setDisplayName(name);
+        server.setServerDir(serverDir.toString());
+        server.setPlatform(ServerPlatform.FABRIC);
+        server.setLoader(ServerLoader.FABRIC);
+        server.setVersion("1.21.1");
+        server.setEcosystemType(ServerEcosystemType.MODS);
+        return server;
+    }
+
+    private static void writeFabricModJar(Path target, String id) throws Exception {
+        TestWorldFixtures.createJar(
+                target,
+                Map.of("fabric.mod.json", """
+                        {
+                          "schemaVersion": 1,
+                          "id": "%s",
+                          "name": "%s",
+                          "version": "1.0.0",
+                          "depends": { "minecraft": "1.21.1" }
+                        }
+                        """.formatted(id, id))
+        );
+    }
+
+    private static final class FakeModrinthModpackService extends ModrinthModpackService {
+        private final String fileName;
+        private int reads;
+        private int downloads;
+
+        private FakeModrinthModpackService(String fileName) {
+            this.fileName = fileName;
+        }
+
+        @Override
+        public ImportIndex readIndex(Path sourcePack) {
+            reads++;
+            return new ImportIndex(
+                    "Pack de prueba",
+                    "test-pack",
+                    "Pack local",
+                    Map.of("minecraft", "1.21.1"),
+                    List.of(new IndexedFile(
+                            "mods/" + fileName,
+                            Map.of("sha1", "0123456789012345678901234567890123456789"),
+                            new Env("optional", "required"),
+                            List.of("https://cdn.modrinth.com/data/project/versions/version/" + fileName),
+                            1L
+                    ))
+            );
+        }
+
+        @Override
+        public ExtensionDownloadPlan resolveImportDownloadPlan(IndexedFile file, Server server) {
+            return new ExtensionDownloadPlan(
+                    "modrinth",
+                    "project",
+                    "version",
+                    "1.0.0",
+                    null,
+                    fileName,
+                    "https://cdn.modrinth.com/data/project/versions/version/" + fileName,
+                    ExtensionSourceType.MODRINTH,
+                    ServerExtensionType.MOD,
+                    ServerPlatform.FABRIC,
+                    "1.21.1",
+                    true,
+                    "Ready"
+            );
+        }
+
+        @Override
+        public void downloadAndVerify(IndexedFile file,
+                                      String requestedUrl,
+                                      File destination,
+                                      controlador.platform.FileDownloader downloader) throws java.io.IOException {
+            downloads++;
+            try {
+                writeFabricModJar(destination.toPath(), fileName.replace(".jar", ""));
+            } catch (Exception ex) {
+                throw new java.io.IOException(ex);
+            }
+        }
+
+        @Override
+        public int extractOverrides(Path sourcePack, Server server, ImportOptions options, List<String> warnings) {
+            return 0;
+        }
     }
 
     private static void deleteDirectoryIfExists(Path directory) throws java.io.IOException {

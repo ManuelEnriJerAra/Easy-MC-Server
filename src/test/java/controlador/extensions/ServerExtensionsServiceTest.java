@@ -486,6 +486,30 @@ class ServerExtensionsServiceTest {
     }
 
     @Test
+    void shouldReleaseJarAfterDetectingInstalledExtension() throws Exception {
+        ServerExtensionsService service = new ServerExtensionsService();
+        Server server = extensionServer("forge-release-after-scan", ServerPlatform.FORGE);
+        Path modJar = serverDir(server).resolve("mods").resolve("release-me.jar");
+        createJar(modJar, Map.of("META-INF/mods.toml", """
+                modLoader="javafml"
+                [[mods]]
+                modId="release_me"
+                version="1.0.0"
+                displayName="Release Me"
+                """));
+
+        List<ServerExtension> detected = service.detectInstalledExtensions(server);
+        Files.delete(modJar);
+        List<ServerExtension> afterExternalDelete = service.detectInstalledExtensions(server);
+
+        assertThat(detected).singleElement()
+                .extracting(ServerExtension::getDisplayName)
+                .isEqualTo("Release Me");
+        assertThat(modJar).doesNotExist();
+        assertThat(afterExternalDelete).isEmpty();
+    }
+
+    @Test
     void shouldScanFabricModDescriptorWithDependencies() throws Exception {
         ServerExtensionsService service = new ServerExtensionsService();
         Server server = extensionServer("fabric-scan", ServerPlatform.FABRIC);

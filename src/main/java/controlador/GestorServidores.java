@@ -20,8 +20,10 @@ import controlador.extensions.CurseForgeModpackService;
 import controlador.extensions.ExtensionArtifactDownloader;
 import controlador.extensions.ExtensionDownloadPlan;
 import controlador.extensions.ExtensionInstallResolution;
+import controlador.extensions.ExtensionInstallResolutionState;
 import controlador.extensions.InstalledExtensionStatus;
 import controlador.extensions.ExtensionUpdateCandidate;
+import controlador.extensions.ModrinthModpackService;
 import controlador.extensions.ServerExtensionsService;
 import modelo.Server;
 import modelo.ServerConfig;
@@ -32,11 +34,12 @@ import controlador.platform.ServerPlatformAdapter;
 import controlador.platform.ServerPlatformAdapters;
 import controlador.platform.ServerPlatformProfile;
 import controlador.platform.ServerValidationResult;
-import com.formdev.flatlaf.extras.components.FlatProgressBar;
 import lombok.Getter;
 import lombok.Setter;
 import modelo.extensions.ServerExtension;
 import modelo.extensions.ServerEcosystemType;
+import modelo.extensions.ExtensionSourceType;
+import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerPlatform;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -55,6 +58,7 @@ import java.net.ServerSocket;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
@@ -77,13 +81,16 @@ import java.util.stream.Stream;
 
 import static controlador.Utilidades.copiarArchivo;
 import static controlador.Utilidades.rellenaEULA;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 @Getter
 @Setter
 
 public class GestorServidores {
+    public enum ModpackImportConflictPolicy {
+        KEEP_EXISTING,
+        REPLACE_EXISTING
+    }
+
     private static final List<String> ARCHIVOS_CONFIG_PRESERVABLES = List.of(
             "server.properties",
             "eula.txt",
@@ -157,6 +164,7 @@ public class GestorServidores {
     private final ServerExtensionsService serverExtensionsService = new ServerExtensionsService();
     private final ExtensionCatalogService extensionCatalogService = new ExtensionCatalogService();
     private final CurseForgeModpackService curseForgeModpackService = new CurseForgeModpackService();
+    private final ModrinthModpackService modrinthModpackService;
     private final FileDownloader extensionDownloader = new ExtensionArtifactDownloader();
 
     private String avisoServidoresNoCargados;
@@ -172,11 +180,16 @@ public class GestorServidores {
 
     // Constructor por defecto
     public GestorServidores() {
-        this(getJsonFile());
+        this(getJsonFile(), new ModrinthModpackService());
     }
 
     GestorServidores(File jsonFile) {
+        this(jsonFile, new ModrinthModpackService());
+    }
+
+    GestorServidores(File jsonFile, ModrinthModpackService modrinthModpackService) {
         this.jsonFile = jsonFile == null ? getJsonFile() : jsonFile;
+        this.modrinthModpackService = modrinthModpackService == null ? new ModrinthModpackService() : modrinthModpackService;
         this.listaServidores = cargarServidores();
         boolean cambiosOrden = normalizarMetadatosOrden(true);
         validarYLimpiarServidoresPersistidos();
@@ -493,6 +506,18 @@ public class GestorServidores {
         return texto == null ? "" : texto;
     }
 
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private ServerPlatformProfile inspeccionarServidor(Path serverDir) {
         return ServerPlatformAdapters.detect(serverDir);
     }
@@ -676,37 +701,370 @@ public class GestorServidores {
         return curseForgeModpackService.exportServerPack(server, targetZip, mode);
     }
 
+    public ModrinthModpackService.ExportResult exportarModpackModrinth(Server server,
+                                                                       Path targetPack,
+                                                                       ModrinthModpackService.ExportMode mode) throws IOException {
+        ModrinthModpackService.ExportResult result = modrinthModpackService.exportServerPack(server, targetPack, mode);
+        if (result.resolvedManualFiles() > 0) {
+            serverExtensionsService.persistInstalledExtensionCache(server);
+            guardarServidor(server);
+        }
+        return result;
+    }
+
     public CurseForgeModpackService.ImportManifest leerManifestModpackCurseForge(Path sourceZip) throws IOException {
         return curseForgeModpackService.readManifest(sourceZip);
+    }
+
+    public ModrinthModpackService.ImportIndex leerIndiceModpackModrinth(Path sourcePack) throws IOException {
+        return modrinthModpackService.readIndex(sourcePack);
     }
 
     public int importarModpackCurseForge(Server server,
                                          Path sourceZip,
                                          List<String> warnings) throws IOException {
+        return importarModpackCurseForge(server, sourceZip, ModpackImportConflictPolicy.KEEP_EXISTING, warnings);
+    }
+
+    public int importarModpackCurseForge(Server server,
+                                         Path sourceZip,
+                                         ModpackImportConflictPolicy conflictPolicy,
+                                         List<String> warnings) throws IOException {
+        return importarModpackCurseForge(server, sourceZip, curseForgeModpackService.readManifest(sourceZip), conflictPolicy, warnings);
+    }
+
+    public int importarModpackCurseForge(Server server,
+                                         Path sourceZip,
+                                         CurseForgeModpackService.ImportManifest manifest,
+                                         ModpackImportConflictPolicy conflictPolicy,
+                                         List<String> warnings) throws IOException {
+        return importarModpackCurseForge(server, sourceZip, manifest, conflictPolicy, warnings, false);
+    }
+
+    public int importarModpackCurseForge(Server server,
+                                         Path sourceZip,
+                                         CurseForgeModpackService.ImportManifest manifest,
+                                         ModpackImportConflictPolicy conflictPolicy,
+                                         List<String> warnings,
+                                         boolean extensionsAlreadySynced) throws IOException {
         if (server == null) {
             throw new IOException("No se ha indicado el servidor.");
         }
-        CurseForgeModpackService.ImportManifest manifest = curseForgeModpackService.readManifest(sourceZip);
+        prepararImportacionModpack(server, !extensionsAlreadySynced);
+        CurseForgeModpackService.ImportManifest resolvedManifest = manifest == null
+                ? curseForgeModpackService.readManifest(sourceZip)
+                : manifest;
+        List<ModpackDownloadTask> tasks = new ArrayList<>();
         int installed = 0;
         if (warnings != null) {
             String serverVersion = server.getVersion() == null ? null : server.getVersion().trim();
-            if (manifest.minecraftVersion() != null
+            if (resolvedManifest.minecraftVersion() != null
                     && serverVersion != null
-                    && !manifest.minecraftVersion().equalsIgnoreCase(serverVersion)) {
-                warnings.add("El manifest usa Minecraft " + manifest.minecraftVersion() + " y el servidor actual usa " + serverVersion + ".");
+                    && !resolvedManifest.minecraftVersion().equalsIgnoreCase(serverVersion)) {
+                warnings.add("El manifest usa Minecraft " + resolvedManifest.minecraftVersion() + " y el servidor actual usa " + serverVersion + ".");
             }
         }
-        for (CurseForgeModpackService.ManifestFileRef fileRef : manifest.files()) {
+        for (CurseForgeModpackService.ManifestFileRef fileRef : resolvedManifest.files()) {
             if (fileRef == null || !fileRef.required()) {
                 continue;
             }
             ExtensionDownloadPlan plan = curseForgeModpackService.resolveDownloadPlan(fileRef.projectID(), fileRef.fileID(), server);
-            serverExtensionsService.installCatalogDownload(server, plan, extensionDownloader);
+            if (debeOmitirsePlanModpack(server, plan, conflictPolicy, warnings)) {
+                continue;
+            }
+            tasks.add(new ModpackDownloadTask(plan, extensionDownloader));
+        }
+        if (conflictPolicy == ModpackImportConflictPolicy.REPLACE_EXISTING) {
+            validarTareasModpackAntesDeReemplazar(tasks);
+            eliminarJarsGestionadosParaReemplazoModpack(server, warnings);
+        }
+        for (ModpackDownloadTask task : tasks) {
+            serverExtensionsService.installCatalogDownload(server, task.plan(), task.downloader());
             installed++;
         }
         serverExtensionsService.persistInstalledExtensionCache(server);
         guardarServidor(server);
         return installed;
+    }
+
+    public int importarModpackModrinth(Server server,
+                                       Path sourcePack,
+                                       List<String> warnings) throws IOException {
+        return importarModpackModrinth(server, sourcePack, ModrinthModpackService.ImportOptions.server(), warnings);
+    }
+
+    public int importarModpackModrinth(Server server,
+                                       Path sourcePack,
+                                       ModrinthModpackService.ImportOptions options,
+                                       List<String> warnings) throws IOException {
+        return importarModpackModrinth(server, sourcePack, options, ModpackImportConflictPolicy.KEEP_EXISTING, warnings);
+    }
+
+    public int importarModpackModrinth(Server server,
+                                       Path sourcePack,
+                                       ModrinthModpackService.ImportOptions options,
+                                       ModpackImportConflictPolicy conflictPolicy,
+                                       List<String> warnings) throws IOException {
+        return importarModpackModrinth(server, sourcePack, modrinthModpackService.readIndex(sourcePack), options, conflictPolicy, warnings);
+    }
+
+    public int importarModpackModrinth(Server server,
+                                       Path sourcePack,
+                                       ModrinthModpackService.ImportIndex index,
+                                       ModrinthModpackService.ImportOptions options,
+                                       ModpackImportConflictPolicy conflictPolicy,
+                                       List<String> warnings) throws IOException {
+        return importarModpackModrinth(server, sourcePack, index, options, conflictPolicy, warnings, false);
+    }
+
+    public int importarModpackModrinth(Server server,
+                                       Path sourcePack,
+                                       ModrinthModpackService.ImportIndex index,
+                                       ModrinthModpackService.ImportOptions options,
+                                       ModpackImportConflictPolicy conflictPolicy,
+                                       List<String> warnings,
+                                       boolean extensionsAlreadySynced) throws IOException {
+        if (server == null) {
+            throw new IOException("No se ha indicado el servidor.");
+        }
+        ModrinthModpackService.ImportIndex resolvedIndex = index == null ? modrinthModpackService.readIndex(sourcePack) : index;
+        if (warnings != null) {
+            warnings.addAll(modrinthModpackService.validateDependencies(resolvedIndex, server));
+        }
+        prepararImportacionModpack(server, !extensionsAlreadySynced);
+        List<ModpackDownloadTask> tasks = new ArrayList<>();
+        {
+            int installed = 0;
+            for (ModrinthModpackService.IndexedFile file : resolvedIndex.files()) {
+                if (file == null) {
+                    continue;
+                }
+                ModrinthModpackService.ImportFileDecision decision = modrinthModpackService.evaluateImportFile(file, options);
+                if (decision.warning() != null && !decision.warning().isBlank() && warnings != null) {
+                    warnings.add(decision.warning());
+                }
+                if (!decision.install()) {
+                    continue;
+                }
+                if (!file.path().toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+                    if (warnings != null) {
+                        warnings.add(file.path() + ": omitido porque no es un .jar gestionable.");
+                    }
+                    continue;
+                }
+                if (debeOmitirseArchivoModpackExistente(
+                        server,
+                        fileNameFromModpackPath(file.path()),
+                        conflictPolicy,
+                        warnings
+                )) {
+                    continue;
+                }
+                ExtensionDownloadPlan plan = modrinthModpackService.resolveImportDownloadPlan(file, server);
+                if (plan.projectId() == null || plan.versionId() == null) {
+                    if (warnings != null) {
+                        warnings.add(file.path() + ": instalado con identidad Modrinth incompleta porque no se pudo resolver el proyecto/version.");
+                    }
+                }
+                if (debeOmitirsePlanModpack(server, plan, conflictPolicy, warnings)) {
+                    continue;
+                }
+                tasks.add(new ModpackDownloadTask(
+                        plan,
+                        (url, destination) -> modrinthModpackService.downloadAndVerify(file, url, destination, extensionDownloader)
+                ));
+            }
+            if (conflictPolicy == ModpackImportConflictPolicy.REPLACE_EXISTING) {
+                validarTareasModpackAntesDeReemplazar(tasks);
+                eliminarJarsGestionadosParaReemplazoModpack(server, warnings);
+            }
+            for (ModpackDownloadTask task : tasks) {
+                serverExtensionsService.installCatalogDownload(server, task.plan(), task.downloader());
+                installed++;
+            }
+            int overrides = modrinthModpackService.extractOverrides(sourcePack, server, options, warnings);
+            if (overrides > 0 && warnings != null) {
+                warnings.add("Se han extraído " + overrides + " archivos de override compatibles.");
+            }
+            serverExtensionsService.persistInstalledExtensionCache(server);
+            guardarServidor(server);
+            return installed;
+        }
+    }
+
+    private void prepararImportacionModpack(Server server,
+                                            boolean refreshExtensions) throws IOException {
+        if (refreshExtensions) {
+            sincronizarExtensionesServidor(server);
+        }
+    }
+
+    private boolean debeOmitirsePlanModpack(Server server,
+                                            ExtensionDownloadPlan plan,
+                                            ModpackImportConflictPolicy conflictPolicy,
+                                            List<String> warnings) throws IOException {
+        ExtensionInstallResolution resolution = serverExtensionsService.evaluateCatalogInstallation(server, plan);
+        if (plan == null || !plan.ready()) {
+            throw new IOException("El modpack contiene una descarga que no se ha podido resolver.");
+        }
+        if (resolution == null || resolution.state() == ExtensionInstallResolutionState.AVAILABLE) {
+            return false;
+        }
+        if (resolution.state() == ExtensionInstallResolutionState.INCOMPATIBLE) {
+            throw new IOException(firstNonBlank(resolution.message(), "El modpack contiene un mod incompatible con este servidor."));
+        }
+        if (conflictPolicy == ModpackImportConflictPolicy.REPLACE_EXISTING) {
+            return false;
+        }
+        if (warnings != null) {
+            warnings.add(firstNonBlank(
+                    resolution.message(),
+                    firstNonBlank(plan == null ? null : plan.fileName(), "Mod") + ": omitido porque ya existe en el servidor."
+            ));
+        }
+        return true;
+    }
+
+    private boolean debeOmitirseArchivoModpackExistente(Server server,
+                                                        String fileName,
+                                                        ModpackImportConflictPolicy conflictPolicy,
+                                                        List<String> warnings) throws IOException {
+        if (conflictPolicy == ModpackImportConflictPolicy.REPLACE_EXISTING
+                || fileName == null
+                || fileName.isBlank()) {
+            return false;
+        }
+        ExtensionDownloadPlan fileProbe = new ExtensionDownloadPlan(
+                "modrinth",
+                null,
+                null,
+                null,
+                null,
+                fileName,
+                null,
+                ExtensionSourceType.MODRINTH,
+                ServerExtensionType.MOD,
+                server == null || server.getPlatform() == null ? ServerPlatform.UNKNOWN : server.getPlatform(),
+                server == null ? null : server.getVersion(),
+                true,
+                null
+        );
+        ExtensionInstallResolution resolution = serverExtensionsService.evaluateCatalogInstallation(server, fileProbe);
+        if (resolution == null || resolution.state() == ExtensionInstallResolutionState.AVAILABLE) {
+            return false;
+        }
+        if (resolution.state() == ExtensionInstallResolutionState.INCOMPATIBLE) {
+            throw new IOException(firstNonBlank(resolution.message(), "El modpack contiene un mod incompatible con este servidor."));
+        }
+        if (warnings != null) {
+            warnings.add(firstNonBlank(
+                    resolution.message(),
+                    fileName + ": omitido porque ya existe en el servidor."
+            ));
+        }
+        return true;
+    }
+
+    private String fileNameFromModpackPath(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        String normalized = path.replace('\\', '/');
+        int slash = normalized.lastIndexOf('/');
+        String fileName = slash >= 0 ? normalized.substring(slash + 1) : normalized;
+        return fileName.isBlank() ? null : fileName;
+    }
+
+    private void validarTareasModpackAntesDeReemplazar(List<ModpackDownloadTask> tasks) throws IOException {
+        if (tasks == null || tasks.isEmpty()) {
+            throw new IOException("No se han encontrado mods instalables en el modpack seleccionado. No se eliminarán los mods actuales.");
+        }
+        Set<String> targetFileNames = new HashSet<>();
+        for (ModpackDownloadTask task : tasks) {
+            ExtensionDownloadPlan plan = task == null ? null : task.plan();
+            if (plan == null || !plan.ready()) {
+                throw new IOException("El modpack contiene una descarga que no se ha podido resolver.");
+            }
+            String fileName = plan.fileName();
+            if (fileName == null || fileName.isBlank() || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+                throw new IOException("El modpack contiene una entrada sin nombre de archivo .jar válido.");
+            }
+            String key = fileName.toLowerCase(java.util.Locale.ROOT);
+            if (!targetFileNames.add(key)) {
+                throw new IOException("El modpack contiene entradas duplicadas para " + fileName + ".");
+            }
+        }
+    }
+
+    private void eliminarJarsGestionadosParaReemplazoModpack(Server server, List<String> warnings) throws IOException {
+        if (server == null) {
+            throw new IOException("No se ha indicado el servidor.");
+        }
+        if (server.getServerProcess() != null && server.getServerProcess().isAlive()) {
+            throw new IOException("Detén el servidor antes de reemplazar los mods actuales.");
+        }
+        Path serverDir = resolverDirectorioServidor(server);
+        if (serverDir == null || !Files.isDirectory(serverDir)) {
+            throw new IOException("No se ha encontrado la carpeta del servidor.");
+        }
+        Path normalizedServerDir = serverDir.toAbsolutePath().normalize();
+        List<Path> extensionDirs = serverExtensionsService.getManagedExtensionDirectories(server);
+        List<Path> jars = new ArrayList<>();
+        for (Path extensionDir : extensionDirs) {
+            if (extensionDir == null || !Files.isDirectory(extensionDir)) {
+                continue;
+            }
+            Path normalizedExtensionDir = extensionDir.toAbsolutePath().normalize();
+            if (!normalizedExtensionDir.startsWith(normalizedServerDir)) {
+                throw new IOException("La carpeta de extensiones no está dentro de la carpeta del servidor: " + extensionDir);
+            }
+            try (Stream<Path> children = Files.list(extensionDir)) {
+                jars.addAll(children
+                        .filter(path -> esJarGestionadoSeguro(normalizedServerDir, normalizedExtensionDir, path))
+                        .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                        .toList());
+            }
+        }
+        for (Path jar : jars) {
+            try {
+                Files.delete(jar);
+            } catch (IOException ex) {
+                throw new IOException("No se ha podido eliminar el mod actual " + jar.getFileName()
+                        + ". Detén el servidor y cierra cualquier programa que esté usando ese archivo.", ex);
+            }
+        }
+        server.setExtensions(serverExtensionsService.detectInstalledExtensions(server));
+        serverExtensionsService.persistInstalledExtensionCache(server);
+        if (!jars.isEmpty() && warnings != null) {
+            warnings.add("Se han eliminado " + jars.size() + (jars.size() == 1
+                    ? " mod actual antes de importar el modpack."
+                    : " mods actuales antes de importar el modpack."));
+        }
+    }
+
+    private boolean esJarGestionadoSeguro(Path normalizedServerDir, Path normalizedExtensionDir, Path path) {
+        if (path == null || Files.isSymbolicLink(path)) {
+            return false;
+        }
+        Path normalizedPath = path.toAbsolutePath().normalize();
+        return normalizedPath.startsWith(normalizedServerDir)
+                && normalizedPath.startsWith(normalizedExtensionDir)
+                && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                && path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".jar");
+    }
+
+    private record ModpackDownloadTask(ExtensionDownloadPlan plan, FileDownloader downloader) {
+    }
+
+    private Path resolverDirectorioServidor(Server server) {
+        if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
+            return null;
+        }
+        try {
+            return Path.of(server.getServerDir());
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     private void aplicarPerfilPlataforma(Server server, ServerPlatformProfile profile) {
@@ -1107,8 +1465,8 @@ public class GestorServidores {
         return value == null || value.isBlank() ? "desconocida" : value;
     }
 
-    // esta función descarga de una url a un destino dándole un nombre y mostrando una barra de carga
-    private boolean descargarConBarra(String url, File destino, String titulo){
+    // esta función descarga de una url a un destino dándole un nombre y mostrando un diálogo modal
+    private boolean descargarConDialogo(String url, File destino, String titulo){
         final JDialog dialog = new JDialog((Frame) null, titulo, true);
         dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 
@@ -1116,16 +1474,13 @@ public class GestorServidores {
         contenido.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
         JLabel label = new JLabel("Descargando...");
-        FlatProgressBar progreso = new FlatProgressBar();
-        progreso.setMinimum(0);
-        progreso.setMaximum(100);
-        progreso.setIndeterminate(true);
-        progreso.setStringPainted(true);
-        progreso.setString("...");
+        JLabel detalle = new JLabel("Por favor espera. La ventana se cerrará al terminar.");
+        detalle.setForeground(AppTheme.getMutedForeground());
+        JProgressBar progreso = AppTheme.createLoadingProgressBar(true);
 
-        // texto arriba y barra de progreso abajo
         contenido.add(label, BorderLayout.NORTH);
-        contenido.add(progreso, BorderLayout.CENTER);
+        contenido.add(detalle, BorderLayout.CENTER);
+        contenido.add(progreso, BorderLayout.SOUTH);
         dialog.setContentPane(contenido);
         dialog.setSize(420, 120);
         dialog.setLocationRelativeTo(null);
@@ -1135,14 +1490,13 @@ public class GestorServidores {
             @Override
             protected Void doInBackground() {
                 final long[] ultimoPorcentaje = { -1 };
-                // ejecutamos la descarga
                 MOJANG_API.descargar(url, destino, (leidos, total) -> {
-                    if(isCancelled()) return;
-                    if(total <= 0) return;
+                    if (isCancelled()) return;
+                    if (total <= 0) return;
                     long porcentaje = (leidos * 100L) / total;
-                    if(porcentaje == ultimoPorcentaje[0]) return; // si no se ha actualizado el porcentaje no actualizamos
+                    if (porcentaje == ultimoPorcentaje[0]) return;
                     ultimoPorcentaje[0] = porcentaje;
-                    setProgress((int)max(0, min(100, porcentaje)));
+                    setProgress((int) Math.max(0, Math.min(100, porcentaje)));
                 });
                 return null;
             }
@@ -1153,14 +1507,12 @@ public class GestorServidores {
             }
         };
 
-        // worker escucha cambios en la propiedad "progress"
         worker.addPropertyChangeListener(evt -> {
-            if(!"progress".equals(evt.getPropertyName())) return;
+            if (!"progress".equals(evt.getPropertyName())) return;
             Object valorPropiedad = evt.getNewValue();
-            if(!(valorPropiedad instanceof Integer p)) return;
-            if(progreso.isIndeterminate()) progreso.setIndeterminate(false);
+            if (!(valorPropiedad instanceof Integer p)) return;
+            if (progreso.isIndeterminate()) progreso.setIndeterminate(false);
             progreso.setValue(p);
-            progreso.setString(p + "%");
         });
 
         worker.execute();
@@ -1790,12 +2142,12 @@ public class GestorServidores {
         JPanel contenido = new JPanel(new BorderLayout(10, 10));
         contenido.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
         JLabel label = new JLabel(descripcion == null ? "Procesando..." : descripcion);
-        FlatProgressBar progreso = new FlatProgressBar();
-        progreso.setIndeterminate(true);
-        progreso.setStringPainted(true);
-        progreso.setString("...");
+        JLabel detalle = new JLabel("Por favor espera. La ventana se cerrará al terminar.");
+        detalle.setForeground(AppTheme.getMutedForeground());
+        JProgressBar progreso = AppTheme.createLoadingProgressBar(true);
         contenido.add(label, BorderLayout.NORTH);
-        contenido.add(progreso, BorderLayout.CENTER);
+        contenido.add(detalle, BorderLayout.CENTER);
+        contenido.add(progreso, BorderLayout.SOUTH);
         dialog.setContentPane(contenido);
         dialog.setSize(460, 120);
         dialog.setLocationRelativeTo(null);
@@ -2504,10 +2856,12 @@ public class GestorServidores {
 
         JButton backButton = new JButton();
         JButton nextButton = new JButton();
+        Icon nextIcon = SvgIconFactory.create("easymcicons/arrow-right.svg", 28, 28, AppTheme::getForeground);
+        Icon finishIcon = SvgIconFactory.create("easymcicons/rocket.svg", 28, 28, AppTheme::getForeground);
         AppTheme.applyHeaderIconButtonStyle(backButton);
         AppTheme.applyHeaderIconButtonStyle(nextButton);
         backButton.setIcon(SvgIconFactory.create("easymcicons/arrow-left.svg", 28, 28, AppTheme::getForeground));
-        nextButton.setIcon(SvgIconFactory.create("easymcicons/arrow-right.svg", 28, 28, AppTheme::getForeground));
+        nextButton.setIcon(nextIcon);
         backButton.setToolTipText("Anterior");
         nextButton.setToolTipText("Siguiente");
         Dimension arrowButtonSize = new Dimension(44, 44);
@@ -2551,8 +2905,10 @@ public class GestorServidores {
                 eulaCheck
         ));
         Runnable refreshNav = () -> {
+            boolean lastStep = stepIndex[0] == stepNames.length - 1;
             backButton.setEnabled(stepIndex[0] > 0);
-            nextButton.setToolTipText(stepIndex[0] == stepNames.length - 1 ? "Crear servidor" : "Siguiente");
+            nextButton.setIcon(lastStep ? finishIcon : nextIcon);
+            nextButton.setToolTipText(lastStep ? "Crear servidor" : "Siguiente");
             statusLabel.setText(" ");
             cardLayout.show(cards, stepNames[stepIndex[0]]);
             refreshEulaState.run();
