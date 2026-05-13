@@ -218,7 +218,9 @@ public final class GestorUsuariosConocidos {
     }
 
     private static Path getJsonPath() {
-        return GestorConfiguracion.getBaseDirectory().resolve(JSON_FILE);
+        Path jsonPath = AppPaths.configDirectory().resolve(JSON_FILE);
+        AppPaths.migrateLegacyFileIfNeeded(AppPaths.legacyBaseDirectory().resolve(JSON_FILE), jsonPath);
+        return jsonPath;
     }
 
     private static String normalize(String value) {

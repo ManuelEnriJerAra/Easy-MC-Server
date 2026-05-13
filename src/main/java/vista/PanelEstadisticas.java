@@ -4,6 +4,7 @@ import com.formdev.flatlaf.extras.components.FlatButton;
 import com.formdev.flatlaf.extras.components.FlatComboBox;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import com.formdev.flatlaf.extras.components.FlatSlider;
+import controlador.AppPaths;
 import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import controlador.Utilidades;
@@ -3360,12 +3361,20 @@ public class PanelEstadisticas extends JPanel {
         if (server != null && server.getServerDir() != null && !server.getServerDir().isBlank()) {
             return Path.of(server.getServerDir()).resolve("easy-mc-stats.json");
         }
-        return getLegacyHistoryFile(serverKey);
+        return getAppStatsHistoryFile(serverKey);
+    }
+
+    private static Path getAppStatsHistoryFile(String serverKey) {
+        return AppPaths.statsDirectory().resolve(getSafeHistoryFileName(serverKey));
     }
 
     private static Path getLegacyHistoryFile(String serverKey) {
+        return AppPaths.legacyBaseDirectory().resolve("stats").resolve(getSafeHistoryFileName(serverKey));
+    }
+
+    private static String getSafeHistoryFileName(String serverKey) {
         String safeName = (serverKey == null || serverKey.isBlank()) ? "__no_server__" : serverKey.replaceAll("[^a-zA-Z0-9._-]", "_");
-        return GestorConfiguracion.getBaseDirectory().resolve("stats").resolve(safeName + ".json");
+        return safeName + ".json";
     }
 
     private static void migrateLegacyHistoryIfNeeded(Server server, String serverKey, Path targetHistoryFile) {

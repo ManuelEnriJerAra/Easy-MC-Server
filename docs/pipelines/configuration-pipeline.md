@@ -13,6 +13,8 @@ Core classes:
 
 `GestorConfiguracion` handles persisted app-level data such as known servers and UI preferences.
 
+App-owned persistence paths are centralized in `controlador.AppPaths`. Default app config files live under the user data root, currently `~/.easy-mc-server/config/`, while disposable extension caches live under `~/.easy-mc-server/cache/`. Do not add new executable-relative app state; use `AppPaths.configDirectory()`, `cacheDirectory()`, `locksDirectory()`, or `statsDirectory()` as appropriate.
+
 Before changing serialized fields, check existing config compatibility and default handling.
 
 ## Server Properties

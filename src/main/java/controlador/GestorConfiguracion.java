@@ -1,7 +1,6 @@
 package controlador;
 
 import java.io.File;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -80,8 +79,13 @@ public final class GestorConfiguracion {
         }
 
         try {
-            MAPPER.writerWithDefaultPrettyPrinter().writeValue(getJsonFile(), config);
-        } catch (JacksonException e) {
+            File file = getJsonFile();
+            Path parent = file.toPath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            MAPPER.writerWithDefaultPrettyPrinter().writeValue(file, config);
+        } catch (Exception e) {
             System.err.println("Error al guardar " + JSON_FILE + ": " + e.getMessage());
         }
     }
@@ -188,25 +192,7 @@ public final class GestorConfiguracion {
     }
 
     public static Path getBaseDirectory() {
-        try {
-            Path baseDir = Path.of(GestorConfiguracion.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            if (Files.isRegularFile(baseDir)) {
-                baseDir = baseDir.getParent();
-            }
-
-            String normalized = baseDir.toString().replace('\\', '/');
-            if (normalized.endsWith("/target/classes")) {
-                baseDir = baseDir.getParent().getParent();
-            } else if (normalized.endsWith("/build/classes/java/main")) {
-                baseDir = baseDir.getParent().getParent().getParent().getParent();
-            } else if (normalized.endsWith("/bin/main")) {
-                baseDir = baseDir.getParent().getParent();
-            }
-
-            return baseDir;
-        } catch (URISyntaxException | RuntimeException e) {
-            return Path.of(".");
-        }
+        return AppPaths.rootDirectory();
     }
 
     private static EasyMCConfig crearConfiguracionPorDefecto() {
@@ -222,24 +208,11 @@ public final class GestorConfiguracion {
     }
 
     private static File getJsonFile() {
-        Path baseDir = getBaseDirectory();
-        Path jsonPath = baseDir.resolve(JSON_FILE);
-        migrateLegacyFileIfNeeded(baseDir.resolve(LEGACY_JSON_FILE), jsonPath);
+        Path jsonPath = AppPaths.configDirectory().resolve(JSON_FILE);
+        Path legacyBaseDir = AppPaths.legacyBaseDirectory();
+        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(JSON_FILE), jsonPath);
+        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(LEGACY_JSON_FILE), jsonPath);
         return jsonPath.toFile();
-    }
-
-    private static void migrateLegacyFileIfNeeded(Path legacyPath, Path targetPath) {
-        if (legacyPath == null || targetPath == null || Files.exists(targetPath) || !Files.exists(legacyPath)) {
-            return;
-        }
-        try {
-            if (targetPath.getParent() != null) {
-                Files.createDirectories(targetPath.getParent());
-            }
-            Files.move(legacyPath, targetPath);
-        } catch (Exception e) {
-            System.err.println("No se ha podido migrar " + legacyPath.getFileName() + " a " + targetPath.getFileName() + ": " + e.getMessage());
-        }
     }
 
     private static boolean normalizarConfiguracion(EasyMCConfig config) {

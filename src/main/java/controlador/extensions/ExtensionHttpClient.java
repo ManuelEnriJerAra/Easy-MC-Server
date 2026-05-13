@@ -1,5 +1,7 @@
 package controlador.extensions;
 
+import controlador.AppPaths;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -180,8 +182,7 @@ class ExtensionHttpClient {
     }
 
     private static Path resolveCacheDirectory() {
-        String userHome = System.getProperty("user.home", ".");
-        return Path.of(userHome, ".easy-mc-server", "cache", "extensions", "http");
+        return AppPaths.cacheDirectory().resolve("extensions").resolve("http");
     }
 
     private record CacheEntry(long createdAtEpochMillis, String body) {

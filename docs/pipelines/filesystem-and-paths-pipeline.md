@@ -8,6 +8,7 @@ Use this guide before editing file operations, imports/exports, backups, paths, 
 - Avoid destructive operations unless the user explicitly chose that flow.
 - Preserve user files when converting, importing, or upgrading.
 - Keep app-managed metadata separate from Minecraft-owned files where possible.
+- Use `controlador.AppPaths` for app-managed user data roots: config, cache, locks, and generated stats.
 - Surface IO failures with actionable Spanish messages in UI flows.
 
 ## Server Directories

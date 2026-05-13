@@ -59,7 +59,6 @@ import java.io.*;
 
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -126,41 +125,11 @@ public class GestorServidores {
     private static final String LEGACY_JSON_FILE = "ServerList.json";
 
     private static File getJsonFile() {
-        try {
-            Path baseDir = Path.of(GestorServidores.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            if (Files.isRegularFile(baseDir)) {
-                baseDir = baseDir.getParent();
-            }
-
-            String normalized = baseDir.toString().replace('\\', '/');
-            if (normalized.endsWith("/target/classes")) {
-                baseDir = baseDir.getParent().getParent();
-            } else if (normalized.endsWith("/build/classes/java/main")) {
-                baseDir = baseDir.getParent().getParent().getParent().getParent();
-            } else if (normalized.endsWith("/bin/main")) {
-                baseDir = baseDir.getParent().getParent();
-            }
-
-            Path jsonPath = baseDir.resolve(JSON_FILE);
-            migrateLegacyFileIfNeeded(baseDir.resolve(LEGACY_JSON_FILE), jsonPath);
-            return jsonPath.toFile();
-        } catch (URISyntaxException | RuntimeException e) {
-            return new File(JSON_FILE);
-        }
-    }
-
-    private static void migrateLegacyFileIfNeeded(Path legacyPath, Path targetPath) {
-        if (legacyPath == null || targetPath == null || Files.exists(targetPath) || !Files.exists(legacyPath)) {
-            return;
-        }
-        try {
-            if (targetPath.getParent() != null) {
-                Files.createDirectories(targetPath.getParent());
-            }
-            Files.move(legacyPath, targetPath);
-        } catch (IOException e) {
-            System.err.println("No se ha podido migrar " + legacyPath.getFileName() + " a " + targetPath.getFileName() + ": " + e.getMessage());
-        }
+        Path jsonPath = AppPaths.configDirectory().resolve(JSON_FILE);
+        Path legacyBaseDir = AppPaths.legacyBaseDirectory();
+        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(JSON_FILE), jsonPath);
+        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(LEGACY_JSON_FILE), jsonPath);
+        return jsonPath.toFile();
     }
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -242,8 +211,12 @@ public class GestorServidores {
         if (!file.exists()) {
             List<Server> servidores = new ArrayList<>();
             try{
+                File parent = file.getParentFile();
+                if (parent != null) {
+                    Files.createDirectories(parent.toPath());
+                }
                 mapper.writerWithDefaultPrettyPrinter().writeValue(file, servidores);
-            } catch (JacksonException e) {
+            } catch (Exception e) {
                 System.err.println("Error al inicializar servidores: " + e.getMessage());
             }
             return servidores;
@@ -2262,8 +2235,12 @@ public class GestorServidores {
     public void guardarServidores(){
         normalizarMetadatosOrden(true);
         try{
+            File parent = jsonFile.getParentFile();
+            if (parent != null) {
+                Files.createDirectories(parent.toPath());
+            }
             mapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, copiarListaServidoresOrdenada());
-        } catch (JacksonException e) {
+        } catch (Exception e) {
             System.err.println("Error al guardar servidores: " + e.getMessage());
         }
     }

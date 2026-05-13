@@ -1,5 +1,7 @@
 package vista;
 
+import controlador.AppPaths;
+
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.spi.IIORegistry;
@@ -69,7 +71,7 @@ final class ExtensionIconLoader {
                 return thread;
             }
     );
-    private static final Path CACHE_DIR = Path.of(System.getProperty("user.home", "."), ".easy-mc-server", "cache", "extensions", "icons");
+    private static final Path CACHE_DIR = AppPaths.cacheDirectory().resolve("extensions").resolve("icons");
     private static final Duration DISK_CACHE_TTL = Duration.ofDays(7);
     private static final Duration FAILURE_BASE_BACKOFF = Duration.ofSeconds(30);
     private static final int MAX_FAILURE_ATTEMPTS = 3;
