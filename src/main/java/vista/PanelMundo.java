@@ -1236,12 +1236,26 @@ public class PanelMundo extends JPanel {
             return conexiones;
         }
 
-        ArrayList<RecentConnection> combinadas = new ArrayList<>(conexionesDebug);
-        if (conexiones != null) {
-            combinadas.addAll(conexiones);
+        return mergeDebugRecentConnections(conexionesDebug, conexiones, MAX_DEBUG_RECENT_CONNECTIONS);
+    }
+
+    static List<RecentConnection> mergeDebugRecentConnections(
+            List<RecentConnection> debugConnections,
+            List<RecentConnection> realConnections,
+            int maxConnections
+    ) {
+        if (maxConnections <= 0) {
+            return List.of();
         }
-        return combinadas.stream()
-                .limit(MAX_DEBUG_RECENT_CONNECTIONS)
+        ArrayList<RecentConnection> combined = new ArrayList<>();
+        if (debugConnections != null) {
+            combined.addAll(debugConnections);
+        }
+        if (realConnections != null) {
+            combined.addAll(realConnections);
+        }
+        return combined.stream()
+                .limit(maxConnections)
                 .toList();
     }
 
@@ -4062,7 +4076,7 @@ public class PanelMundo extends JPanel {
         }
     }
 
-    private record RecentConnection(String username, String timestamp, String location, long sortEpochMillis) {
+    record RecentConnection(String username, String timestamp, String location, long sortEpochMillis) {
         private RecentConnection(String username, String timestamp, String location) {
             this(username, timestamp, location, 0L);
         }

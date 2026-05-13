@@ -45,6 +45,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import vista.AppTheme;
+import vista.FolderPathLayout;
 import vista.PlatformSelectorPanel;
 import vista.ProcessWizardDialog;
 import vista.SvgIconFactory;
@@ -3432,9 +3433,6 @@ public class GestorServidores {
 
     private static final class FolderPathPanel extends JPanel {
         private static final int RESET_GAP = 6;
-        private static final int EMPTY_FIELD_COLUMNS = 8;
-        private static final int FIELD_TEXT_PADDING = 18;
-        private static final int MIN_FIELD_WIDTH = 150;
 
         private final JLabel prefixLabel;
         private final JTextField folderNameField;
@@ -3466,27 +3464,18 @@ public class GestorServidores {
             resetButton.setBounds(resetX, resetY, resetW, resetH);
 
             int availableTextW = Math.max(0, contentW - resetW - RESET_GAP);
-            int fieldW = calcularAnchoCampo(availableTextW);
-            int maxPrefixW = Math.max(0, availableTextW - fieldW);
-            int prefixW = Math.min(anchoPrefijoCompleto(), maxPrefixW);
+            FontMetrics fieldMetrics = folderNameField.getFontMetrics(folderNameField.getFont());
+            FolderPathLayout.Bounds bounds = FolderPathLayout.calculate(
+                    availableTextW,
+                    anchoPrefijoCompleto(),
+                    folderNameField.getText(),
+                    fieldMetrics
+            );
+            int prefixW = bounds.prefixWidth();
 
             prefixLabel.setVisible(prefixW > 0);
             prefixLabel.setBounds(contentX, contentY, prefixW, contentH);
             folderNameField.setBounds(contentX + prefixW, contentY, Math.max(0, availableTextW - prefixW), contentH);
-        }
-
-        private int calcularAnchoCampo(int availableTextW) {
-            if (availableTextW <= 0) {
-                return 0;
-            }
-            FontMetrics metrics = folderNameField.getFontMetrics(folderNameField.getFont());
-            String text = folderNameField.getText();
-            int emptyWidth = metrics.charWidth('m') * EMPTY_FIELD_COLUMNS + FIELD_TEXT_PADDING;
-            int desiredWidth = text == null || text.isBlank()
-                    ? emptyWidth
-                    : metrics.stringWidth(text) + FIELD_TEXT_PADDING;
-            int minWidth = Math.min(MIN_FIELD_WIDTH, availableTextW);
-            return Math.min(availableTextW, Math.max(minWidth, desiredWidth));
         }
 
         private int anchoPrefijoCompleto() {

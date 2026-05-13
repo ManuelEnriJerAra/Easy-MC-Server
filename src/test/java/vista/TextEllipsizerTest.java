@@ -44,4 +44,21 @@ class TextEllipsizerTest {
         assertTrue(result.endsWith("Survival"));
         assertTrue(metrics.stringWidth(result) <= metrics.stringWidth(".../Survival"));
     }
+
+    @Test
+    void leftReturnsFullSuffixWithEllipsisWhenOnlyOneCharacterFits() {
+        int width = metrics.stringWidth("...l");
+
+        String result = TextEllipsizer.left("Survival", metrics, width);
+
+        assertEquals("...l", result);
+        assertTrue(metrics.stringWidth(result) <= width);
+    }
+
+    @Test
+    void leftReturnsEllipsisWhenOnlyEllipsisFits() {
+        int width = metrics.stringWidth("...");
+
+        assertEquals("...", TextEllipsizer.left("Survival", metrics, width));
+    }
 }
