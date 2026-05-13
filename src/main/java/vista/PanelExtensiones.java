@@ -171,19 +171,19 @@ final class PanelExtensiones extends JPanel {
         updateViewModeButton();
         listCard.getHeaderActionsPanel().add(viewModeButton);
 
-        configureExtensionActionButton(installButton, "easymcicons/file.svg", "Instalar " + extensionSingularLower() + " .jar", 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(installButton, "Instalar " + extensionSingularLower() + " .jar", "easymcicons/file.svg", 22, AppTheme::getForeground, false);
         installButton.addActionListener(e -> instalarExtensionManual());
 
-        configureExtensionActionButton(browseCatalogButton, "easymcicons/shop.svg", "Explorar catalogo de " + extensionPluralLower(), 44, AppTheme::getMainAccent, true);
+        AppTheme.configureRowIconActionButton(browseCatalogButton, "Explorar catalogo de " + extensionPluralLower(), "easymcicons/shop.svg", 44, AppTheme::getMainAccent, true);
         browseCatalogButton.addActionListener(e -> abrirMarketplaceExtensiones());
 
-        configureExtensionActionButton(importPackButton, "easymcicons/download.svg", "Importar pack", 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(importPackButton, "Importar pack", "easymcicons/download.svg", 22, AppTheme::getForeground, false);
         importPackButton.addActionListener(e -> importarModpack());
 
-        configureExtensionActionButton(exportPackButton, "easymcicons/upload.svg", "Exportar pack", 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(exportPackButton, "Exportar pack", "easymcicons/upload.svg", 22, AppTheme::getForeground, false);
         exportPackButton.addActionListener(e -> exportarModpack());
 
-        configureExtensionActionButton(openDirectoryButton, "easymcicons/folder.svg", "Abrir carpeta de " + extensionPluralLower(), 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(openDirectoryButton, "Abrir carpeta de " + extensionPluralLower(), "easymcicons/folder.svg", 22, AppTheme::getForeground, false);
         configureFolderHover(openDirectoryButton);
         openDirectoryButton.addActionListener(e -> abrirCarpetaExtensiones());
 
@@ -263,45 +263,6 @@ final class PanelExtensiones extends JPanel {
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         scroll.setViewportView(extensionsList);
         content.add(scroll, BorderLayout.CENTER);
-    }
-
-    private void configureExtensionActionButton(AbstractButton button,
-                                                String iconPath,
-                                                String tooltip,
-                                                int iconSize,
-                                                java.util.function.Supplier<Color> colorSupplier,
-                                                boolean prominent) {
-        if (button == null) {
-            return;
-        }
-        AppTheme.applyHeaderIconButtonStyle(button);
-        button.setToolTipText(tooltip);
-        button.setIcon(SvgIconFactory.create(iconPath, iconSize, iconSize, colorSupplier));
-        int buttonSize = prominent ? 54 : 38;
-        button.setPreferredSize(new Dimension(buttonSize, buttonSize));
-        button.setMinimumSize(new Dimension(buttonSize, buttonSize));
-        button.setMaximumSize(new Dimension(buttonSize, buttonSize));
-        button.setOpaque(true);
-        button.setContentAreaFilled(true);
-        button.putClientProperty("JButton.buttonType", "roundRect");
-        button.setBackground(AppTheme.getBackground());
-        button.setBorder(AppTheme.createRoundedBorder(new Insets(6, 6, 6, 6), AppTheme.getSubtleBorderColor(), 1f));
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseEntered(java.awt.event.MouseEvent e) {
-                if (!button.isEnabled()) {
-                    return;
-                }
-                button.setBackground(AppTheme.getSoftSelectionBackground());
-                button.repaint();
-            }
-
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                button.setBackground(AppTheme.getBackground());
-                button.repaint();
-            }
-        });
     }
 
     private void configureFolderHover(AbstractButton button) {

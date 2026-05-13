@@ -9,11 +9,13 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.function.Supplier;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.Icon;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
@@ -259,6 +261,89 @@ public final class AppTheme {
         button.setHorizontalAlignment(SwingConstants.CENTER);
         button.setVerticalAlignment(SwingConstants.CENTER);
         button.setIconTextGap(0);
+    }
+
+    public static void configureHeaderIconButton(
+            AbstractButton button,
+            String tooltip,
+            String iconPath,
+            int iconSize,
+            Supplier<Color> colorSupplier
+    ) {
+        if (button == null) return;
+        applyHeaderIconButtonStyle(button);
+        button.setToolTipText(tooltip);
+        SvgIconFactory.apply(button, iconPath, iconSize, iconSize, colorSupplier);
+    }
+
+    public static void configureDebugIconButton(
+            AbstractButton button,
+            String tooltip,
+            String iconPath,
+            Runnable action
+    ) {
+        configureHeaderIconButton(button, tooltip, iconPath, 18, AppTheme::getForeground);
+        if (button == null || action == null) return;
+        button.addActionListener(e -> {
+            if (DebugMode.isEnabled()) {
+                action.run();
+            }
+        });
+    }
+
+    public static void configureRowIconActionButton(
+            AbstractButton button,
+            String tooltip,
+            String iconPath,
+            int iconSize,
+            Supplier<Color> colorSupplier,
+            boolean prominent
+    ) {
+        if (button == null) return;
+        applyHeaderIconButtonStyle(button);
+        button.setToolTipText(tooltip);
+        button.setIcon(SvgIconFactory.create(iconPath, iconSize, iconSize, colorSupplier));
+
+        int buttonSize = prominent ? 54 : 38;
+        Dimension size = new Dimension(buttonSize, buttonSize);
+        button.setPreferredSize(size);
+        button.setMinimumSize(size);
+        button.setMaximumSize(size);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.putClientProperty("JButton.buttonType", "roundRect");
+        button.setBackground(getBackground());
+        button.setBorder(createRoundedBorder(new Insets(6, 6, 6, 6), getSubtleBorderColor(), 1f));
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                if (!button.isEnabled()) return;
+                button.setBackground(getSoftSelectionBackground());
+                button.repaint();
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(getBackground());
+                button.repaint();
+            }
+        });
+    }
+
+    public static void applyLargeControlButtonStyle(AbstractButton button, Icon icon) {
+        if (button == null) return;
+        button.setForeground(Color.WHITE);
+        button.setHorizontalAlignment(SwingConstants.CENTER);
+        button.setHorizontalTextPosition(SwingConstants.RIGHT);
+        button.setVerticalTextPosition(SwingConstants.CENTER);
+        button.setIconTextGap(8);
+        button.setFont(button.getFont().deriveFont(Font.BOLD, button.getFont().getSize2D() + 5f));
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setOpaque(false);
+        button.setContentAreaFilled(true);
+        button.putClientProperty("JButton.arc", getArc());
+        button.setIcon(icon);
     }
 
     public static void applyRefreshIconButtonStyle(AbstractButton button) {

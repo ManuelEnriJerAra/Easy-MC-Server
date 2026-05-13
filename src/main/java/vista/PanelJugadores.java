@@ -283,20 +283,12 @@ public class PanelJugadores extends JPanel {
     }
 
     private void configurarBotonCabecera(JButton boton, String titulo, String iconPath, Runnable onClick) {
-        boton.setToolTipText("Abrir " + titulo);
-        AppTheme.applyHeaderIconButtonStyle(boton);
-        SvgIconFactory.apply(boton, iconPath, 18, 18, AppTheme::getForeground);
+        AppTheme.configureHeaderIconButton(boton, "Abrir " + titulo, iconPath, 18, AppTheme::getForeground);
         boton.addActionListener(e -> onClick.run());
     }
 
     private void configurarBotonDebug(JButton boton, String tooltip, String iconPath, Runnable onClick) {
-        boton.setToolTipText(tooltip);
-        AppTheme.applyHeaderIconButtonStyle(boton);
-        SvgIconFactory.apply(boton, iconPath, 18, 18, AppTheme::getForeground);
-        boton.addActionListener(e -> {
-            if (!DebugMode.isEnabled()) return;
-            onClick.run();
-        });
+        AppTheme.configureDebugIconButton(boton, tooltip, iconPath, onClick);
     }
 
     private void actualizarAccionesCabecera() {
@@ -921,9 +913,7 @@ public class PanelJugadores extends JPanel {
 
     private void configureListIconButton(JButton button, String iconPath, String tooltip) {
         if (button == null) return;
-        AppTheme.applyHeaderIconButtonStyle(button);
-        SvgIconFactory.apply(button, iconPath, 18, 18, AppTheme::getForeground);
-        button.setToolTipText(tooltip);
+        AppTheme.configureHeaderIconButton(button, tooltip, iconPath, 18, AppTheme::getForeground);
     }
 
     private String formatearContadorLista(TipoLista tipo, int count) {

@@ -206,11 +206,11 @@ public class PanelMundo extends JPanel {
         guardarConfiguracionMundoButton.setText("Guardar ajustes del mundo");
         previewMenuButton.setText(null);
         AppTheme.applyRefreshIconButtonStyle(refrescarButton);
-        styleActionButton(importarButton);
-        styleActionButton(exportarButton);
-        styleActionButton(generarButton);
-        styleActionButton(generarPreviewButton);
-        styleActionButton(guardarConfiguracionMundoButton);
+        AppTheme.applyActionButtonStyle(importarButton);
+        AppTheme.applyActionButtonStyle(exportarButton);
+        AppTheme.applyActionButtonStyle(generarButton);
+        AppTheme.applyActionButtonStyle(generarPreviewButton);
+        AppTheme.applyActionButtonStyle(guardarConfiguracionMundoButton);
         stylePreviewOverlayButton(generarPreviewButton);
         stylePreviewMenuButton(previewMenuButton);
         applyDefaultPrimaryButtonStyle();
@@ -484,13 +484,7 @@ public class PanelMundo extends JPanel {
     }
 
     private void configurarBotonDebug(JButton boton, String tooltip, String iconPath, Runnable onClick) {
-        boton.setToolTipText(tooltip);
-        AppTheme.applyHeaderIconButtonStyle(boton);
-        SvgIconFactory.apply(boton, iconPath, 18, 18, AppTheme::getForeground);
-        boton.addActionListener(e -> {
-            if (!DebugMode.isEnabled()) return;
-            onClick.run();
-        });
+        AppTheme.configureDebugIconButton(boton, tooltip, iconPath, onClick);
     }
 
     private void actualizarAccionesDebugConexiones() {
@@ -1184,7 +1178,7 @@ public class PanelMundo extends JPanel {
     }
 
     private void applyDefaultWorldSettingsSaveButtonStyle() {
-        styleActionButton(guardarConfiguracionMundoButton);
+        AppTheme.applyActionButtonStyle(guardarConfiguracionMundoButton);
     }
 
     private boolean leerBoolean(Properties props, String key, boolean defaultValue) {
@@ -2998,17 +2992,12 @@ public class PanelMundo extends JPanel {
     }
 
     private void applyDefaultPrimaryButtonStyle() {
-        styleActionButton(usarEsteMundoButton);
-    }
-
-    private void styleActionButton(JButton button) {
-        if (button == null) return;
-        AppTheme.applyActionButtonStyle(button);
+        AppTheme.applyActionButtonStyle(usarEsteMundoButton);
     }
 
     private void stylePreviewMenuButton(JButton button) {
         if (button == null) return;
-        styleActionButton(button);
+        AppTheme.applyActionButtonStyle(button);
         button.setText(null);
         button.setIcon(SvgIconFactory.create("easymcicons/tuning-2.svg", 18, 18));
         button.setMargin(new Insets(4, 8, 4, 8));

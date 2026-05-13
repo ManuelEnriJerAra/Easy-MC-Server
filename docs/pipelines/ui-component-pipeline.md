@@ -11,6 +11,9 @@ Use `AppTheme` for:
 - rounded borders
 - action button styles
 - header icon button styles
+- configured header/debug icon buttons
+- fixed-size row/action icon buttons
+- large server control button styling
 - refresh icon behavior
 - scroll speed/style helpers where present
 

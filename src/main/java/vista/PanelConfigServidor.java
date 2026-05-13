@@ -409,12 +409,7 @@ public class PanelConfigServidor extends JPanel {
 
     private void applyDefaultSaveButtonStyle(){
         if(saveButton == null) return;
-        styleActionButton(saveButton);
-    }
-
-    private void styleActionButton(JButton button){
-        if(button == null) return;
-        AppTheme.applyActionButtonStyle(button);
+        AppTheme.applyActionButtonStyle(saveButton);
     }
 
 

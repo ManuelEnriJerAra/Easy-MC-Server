@@ -30,7 +30,6 @@ import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.JRootPane;
 import javax.swing.RepaintManager;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
@@ -244,18 +243,7 @@ public Dimension getMaximumSize() {
         if (button == null) {
             return;
         }
-        button.setForeground(Color.WHITE);
-        button.setHorizontalAlignment(SwingConstants.CENTER);
-        button.setHorizontalTextPosition(SwingConstants.RIGHT);
-        button.setVerticalTextPosition(SwingConstants.CENTER);
-        button.setIconTextGap(8);
-        button.setFont(button.getFont().deriveFont(Font.BOLD, button.getFont().getSize2D() + 5f));
-        button.setFocusPainted(false);
-        button.setBorderPainted(false);
-        button.setOpaque(false);
-        button.setContentAreaFilled(true);
-        button.putClientProperty("JButton.arc", AppTheme.getArc());
-        button.setIcon(flatIcon);
+        AppTheme.applyLargeControlButtonStyle(button, flatIcon);
         flatIcon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> Color.WHITE));
     }
 
