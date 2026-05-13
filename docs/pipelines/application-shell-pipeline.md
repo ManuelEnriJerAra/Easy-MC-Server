@@ -20,6 +20,7 @@ Responsibilities:
 - Wires global actions such as create/import/delete/open folder.
 - Toggles Debug mode through the Info navigation entry click sequence.
 - Updates the title when Debug mode changes.
+- Owns system tray integration when the platform supports `SystemTray`.
 
 Helpers:
 
@@ -57,6 +58,12 @@ Do not let individual panels keep stale selected-server assumptions. Prefer fetc
 `VentanaPrincipal` owns the hidden click sequence that toggles `DebugMode`. Panels should only consume `DebugMode`, not duplicate toggle logic.
 
 See `debug-mode-pipeline.md`.
+
+## System Tray And Exit
+
+`VentanaPrincipal` installs a tray icon when `SystemTray.isSupported()` succeeds. In that mode, the window close button hides the main frame instead of exiting the application. Explicit quit actions, including the tray `Salir de Easy MC Server` action and the no-tray fallback close path, keep the active-server confirmation and shutdown flow.
+
+Tray menu state should be rebuilt from `GestorServidores.getServidoresActivos()` so active server counts and names do not go stale. Swing frame restore and exit prompts launched from tray callbacks should return to the EDT.
 
 ## Layout Notes
 

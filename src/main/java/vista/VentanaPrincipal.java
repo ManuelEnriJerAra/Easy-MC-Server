@@ -55,6 +55,7 @@ public class VentanaPrincipal extends JFrame {
     private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
     private static final int SERVER_LIST_INITIAL_WIDTH = 320;
     private static final int SERVER_LIST_MIN_WIDTH = 280;
+    private static final int TRAY_SERVER_NAME_COLUMN_WIDTH = 28;
     private static final String PROP_MANAGED_ROUNDED_BORDER = "easy-mc-server.managedRoundedBorder";
     private static final String PROP_ROUNDED_BORDER_ENABLED = "easy-mc-server.roundedBorderEnabled";
 
@@ -93,6 +94,10 @@ public class VentanaPrincipal extends JFrame {
     private JPanel consolaCard; // card dentro del split del HOME
     private final Map<PaginaDerecha, JButton> navButtons = new EnumMap<>(PaginaDerecha.class);
     private final PropertyChangeListener debugModeListener;
+    private PropertyChangeListener trayServerStateListener;
+    private TrayIcon trayIcon;
+    private boolean trayDisponible;
+    private boolean avisoBandejaMostrado;
     private int infoClicksForDebug;
 
     public VentanaPrincipal(GestorServidores gestorServidores) {
@@ -100,6 +105,8 @@ public class VentanaPrincipal extends JFrame {
         this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         this.setSize(1280, 720);
         actualizarTituloDebug();
+        configurarIconoVentana();
+        instalarBandejaSistema();
         this.setLocationRelativeTo(null);
         debugModeListener = evt -> {
             if (!DebugMode.PROPERTY_ENABLED.equals(evt.getPropertyName())) return;
@@ -331,12 +338,17 @@ public class VentanaPrincipal extends JFrame {
         this.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                intentarCerrarAplicacion(gestorServidores);
+                if(trayDisponible){
+                    ocultarEnBandeja();
+                } else {
+                    solicitarSalidaAplicacion();
+                }
             }
 
             @Override
             public void windowClosed(WindowEvent e) {
                 DebugMode.removePropertyChangeListener(debugModeListener);
+                desinstalarBandejaSistema();
             }
         });
 
@@ -984,11 +996,223 @@ public class VentanaPrincipal extends JFrame {
         this.dispose();
     }
 
-    private void intentarCerrarAplicacion(GestorServidores gestorServidores){
+    private void configurarIconoVentana(){
+        Image image = cargarLogoAplicacion();
+        if(image != null){
+            setIconImage(image);
+        }
+    }
+
+    private Image cargarLogoAplicacion(){
+        java.net.URL urlImagen = getClass().getResource("/logo.png");
+        if(urlImagen == null) return null;
+        return new ImageIcon(urlImagen).getImage();
+    }
+
+    private void instalarBandejaSistema(){
+        try{
+            if(!SystemTray.isSupported()) return;
+
+            Image image = cargarLogoAplicacion();
+            if(image == null) return;
+
+            trayIcon = new TrayIcon(image, BASE_TITLE);
+            trayIcon.setImageAutoSize(true);
+            trayIcon.addActionListener(e -> restaurarDesdeBandeja());
+            trayIcon.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    refrescarMenuBandejaSiCorresponde(e);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    refrescarMenuBandejaSiCorresponde(e);
+                }
+
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if(e.getButton() == MouseEvent.BUTTON1){
+                        restaurarDesdeBandeja();
+                    }
+                }
+            });
+
+            trayServerStateListener = evt -> EventQueue.invokeLater(this::actualizarMenuBandeja);
+            gestorServidores.addPropertyChangeListener("estadoServidor", trayServerStateListener);
+            gestorServidores.addPropertyChangeListener("listaServidores", trayServerStateListener);
+            PanelEstadisticas.registrarGestorParaMuestras(gestorServidores);
+            actualizarMenuBandeja();
+            SystemTray.getSystemTray().add(trayIcon);
+            trayDisponible = true;
+        } catch (AWTException ex){
+            desinstalarBandejaSistema();
+        } catch (RuntimeException ex){
+            desinstalarBandejaSistema();
+        }
+    }
+
+    private void refrescarMenuBandejaSiCorresponde(MouseEvent e){
+        if(e == null) return;
+        if(e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3){
+            EventQueue.invokeLater(this::actualizarMenuBandeja);
+        }
+    }
+
+    private void actualizarMenuBandeja(){
+        if(trayIcon == null) return;
+
+        PopupMenu menu = new PopupMenu();
+        MenuItem abrir = new MenuItem("Abrir Easy MC Server");
+        abrir.addActionListener(e -> restaurarDesdeBandeja());
+        menu.add(abrir);
+        menu.addSeparator();
+
+        List<Server> activos = gestorServidores.getServidoresActivos();
+        MenuItem contador = new MenuItem("Servidores activos: " + activos.size());
+        contador.setEnabled(false);
+        menu.add(contador);
+
+        if(activos.isEmpty()){
+            MenuItem ninguno = new MenuItem("Ningun servidor activo");
+            ninguno.setEnabled(false);
+            menu.add(ninguno);
+        } else {
+            List<TrayServerMenuRow> serverRows = construirFilasServidoresBandeja(activos);
+            int ramColumnWidth = serverRows.stream()
+                    .mapToInt(row -> row.ramText().length())
+                    .max()
+                    .orElse(0);
+            for(TrayServerMenuRow row : serverRows){
+                MenuItem item = new MenuItem("- " + textoServidorActivoBandeja(row, ramColumnWidth));
+                aplicarFuenteMonoespaciadaBandeja(item);
+                item.setEnabled(false);
+                menu.add(item);
+            }
+        }
+
+        menu.addSeparator();
+        MenuItem salir = new MenuItem("Salir de Easy MC Server");
+        salir.addActionListener(e -> solicitarSalidaDesdeBandeja());
+        menu.add(salir);
+
+        trayIcon.setPopupMenu(menu);
+        trayIcon.setToolTip(BASE_TITLE + " - " + activos.size() + " servidor(es) activo(s)");
+    }
+
+    private List<TrayServerMenuRow> construirFilasServidoresBandeja(List<Server> activos){
+        List<TrayServerMenuRow> rows = new ArrayList<>();
+        if(activos == null || activos.isEmpty()) return rows;
+
+        for(Server server : activos){
+            rows.add(new TrayServerMenuRow(
+                    ajustarNombreServidorBandeja(nombreServidorBandeja(server)),
+                    textoRamServidorBandeja(server)
+            ));
+        }
+        return rows;
+    }
+
+    private String textoServidorActivoBandeja(TrayServerMenuRow row, int ramColumnWidth){
+        String serverName = rellenarDerecha(row.serverName(), TRAY_SERVER_NAME_COLUMN_WIDTH);
+        String ramText = rellenarIzquierda(row.ramText(), ramColumnWidth);
+        return serverName + "  RAM: " + ramText;
+    }
+
+    private String ajustarNombreServidorBandeja(String serverName){
+        String safeName = serverName == null || serverName.isBlank() ? "Servidor sin nombre" : serverName.trim();
+        if(safeName.length() <= TRAY_SERVER_NAME_COLUMN_WIDTH){
+            return safeName;
+        }
+        int visibleChars = Math.max(0, TRAY_SERVER_NAME_COLUMN_WIDTH - 3);
+        return safeName.substring(0, visibleChars) + "...";
+    }
+
+    private String rellenarDerecha(String text, int width){
+        String safeText = text == null ? "" : text;
+        if(safeText.length() >= width) return safeText;
+        return safeText + " ".repeat(width - safeText.length());
+    }
+
+    private String rellenarIzquierda(String text, int width){
+        String safeText = text == null ? "" : text;
+        if(safeText.length() >= width) return safeText;
+        return " ".repeat(width - safeText.length()) + safeText;
+    }
+
+    private void aplicarFuenteMonoespaciadaBandeja(MenuItem item){
+        if(item == null) return;
+        Font base = item.getFont();
+        int style = base != null ? base.getStyle() : Font.PLAIN;
+        int size = base != null ? base.getSize() : 12;
+        item.setFont(new Font(Font.MONOSPACED, style, size));
+    }
+
+    private String textoRamServidorBandeja(Server server){
+        ServerResourceSnapshot snapshot = PanelEstadisticas.getLiveResourceSnapshot(server);
+        return snapshot.ramPercentRounded() + "% / " + formatearRamBandeja(snapshot.ramMaxMb());
+    }
+
+    private String formatearRamBandeja(long ramMb){
+        if(ramMb <= 0L) return "-";
+        if(ramMb < 1024L) return ramMb + " MB";
+
+        double ramGb = ramMb / 1024d;
+        if(Math.abs(ramGb - Math.rint(ramGb)) < 0.05d){
+            return String.format(java.util.Locale.ROOT, "%.0f GB", ramGb);
+        }
+        return String.format(java.util.Locale.ROOT, "%.1f GB", ramGb);
+    }
+
+    private String nombreServidorBandeja(Server server){
+        if(server == null) return "Servidor desconocido";
+        String displayName = server.getDisplayName();
+        if(displayName != null && !displayName.isBlank()) return displayName;
+        String id = server.getId();
+        if(id != null && !id.isBlank()) return id;
+        return "Servidor sin nombre";
+    }
+
+    private record TrayServerMenuRow(String serverName, String ramText) {}
+
+    private void ocultarEnBandeja(){
+        actualizarMenuBandeja();
+        setVisible(false);
+        if(!avisoBandejaMostrado && trayIcon != null){
+            avisoBandejaMostrado = true;
+            trayIcon.displayMessage(
+                    BASE_TITLE,
+                    "Easy MC Server sigue ejecutandose en segundo plano.",
+                    TrayIcon.MessageType.INFO
+            );
+        }
+    }
+
+    private void restaurarDesdeBandeja(){
+        SwingUtilities.invokeLater(this::restaurarVentanaPrincipal);
+    }
+
+    private void restaurarVentanaPrincipal(){
+        if(!isDisplayable()) return;
+        setVisible(true);
+        setExtendedState(getExtendedState() & ~Frame.ICONIFIED);
+        toFront();
+        requestFocus();
+    }
+
+    private void solicitarSalidaDesdeBandeja(){
+        SwingUtilities.invokeLater(this::solicitarSalidaAplicacion);
+    }
+
+    private void solicitarSalidaAplicacion(){
+        if(!isVisible()){
+            restaurarVentanaPrincipal();
+        }
         if(!confirmarSalidaConfiguracion(null, null)) return;
 
         List<Server> activos = gestorServidores.getServidoresActivos();
         if(activos.isEmpty()){
+            desinstalarBandejaSistema();
             this.dispose();
             System.exit(0);
             return;
@@ -1031,6 +1255,22 @@ public class VentanaPrincipal extends JFrame {
                 });
             }
         }, "shutdown-servidores").start();
+    }
+
+    private void desinstalarBandejaSistema(){
+        if(trayServerStateListener != null){
+            gestorServidores.removePropertyChangeListener("estadoServidor", trayServerStateListener);
+            gestorServidores.removePropertyChangeListener("listaServidores", trayServerStateListener);
+            trayServerStateListener = null;
+        }
+        if(trayIcon != null){
+            try{
+                SystemTray.getSystemTray().remove(trayIcon);
+            } catch (RuntimeException ignored){
+            }
+            trayIcon = null;
+        }
+        trayDisponible = false;
     }
 
     private PanelServidores getPanelServidores(GestorServidores gestorServidores) {

@@ -729,6 +729,12 @@ public class PanelEstadisticas extends JPanel {
         );
     }
 
+    static void registrarGestorParaMuestras(GestorServidores gestorServidores) {
+        if (gestorServidores != null) {
+            REGISTERED_GESTORES.add(gestorServidores);
+        }
+    }
+
     private int resolveMaxRamMb() {
         if (server == null || server.getServerConfig() == null) {
             return 1;
