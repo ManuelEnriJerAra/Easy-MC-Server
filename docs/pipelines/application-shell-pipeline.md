@@ -8,6 +8,8 @@ Main class: `src/main/java/controlador/Main.java`.
 
 The application starts the Swing UI, configures Look and Feel/theme, and opens the main window.
 
+Startup first acquires `controlador.ApplicationInstanceLock`, an OS file lock stored under `AppPaths.locksDirectory()`. The first instance also opens a localhost handoff listener so duplicate launches can ask the running app to restore/focus its current window before exiting. Keep this guard before theme/config loading, controller construction, and window creation so a duplicate launch exits without mutating shared app state.
+
 ## Main Window
 
 Primary class: `src/main/java/vista/VentanaPrincipal.java`.

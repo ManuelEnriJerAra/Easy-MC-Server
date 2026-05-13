@@ -54,7 +54,7 @@ public class VentanaPrincipal extends JFrame {
     private static final String BASE_TITLE = "Easy-MC-Server";
     private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
     private static final int SERVER_LIST_INITIAL_WIDTH = 320;
-    private static final int SERVER_LIST_MIN_WIDTH = 280;
+    private static final int SERVER_LIST_MIN_WIDTH = 220;
     private static final int TRAY_SERVER_NAME_COLUMN_WIDTH = 28;
     private static final String PROP_MANAGED_ROUNDED_BORDER = "easy-mc-server.managedRoundedBorder";
     private static final String PROP_ROUNDED_BORDER_ENABLED = "easy-mc-server.roundedBorderEnabled";
@@ -377,13 +377,14 @@ public class VentanaPrincipal extends JFrame {
         wrapperIzquierdo.setBackground(bgApp);
         wrapperIzquierdo.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
         wrapperIzquierdo.setPreferredSize(new Dimension(SERVER_LIST_INITIAL_WIDTH, 0));
-        wrapperIzquierdo.setMinimumSize(new Dimension(SERVER_LIST_MIN_WIDTH, 0));
+        wrapperIzquierdo.setMinimumSize(new Dimension(0, 0));
 
         wrapperDerecho = new JPanel(new BorderLayout());
         wrapperDerecho.add(panelDerecho, BorderLayout.CENTER);
         wrapperDerecho.setOpaque(true);
         wrapperDerecho.setBackground(bgApp);
         wrapperDerecho.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 8));
+        wrapperDerecho.setMinimumSize(new Dimension(0, 0));
 
         splitPrincipal = new FlatSplitPane();
         splitPrincipal.setOrientation(JSplitPane.HORIZONTAL_SPLIT);
@@ -413,7 +414,6 @@ public class VentanaPrincipal extends JFrame {
                     JRootPane root = getRootPane();
                     if(root != null){
                         RepaintManager.currentManager(root).markCompletelyDirty(root);
-                        root.revalidate();
                         root.repaint();
                     }
                 });
@@ -447,7 +447,7 @@ public class VentanaPrincipal extends JFrame {
 
         panelDerechoCards.removeAll();
         VentanaPrincipalRightContentBuilder.Result content = new VentanaPrincipalRightContentBuilder()
-                .build(server, gestorServidores, this.getWidth(), this::actualizarServidorTrasConversion);
+                .build(server, gestorServidores, this::actualizarServidorTrasConversion);
         splitHome = content.splitHome();
         jugadoresCard = content.jugadoresCard();
         consolaCard = content.consolaCard();
@@ -472,7 +472,6 @@ public class VentanaPrincipal extends JFrame {
         panelDerechoCards.add(content.configPanel(), PaginaDerecha.CONFIG.name());
         panelDerechoCards.add(content.extensionesPanel(), PaginaDerecha.EXTENSIONES.name());
         panelDerechoCards.add(content.statsPanel(), PaginaDerecha.STATS.name());
-        panelDerechoCards.add(content.infoPanel(), PaginaDerecha.INFO.name());
 
         PaginaDerecha paginaAMostrar = paginaDerechaActual != null ? paginaDerechaActual : PaginaDerecha.HOME;
         setPaginaDerecha(paginaAMostrar);
@@ -511,7 +510,7 @@ public class VentanaPrincipal extends JFrame {
         PanelTotalServidor panelTotalServidor = new PanelTotalServidor(gestorServidores);
         PanelJugadores panelJugadores = new PanelJugadores(gestorServidores, false);
         PanelConsola panelConsola = new PanelConsola(gestorServidores);
-        panelConsola.setPreferredSize(new Dimension(this.getWidth(), 100));
+        panelConsola.setPreferredSize(new Dimension(0, 100));
 
         // Todo lo que está encima de los jugadores en un "card" con borde redondeado (FlatLaf)
         CardPanel headerCard = new CardPanel("Servidor seleccionado");
@@ -707,6 +706,7 @@ public class VentanaPrincipal extends JFrame {
 
     private void setPaginaDerecha(PaginaDerecha pagina){
         if(pagina == null) pagina = PaginaDerecha.HOME;
+        if(pagina == PaginaDerecha.INFO) pagina = PaginaDerecha.HOME;
         paginaDerechaActual = pagina;
         cardDerecho.show(panelDerechoCards, pagina.name());
 
@@ -1316,6 +1316,10 @@ public class VentanaPrincipal extends JFrame {
     private void navegarAPaginaDerecha(PaginaDerecha pagina){
         if(pagina == null) pagina = PaginaDerecha.HOME;
         registrarClickInfoDebug(pagina);
+        if(pagina == PaginaDerecha.INFO){
+            setPaginaDerecha(paginaDerechaActual == PaginaDerecha.INFO ? PaginaDerecha.HOME : paginaDerechaActual);
+            return;
+        }
         if(pagina == paginaDerechaActual){
             setPaginaDerecha(pagina);
             return;

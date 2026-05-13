@@ -242,7 +242,7 @@ final class ExtensionDetailsLayout extends JPanel {
     static final class DetailBodyPanel extends JPanel implements Scrollable {
         @Override
         public Dimension getPreferredScrollableViewportSize() {
-            return getPreferredSize();
+            return new Dimension(320, 240);
         }
 
         @Override

@@ -17,6 +17,7 @@ import vista.VentanaPrincipal;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.IOException;
 
 import com.formdev.flatlaf.util.SystemInfo;
 
@@ -24,6 +25,7 @@ public class Main {
 
     public static NoServerFrame noServerFrame;
     public static VentanaPrincipal ventanaPrincipal;
+    private static ApplicationInstanceLock instanceLock;
 
     public static final int DEFAULT_ARC = 20;
 
@@ -50,6 +52,10 @@ public class Main {
     }
 
     public static void main(String[] args){
+        if (!adquirirBloqueoInstancia()) {
+            return;
+        }
+
         SwingUtilities.invokeLater(()->{
             aplicarTemaInicial();
             if (SystemInfo.isLinux) {
@@ -73,6 +79,87 @@ public class Main {
                 gestorServidores.mostrarAvisoArranqueSiProcede(ventanaPrincipal);
             }
         });
+    }
+
+    private static boolean adquirirBloqueoInstancia() {
+        try {
+            instanceLock = ApplicationInstanceLock.tryAcquire();
+            if (instanceLock == null) {
+                if (!ApplicationInstanceLock.requestExistingInstanceFocus()) {
+                    mostrarAvisoInstanciaEnEjecucion();
+                }
+                return false;
+            }
+            instanceLock.startHandoffServer(Main::enfocarVentanaAplicacion);
+            Runtime.getRuntime().addShutdownHook(new Thread(Main::liberarBloqueoInstancia, "easy-mc-server-lock-release"));
+            return true;
+        } catch (IOException e) {
+            System.err.println("No se pudo preparar el bloqueo de instancia: " + e.getMessage());
+            mostrarAvisoBloqueoNoDisponible();
+            return false;
+        }
+    }
+
+    private static void liberarBloqueoInstancia() {
+        if (instanceLock == null) {
+            return;
+        }
+        try {
+            instanceLock.close();
+        } catch (IOException e) {
+            System.err.println("No se pudo liberar el bloqueo de instancia: " + e.getMessage());
+        }
+    }
+
+    private static void mostrarAvisoInstanciaEnEjecucion() {
+        mostrarAvisoArranque("Easy MC Server ya está en ejecución.");
+    }
+
+    private static void mostrarAvisoBloqueoNoDisponible() {
+        mostrarAvisoArranque("No se pudo comprobar si Easy MC Server ya está en ejecución.");
+    }
+
+    private static void mostrarAvisoArranque(String mensaje) {
+        if (GraphicsEnvironment.isHeadless()) {
+            System.err.println(mensaje);
+            return;
+        }
+        JOptionPane.showMessageDialog(
+                null,
+                mensaje,
+                "Easy MC Server",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
+    private static void enfocarVentanaAplicacion() {
+        SwingUtilities.invokeLater(() -> {
+            Window target = buscarVentanaAplicacion();
+            if (target == null || !target.isDisplayable()) {
+                return;
+            }
+            target.setVisible(true);
+            if (target instanceof Frame frame) {
+                frame.setExtendedState(frame.getExtendedState() & ~Frame.ICONIFIED);
+            }
+            target.toFront();
+            target.requestFocus();
+        });
+    }
+
+    private static Window buscarVentanaAplicacion() {
+        if (ventanaPrincipal != null && ventanaPrincipal.isDisplayable()) {
+            return ventanaPrincipal;
+        }
+        if (noServerFrame != null && noServerFrame.isDisplayable()) {
+            return noServerFrame;
+        }
+        for (Window window : Window.getWindows()) {
+            if ((window instanceof VentanaPrincipal || window instanceof NoServerFrame) && window.isDisplayable()) {
+                return window;
+            }
+        }
+        return null;
     }
 
     private static void aplicarTemaInicial() {

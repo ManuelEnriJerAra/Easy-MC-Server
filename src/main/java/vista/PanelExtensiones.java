@@ -104,8 +104,8 @@ final class PanelExtensiones extends JPanel {
         splitPane.setResizeWeight(0.56d);
         splitPane.setContinuousLayout(true);
         splitPane.setDividerSize(10);
-        listCard.setMinimumSize(new Dimension(420, 360));
-        detailsCard.setMinimumSize(new Dimension(420, 360));
+        listCard.setMinimumSize(new Dimension(0, 0));
+        detailsCard.setMinimumSize(new Dimension(0, 0));
         add(splitPane, BorderLayout.CENTER);
 
         configurarPanelListado();
@@ -246,7 +246,8 @@ final class PanelExtensiones extends JPanel {
                     return;
                 }
                 Rectangle bounds = extensionsList.getCellBounds(index, index);
-                if (bounds != null && e.getX() >= bounds.x + bounds.width - 58) {
+                int actionWidth = viewMode == ExtensionListViewMode.COMPACT ? 42 : 52;
+                if (bounds != null && index == extensionListHoverIndex && e.getX() >= bounds.x + bounds.width - actionWidth) {
                     extensionsList.setSelectedIndex(index);
                     eliminarExtensionSeleccionada();
                 }
@@ -1461,14 +1462,6 @@ final class PanelExtensiones extends JPanel {
         return ExtensionStatusPresentation.background(toCompatibilityStatus(status));
     }
 
-    private String statusIconPath(VisualStatus status) {
-        return ExtensionStatusPresentation.iconPath(toCompatibilityStatus(status));
-    }
-
-    private Color statusIconColor(VisualStatus status) {
-        return ExtensionStatusPresentation.iconColor(toCompatibilityStatus(status));
-    }
-
     private ExtensionCompatibilityStatus toCompatibilityStatus(VisualStatus status) {
         return switch (status == null ? VisualStatus.WARNING : status) {
             case OK -> ExtensionCompatibilityStatus.COMPATIBLE;
@@ -1954,6 +1947,11 @@ final class PanelExtensiones extends JPanel {
     }
 
     private final class ExtensionCellRenderer implements ListCellRenderer<ServerExtension> {
+        private static final int DETAILED_ICON_SIZE = 52;
+        private static final int DETAILED_ACTION_SIZE = 52;
+        private static final int COMPACT_ICON_SIZE = 42;
+        private static final int COMPACT_ACTION_SIZE = 42;
+
         @Override
         public Component getListCellRendererComponent(JList<? extends ServerExtension> list,
                                                       ServerExtension value,
@@ -1965,8 +1963,9 @@ final class PanelExtensiones extends JPanel {
             if (compact) {
                 return createCompactRow(list, value, status, index, isSelected);
             }
-            int rowWidth = Math.max(360, list.getWidth() - 18);
-            JPanel card = new JPanel(new BorderLayout(10, 0));
+            int cardHgap = 10;
+            int contentHgap = 8;
+            JPanel card = new JPanel(new BorderLayout(cardHgap, 0));
             card.setOpaque(true);
             card.setBorder(AppTheme.createRoundedBorder(
                     new Insets(0, 0, 0, 0),
@@ -1975,63 +1974,58 @@ final class PanelExtensiones extends JPanel {
             ));
             card.setBackground(isSelected ? AppTheme.getSoftSelectionBackground() : AppTheme.getPanelBackground());
 
-            JLabel icon = new JLabel(resolveExtensionIcon(value, 52));
+            JLabel icon = new JLabel(resolveExtensionIcon(value, DETAILED_ICON_SIZE));
             icon.setHorizontalAlignment(SwingConstants.CENTER);
             icon.setVerticalAlignment(SwingConstants.CENTER);
             icon.setOpaque(true);
             icon.setBackground(AppTheme.withAlpha(AppTheme.getForeground(), 12));
-            icon.setPreferredSize(new Dimension(compact ? 38 : 48, compact ? 38 : 58));
-            icon.setPreferredSize(new Dimension(52, 52));
+            icon.setPreferredSize(new Dimension(DETAILED_ICON_SIZE, DETAILED_ICON_SIZE));
             card.add(icon, BorderLayout.WEST);
 
-            JPanel content = new JPanel(new BorderLayout(8, 0));
+            JPanel content = new JPanel(new BorderLayout(contentHgap, 0));
             content.setOpaque(false);
 
             JPanel textBlock = new JPanel(new BorderLayout(0, 2));
             textBlock.setOpaque(false);
 
-            JPanel titleRow = new JPanel();
-            titleRow.setOpaque(false);
-            titleRow.setLayout(new BoxLayout(titleRow, BoxLayout.X_AXIS));
-
-            int iconWidth = 64;
-            int actionWidth = 58;
-            int titleBudget = Math.max(190, rowWidth - iconWidth - actionWidth - 42);
-            JLabel nameLabel = new JLabel(ellipsize(resolveExtensionName(value), list.getFont().deriveFont(Font.BOLD, 15.5f), titleBudget / 2));
-            nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 15.5f));
-            nameLabel.setToolTipText(resolveExtensionName(value));
-            titleRow.add(nameLabel);
-            titleRow.add(Box.createHorizontalStrut(10));
-
+            Font nameFont = list.getFont().deriveFont(Font.BOLD, 15.5f);
+            Font metaFont = list.getFont().deriveFont(Font.PLAIN, 12.5f);
+            String extensionName = resolveExtensionName(value);
             String titleMeta = extensionTypeLabel(value) + " / by " + resolveAuthor(value) + " / " + describeSource(value == null ? null : value.getSource());
-            JLabel metaLabel = new JLabel(ellipsize(titleMeta, list.getFont().deriveFont(Font.PLAIN, 12.5f), titleBudget / 2));
-            metaLabel.setFont(metaLabel.getFont().deriveFont(Font.PLAIN, 12.5f));
+            JLabel nameLabel = new JLabel(extensionName);
+            nameLabel.setFont(nameFont);
+            nameLabel.setToolTipText(resolveExtensionName(value));
+
+            JLabel metaLabel = new JLabel(titleMeta);
+            metaLabel.setFont(metaFont);
             metaLabel.setForeground(AppTheme.getMutedForeground());
             metaLabel.setToolTipText(titleMeta);
-            titleRow.add(metaLabel);
+            JPanel titleRow = new ExtensionTitleRow(nameLabel, metaLabel, InstalledExtensionRowTextLayout.TITLE_GAP);
             textBlock.add(titleRow, BorderLayout.NORTH);
 
             String description = rowDescription(value, status);
-            JLabel descriptionLabel = new JLabel(ellipsize(description, list.getFont().deriveFont(13.25f), Math.max(120, rowWidth - iconWidth - actionWidth - 36)));
+            JLabel descriptionLabel = new JLabel(description);
             descriptionLabel.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 210));
             descriptionLabel.setFont(descriptionLabel.getFont().deriveFont(13.25f));
+            constrainLabelWidth(descriptionLabel);
             descriptionLabel.setVerticalAlignment(SwingConstants.TOP);
             descriptionLabel.setToolTipText(description);
             textBlock.add(descriptionLabel, BorderLayout.CENTER);
 
-            JPanel eastPanel = new JPanel(new BorderLayout(8, 0));
-            eastPanel.setOpaque(false);
             boolean hover = index == extensionListHoverIndex;
-            eastPanel.add(hover ? createRowActionIcon(52) : createStatusIcon(status, 52), BorderLayout.EAST);
 
             content.add(textBlock, BorderLayout.CENTER);
-            content.add(eastPanel, BorderLayout.EAST);
+            if (hover) {
+                content.add(createRowActionIcon(DETAILED_ACTION_SIZE), BorderLayout.EAST);
+            }
             card.add(content, BorderLayout.CENTER);
+            card.setToolTipText(status == null ? null : status.summary());
             return card;
         }
 
         private Component createCompactRow(JList<? extends ServerExtension> list, ServerExtension value, InstalledExtensionStatus status, int index, boolean isSelected) {
-            JPanel row = new JPanel(new BorderLayout(8, 0));
+            int rowHgap = 8;
+            JPanel row = new JPanel(new BorderLayout(rowHgap, 0));
             row.setOpaque(true);
             row.setBackground(isSelected ? AppTheme.getSoftSelectionBackground() : AppTheme.getPanelBackground());
             row.setBorder(AppTheme.createRoundedBorder(
@@ -2040,31 +2034,30 @@ final class PanelExtensiones extends JPanel {
                     1f
             ));
 
-            JLabel icon = new JLabel(resolveExtensionIcon(value, 42));
+            JLabel icon = new JLabel(resolveExtensionIcon(value, COMPACT_ICON_SIZE));
             icon.setHorizontalAlignment(SwingConstants.CENTER);
             icon.setVerticalAlignment(SwingConstants.CENTER);
-            icon.setPreferredSize(new Dimension(42, 42));
-            icon.setMinimumSize(new Dimension(42, 42));
+            icon.setPreferredSize(new Dimension(COMPACT_ICON_SIZE, COMPACT_ICON_SIZE));
+            icon.setMinimumSize(new Dimension(COMPACT_ICON_SIZE, COMPACT_ICON_SIZE));
             row.add(icon, BorderLayout.WEST);
 
             JPanel titleRow = new JPanel();
-            titleRow.setOpaque(false);
-            titleRow.setLayout(new BoxLayout(titleRow, BoxLayout.X_AXIS));
             titleRow.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
-            int textBudget = Math.max(120, list.getWidth() - 120);
-            JLabel nameLabel = new JLabel(ellipsize(resolveExtensionName(value), list.getFont().deriveFont(Font.BOLD, 13.25f), textBudget / 2));
-            nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 13.25f));
+            Font nameFont = list.getFont().deriveFont(Font.BOLD, 13.25f);
+            Font metaFont = list.getFont().deriveFont(Font.PLAIN, 12.25f);
+            String extensionName = resolveExtensionName(value);
+            String titleMeta = extensionTypeLabel(value) + " / by " + resolveAuthor(value) + " / " + describeSource(value == null ? null : value.getSource());
+            JLabel nameLabel = new JLabel(extensionName);
+            nameLabel.setFont(nameFont);
             nameLabel.setForeground(AppTheme.getForeground());
             nameLabel.setToolTipText(resolveExtensionName(value));
-            titleRow.add(nameLabel);
-            titleRow.add(Box.createHorizontalStrut(8));
 
-            String titleMeta = extensionTypeLabel(value) + " / by " + resolveAuthor(value) + " / " + describeSource(value == null ? null : value.getSource());
-            JLabel metaLabel = new JLabel(ellipsize(titleMeta, list.getFont().deriveFont(Font.PLAIN, 12.25f), textBudget / 2));
-            metaLabel.setFont(metaLabel.getFont().deriveFont(Font.PLAIN, 12.25f));
+            JLabel metaLabel = new JLabel(titleMeta);
+            metaLabel.setFont(metaFont);
             metaLabel.setForeground(AppTheme.getMutedForeground());
             metaLabel.setToolTipText(titleMeta);
-            titleRow.add(metaLabel);
+            titleRow = new ExtensionTitleRow(nameLabel, metaLabel, InstalledExtensionRowTextLayout.COMPACT_TITLE_GAP);
+            titleRow.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
 
             JPanel center = new JPanel(new GridBagLayout());
             center.setOpaque(false);
@@ -2077,24 +2070,18 @@ final class PanelExtensiones extends JPanel {
             center.add(titleRow, gbc);
             row.add(center, BorderLayout.CENTER);
             boolean hover = index == extensionListHoverIndex;
-            row.add(hover ? createRowActionIcon(42) : createStatusIcon(status, 42), BorderLayout.EAST);
+            if (hover) {
+                row.add(createRowActionIcon(COMPACT_ACTION_SIZE), BorderLayout.EAST);
+            }
+            row.setToolTipText(status == null ? null : status.summary());
             return row;
         }
 
-        private JLabel createStatusIcon(InstalledExtensionStatus status, int size) {
-            VisualStatus visualStatus = visualStatus(status);
-            JLabel label = new JLabel();
-            label.setHorizontalAlignment(SwingConstants.CENTER);
-            label.setVerticalAlignment(SwingConstants.CENTER);
-            label.setPreferredSize(new Dimension(size, size));
-            label.setMinimumSize(new Dimension(size, size));
-            label.setToolTipText(status == null ? "Estado desconocido" : status.summary());
-            int iconSize = Math.max(28, Math.min(size - 10, 34));
-            String iconPath = statusIconPath(visualStatus);
-            if (iconPath != null) {
-                label.setIcon(SvgIconFactory.create(iconPath, iconSize, iconSize, () -> statusIconColor(visualStatus)));
-            }
-            return label;
+        private void constrainLabelWidth(JLabel label) {
+            Dimension preferred = label.getPreferredSize();
+            int height = preferred == null ? 1 : Math.max(1, preferred.height);
+            label.setMinimumSize(new Dimension(0, height));
+            label.setPreferredSize(new Dimension(0, height));
         }
 
         private JLabel createRowActionIcon(int size) {
@@ -2111,9 +2098,74 @@ final class PanelExtensiones extends JPanel {
 
     }
 
+    private final class ExtensionTitleRow extends JPanel {
+        private final JLabel leadingLabel;
+        private final JLabel trailingLabel;
+        private final int gap;
+
+        private ExtensionTitleRow(JLabel leadingLabel, JLabel trailingLabel, int gap) {
+            this.leadingLabel = leadingLabel;
+            this.trailingLabel = trailingLabel;
+            this.gap = Math.max(0, gap);
+            setOpaque(false);
+            setLayout(null);
+            constrainLabel(leadingLabel);
+            constrainLabel(trailingLabel);
+            add(leadingLabel);
+            add(trailingLabel);
+        }
+
+        @Override
+        public void doLayout() {
+            Insets insets = getInsets();
+            int x = insets.left;
+            int y = insets.top;
+            int width = Math.max(0, getWidth() - insets.left - insets.right);
+            int height = Math.max(0, getHeight() - insets.top - insets.bottom);
+            int naturalLeading = leadingLabel.getFontMetrics(leadingLabel.getFont()).stringWidth(leadingLabel.getText());
+            int naturalTrailing = trailingLabel.getFontMetrics(trailingLabel.getFont()).stringWidth(trailingLabel.getText());
+            InstalledExtensionRowTextLayout.Allocation allocation = InstalledExtensionRowTextLayout.allocateTitleWidths(
+                    width,
+                    gap,
+                    naturalLeading,
+                    naturalTrailing
+            );
+            int leadingWidth = allocation.leadingWidth();
+            int trailingWidth = allocation.trailingWidth();
+            int actualGap = leadingWidth > 0 && trailingWidth > 0 ? Math.min(gap, Math.max(0, width - leadingWidth - trailingWidth)) : 0;
+            leadingLabel.setBounds(x, y, leadingWidth, height);
+            trailingLabel.setBounds(x + leadingWidth + actualGap, y, trailingWidth, height);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            Insets insets = getInsets();
+            return new Dimension(0, preferredContentHeight() + insets.top + insets.bottom);
+        }
+
+        @Override
+        public Dimension getMinimumSize() {
+            Insets insets = getInsets();
+            return new Dimension(0, preferredContentHeight() + insets.top + insets.bottom);
+        }
+
+        private int preferredContentHeight() {
+            return Math.max(
+                    leadingLabel.getPreferredSize().height,
+                    trailingLabel.getPreferredSize().height
+            );
+        }
+
+        private void constrainLabel(JLabel label) {
+            Dimension preferred = label.getPreferredSize();
+            int height = preferred == null ? 1 : Math.max(1, preferred.height);
+            label.setMinimumSize(new Dimension(0, height));
+            label.setPreferredSize(new Dimension(0, height));
+        }
+    }
+
     private String shortDescription(ServerExtension extension) {
-        String description = baseDescription(extension).replace('\n', ' ').trim();
-        return description.length() > 110 ? description.substring(0, 107) + "..." : description;
+        return baseDescription(extension).replace('\n', ' ').trim();
     }
 
     private String rowDescription(ServerExtension extension, InstalledExtensionStatus status) {

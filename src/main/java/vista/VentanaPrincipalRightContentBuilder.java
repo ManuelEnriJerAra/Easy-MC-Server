@@ -15,7 +15,6 @@ final class VentanaPrincipalRightContentBuilder {
             JPanel configPanel,
             JPanel extensionesPanel,
             JPanel statsPanel,
-            JPanel infoPanel,
             JSplitPane splitHome,
             CardPanel jugadoresCard,
             JPanel consolaCard,
@@ -27,7 +26,6 @@ final class VentanaPrincipalRightContentBuilder {
     Result build(
             Server server,
             GestorServidores gestorServidores,
-            int preferredConsoleHeight,
             Consumer<Server> onServerConverted
     ) {
         JPanel home = new JPanel(new BorderLayout(0, 8));
@@ -36,7 +34,7 @@ final class VentanaPrincipalRightContentBuilder {
         PanelTotalServidor panelTotalServidor = new PanelTotalServidor(gestorServidores);
         PanelJugadores panelJugadores = new PanelJugadores(gestorServidores, false);
         PanelConsola panelConsola = new PanelConsola(gestorServidores);
-        panelConsola.setPreferredSize(new Dimension(preferredConsoleHeight, 100));
+        panelConsola.setPreferredSize(new Dimension(0, 100));
 
         CardPanel headerCard = new CardPanel("Servidor seleccionado");
         headerCard.setBorder(BorderFactory.createEmptyBorder());
@@ -69,8 +67,6 @@ final class VentanaPrincipalRightContentBuilder {
         JPanel mundo = new PanelMundo(gestorServidores, panelConfigServidor::reload);
         JPanel extensiones = new PanelExtensiones(gestorServidores, server);
         JPanel stats = new PanelEstadisticas(gestorServidores, server);
-        JPanel info = new JPanel(new BorderLayout());
-        info.setOpaque(false);
 
         return new Result(
                 home,
@@ -78,7 +74,6 @@ final class VentanaPrincipalRightContentBuilder {
                 panelConfigServidor,
                 extensiones,
                 stats,
-                info,
                 splitHome,
                 jugadoresCard,
                 consolaCard,

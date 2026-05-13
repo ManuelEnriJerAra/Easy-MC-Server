@@ -1340,11 +1340,8 @@ public class PanelMundo extends JPanel {
             vacio.setAlignmentX(Component.LEFT_ALIGNMENT);
             conexionesPanel.add(vacio);
         } else {
-            for (int i = 0; i < conexiones.size(); i++) {
-                conexionesPanel.add(crearFilaConexion(conexiones.get(i)));
-                if (i + 1 < conexiones.size()) {
-                    conexionesPanel.add(Box.createVerticalStrut(8));
-                }
+            for (RecentConnection conexion : conexiones) {
+                conexionesPanel.add(crearFilaConexion(conexion));
             }
         }
 
@@ -1356,24 +1353,19 @@ public class PanelMundo extends JPanel {
         JPanel fila = new JPanel(new BorderLayout(10, 0));
         fila.setOpaque(false);
         fila.setAlignmentX(Component.LEFT_ALIGNMENT);
-        fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
 
         PlayerIdentityView identidad = new PlayerIdentityView(conexion.username(), PlayerIdentityView.SizePreset.COMPACT);
+        identidad.setAlignmentX(Component.LEFT_ALIGNMENT);
+
         JLabel fecha = new JLabel(conexion.timestamp());
         fecha.setForeground(AppTheme.getMutedForeground());
-        JLabel ubicacion = new JLabel(valorOPlaceholder(conexion.location()));
-        ubicacion.setForeground(AppTheme.getMutedForeground());
-        ubicacion.setFont(ubicacion.getFont().deriveFont(Font.PLAIN, 11f));
+        fecha.setVerticalAlignment(SwingConstants.CENTER);
 
-        JPanel texto = new JPanel();
-        texto.setOpaque(false);
-        texto.setLayout(new BoxLayout(texto, BoxLayout.Y_AXIS));
-        texto.add(identidad);
-        if (conexion.location() != null && !conexion.location().isBlank()) {
-            texto.add(ubicacion);
-        }
+        int rowHeight = Math.max(identidad.getPreferredSize().height, fecha.getPreferredSize().height);
+        fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, rowHeight));
+        fila.setMinimumSize(new Dimension(0, rowHeight));
 
-        fila.add(texto, BorderLayout.CENTER);
+        fila.add(identidad, BorderLayout.CENTER);
         fila.add(fecha, BorderLayout.EAST);
         return fila;
     }

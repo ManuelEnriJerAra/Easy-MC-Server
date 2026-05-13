@@ -45,6 +45,8 @@ Data source order:
 
 Keep the display bounded to the existing recent-connection limit.
 
+Recent-connection rows use `PlayerIdentityView.SizePreset.COMPACT` without vertical gaps between users, with the timestamp centered in the trailing area. Location/coordinate data may remain in the internal `RecentConnection` value, but this compact card does not render it.
+
 ## Preview Pipeline
 
 Preview state is coordinated between UI controls, metadata, and background render workers.
