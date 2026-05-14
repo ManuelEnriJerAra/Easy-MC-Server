@@ -18,6 +18,8 @@ The server creation flow is centered in `src/main/java/controlador/GestorServido
 - `parent`: choose the parent folder through `JFileChooser`.
 - `folderName`: edit the final child folder name.
 
+The wizard keeps loaded creation options per platform for the lifetime of the dialog. The underlying platform metadata clients also use the shared in-memory cache from `platform-adapters-pipeline.md`, so switching platforms in one wizard session should not repeat identical remote version calls.
+
 The `folderName` step uses a custom visual path editor:
 
 - The parent path is rendered with leading ellipsis when it cannot fit.

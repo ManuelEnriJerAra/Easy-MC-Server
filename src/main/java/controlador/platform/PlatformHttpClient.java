@@ -13,20 +13,29 @@ interface PlatformHttpClient {
     JsonElement getJson(String url) throws IOException;
 }
 
-final class UrlConnectionPlatformHttpClient implements PlatformHttpClient {
-    private static final int CONNECT_TIMEOUT_MS = 5_000;
-    private static final int READ_TIMEOUT_MS = 10_000;
-    private static final String USER_AGENT = "Easy-MC-Server/1.0 (+https://github.com/)";
+final class CachedPlatformHttpClient implements PlatformHttpClient {
+    private final PlatformHttpClient delegate;
 
+    CachedPlatformHttpClient(PlatformHttpClient delegate) {
+        this.delegate = delegate == null ? new UrlConnectionPlatformHttpClient() : delegate;
+    }
+
+    @Override
+    public JsonElement getJson(String url) throws IOException {
+        return PlatformRemoteLookupPolicy.getJson(url, () -> delegate.getJson(url));
+    }
+}
+
+final class UrlConnectionPlatformHttpClient implements PlatformHttpClient {
     @Override
     public JsonElement getJson(String url) throws IOException {
         if (url == null || url.isBlank()) {
             throw new IOException("No se ha indicado la URL.");
         }
         URLConnection connection = URI.create(url).toURL().openConnection();
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
-        connection.setRequestProperty("User-Agent", USER_AGENT);
+        connection.setConnectTimeout(PlatformRemoteLookupPolicy.CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(PlatformRemoteLookupPolicy.READ_TIMEOUT_MS);
+        connection.setRequestProperty("User-Agent", PlatformRemoteLookupPolicy.USER_AGENT);
         try (InputStreamReader reader = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
             return JsonParser.parseReader(reader);
         }

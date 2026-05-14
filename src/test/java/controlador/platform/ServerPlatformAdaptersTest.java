@@ -15,6 +15,7 @@ import support.TestWorldFixtures;
 import java.io.File;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,6 +25,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ServerPlatformAdaptersTest {
     @TempDir
@@ -549,6 +551,7 @@ class ServerPlatformAdaptersTest {
 
     @Test
     void install_paperPurpurFabricYQuiltPreparanCarpetasCorrectas() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
         Path sourceJar = tempDir.resolve("downloads").resolve("runtime.jar");
         TestWorldFixtures.createValidServerJar(sourceJar.getParent(), sourceJar.getFileName().toString(), "{\"id\":\"1.21.1\"}");
 
@@ -617,6 +620,7 @@ class ServerPlatformAdaptersTest {
 
     @Test
     void creationClients_debenParsearOpcionesYDirectorios() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
         PaperDownloadsClient paperClient = new PaperDownloadsClient(new FakePlatformHttpClient(Map.of(
                 "https://fill.papermc.io/v3/projects/paper",
                 """
@@ -652,10 +656,119 @@ class ServerPlatformAdaptersTest {
         assertThat(fabricClient.listCreationOptions().getFirst().directoryName()).isEqualTo("fabric-1.21.2-server");
         assertThat(fabricClient.listCreationOptions().getFirst().platformVersion()).isEqualTo("0.19.2|1.1.1");
 
+        QuiltMetaClient quiltClient = new QuiltMetaClient(new FakePlatformHttpClient(Map.of(
+                "https://meta.quiltmc.org/v3/versions/loader",
+                """
+                [{"version":"0.29.2"}]
+                """,
+                "https://meta.quiltmc.org/v3/versions/installer",
+                """
+                [{"version":"0.12.1","url":"https://example.test/quilt-installer.jar"}]
+                """,
+                "https://meta.quiltmc.org/v3/versions/game",
+                """
+                [
+                  {"version":"26.2-snapshot-6","stable":false},
+                  {"version":"26.1.2","stable":true},
+                  {"version":"26.1.2-rc-1","stable":false},
+                  {"version":"1.14.4","stable":true}
+                ]
+                """
+        )));
+        assertThat(quiltClient.listCreationOptions())
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("26.1.2", "1.14.4");
+
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("21.1.200")).isEqualTo("1.21.1");
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("20.6.120")).isEqualTo("1.20.6");
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.2.48-beta")).isEqualTo("26.1.2");
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.2")).isEqualTo("26.1.2");
+    }
+
+    @Test
+    void creationClients_debenCachearMetadataRemotaEnMemoria() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingPlatformHttpClient httpClient = new CountingPlatformHttpClient(Map.of(
+                "https://meta.fabricmc.net/v2/versions/loader",
+                """
+                [{"version":"0.19.2","stable":true}]
+                """,
+                "https://meta.fabricmc.net/v2/versions/installer",
+                """
+                [{"version":"1.1.1","stable":true}]
+                """,
+                "https://meta.fabricmc.net/v2/versions/game",
+                """
+                [{"version":"1.21.2","stable":true},{"version":"1.21.1","stable":true}]
+                """
+        ));
+        FabricMetaClient fabricClient = new FabricMetaClient(httpClient);
+
+        assertThat(fabricClient.listCreationOptions()).hasSize(2);
+        assertThat(fabricClient.listCreationOptions()).hasSize(2);
+
+        assertThat(httpClient.count("https://meta.fabricmc.net/v2/versions/loader")).isEqualTo(1);
+        assertThat(httpClient.count("https://meta.fabricmc.net/v2/versions/installer")).isEqualTo(1);
+        assertThat(httpClient.count("https://meta.fabricmc.net/v2/versions/game")).isEqualTo(1);
+    }
+
+    @Test
+    void creationClients_debenAplicarCooldownAFallosRemotos() {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingPlatformHttpClient httpClient = new CountingPlatformHttpClient(Map.of());
+        FabricMetaClient fabricClient = new FabricMetaClient(httpClient);
+
+        assertThatThrownBy(fabricClient::listCreationOptions)
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("servicio remoto de plataformas");
+        assertThatThrownBy(fabricClient::listCreationOptions)
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("servicio remoto de plataformas");
+
+        assertThat(httpClient.count("https://meta.fabricmc.net/v2/versions/loader")).isEqualTo(1);
+    }
+
+    @Test
+    void purpurCreationOptions_debenEvitarConsultasPorVersion() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingPlatformHttpClient httpClient = new CountingPlatformHttpClient(Map.of(
+                "https://api.purpurmc.org/v2/purpur",
+                """
+                {"versions":["1.21.1","1.21.2","1.21.3"]}
+                """
+        ));
+        PurpurDownloadsClient purpurClient = new PurpurDownloadsClient(httpClient);
+
+        List<ServerCreationOption> options = purpurClient.listCreationOptions();
+
+        assertThat(options)
+                .extracting(ServerCreationOption::platformVersion)
+                .containsOnly("latest");
+        assertThat(options.getFirst().displayName()).contains("Purpur latest");
+        assertThat(httpClient.count("https://api.purpurmc.org/v2/purpur")).isEqualTo(1);
+        assertThat(httpClient.count("https://api.purpurmc.org/v2/purpur/1.21.3")).isZero();
+        assertThat(purpurClient.downloadUrl("1.21.3", "latest"))
+                .isEqualTo("https://api.purpurmc.org/v2/purpur/1.21.3/latest/download");
+    }
+
+    @Test
+    void repositoryClients_debenCachearMetadataXmlEnMemoria() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingForgeRepositoryClient forgeClient = new CountingForgeRepositoryClient("""
+                <metadata>
+                  <versioning>
+                    <versions>
+                      <version>1.20.1-47.4.17</version>
+                      <version>1.20.1-47.4.18</version>
+                    </versions>
+                  </versioning>
+                </metadata>
+                """);
+
+        assertThat(forgeClient.listCreationOptions()).hasSize(1);
+        assertThat(forgeClient.listCreationOptions()).hasSize(1);
+
+        assertThat(forgeClient.openCount()).isEqualTo(1);
     }
 
     @Test
@@ -774,6 +887,48 @@ class ServerPlatformAdaptersTest {
                 throw new IOException("No fixture for " + url);
             }
             return JsonParser.parseString(response);
+        }
+    }
+
+    private static final class CountingPlatformHttpClient implements PlatformHttpClient {
+        private final Map<String, String> responses;
+        private final Map<String, Integer> counts = new java.util.HashMap<>();
+
+        private CountingPlatformHttpClient(Map<String, String> responses) {
+            this.responses = responses == null ? Map.of() : responses;
+        }
+
+        @Override
+        public JsonElement getJson(String url) throws IOException {
+            counts.merge(url, 1, Integer::sum);
+            String response = responses.get(url);
+            if (response == null) {
+                throw new IOException("No fixture for " + url);
+            }
+            return JsonParser.parseString(response);
+        }
+
+        private int count(String url) {
+            return counts.getOrDefault(url, 0);
+        }
+    }
+
+    private static final class CountingForgeRepositoryClient extends ForgeRepositoryClient {
+        private final byte[] metadata;
+        private int openCount;
+
+        private CountingForgeRepositoryClient(String metadata) {
+            this.metadata = metadata.getBytes(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        protected InputStream openMetadataStream() {
+            openCount++;
+            return new ByteArrayInputStream(metadata);
+        }
+
+        private int openCount() {
+            return openCount;
         }
     }
 }

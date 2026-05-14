@@ -4,13 +4,12 @@ import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URLConnection;
-import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,14 +17,17 @@ import java.util.Map;
 public class ForgeRepositoryClient {
     private static final URI METADATA_URI = URI.create("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml");
     private static final String BASE_MAVEN_URL = "https://maven.minecraftforge.net/net/minecraftforge/forge/";
-    private static final int CONNECT_TIMEOUT_MS = 5_000;
-    private static final int READ_TIMEOUT_MS = 10_000;
 
     public List<ServerCreationOption> listCreationOptions() throws IOException {
-        List<String> artifactVersions;
-        try (InputStream in = openMetadataStream()) {
-            artifactVersions = parseArtifactVersions(in);
-        }
+        byte[] metadata = PlatformRemoteLookupPolicy.getBytes(
+                METADATA_URI.toString(),
+                () -> {
+                    try (InputStream in = openMetadataStream()) {
+                        return in.readAllBytes();
+                    }
+                }
+        );
+        List<String> artifactVersions = parseArtifactVersions(new ByteArrayInputStream(metadata));
 
         Map<String, String> latestByMinecraftVersion = new LinkedHashMap<>();
         for (String artifactVersion : artifactVersions) {
@@ -60,8 +62,9 @@ public class ForgeRepositoryClient {
 
     protected InputStream openMetadataStream() throws IOException {
         URLConnection connection = METADATA_URI.toURL().openConnection();
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
+        connection.setConnectTimeout(PlatformRemoteLookupPolicy.CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(PlatformRemoteLookupPolicy.READ_TIMEOUT_MS);
+        connection.setRequestProperty("User-Agent", PlatformRemoteLookupPolicy.USER_AGENT);
         return connection.getInputStream();
     }
 

@@ -11,6 +11,7 @@ import java.util.List;
 
 class PurpurDownloadsClient {
     private static final String BASE_URL = "https://api.purpurmc.org/v2/purpur";
+    private static final String LATEST_BUILD = "latest";
     private final PlatformHttpClient httpClient;
 
     PurpurDownloadsClient() {
@@ -18,7 +19,7 @@ class PurpurDownloadsClient {
     }
 
     PurpurDownloadsClient(PlatformHttpClient httpClient) {
-        this.httpClient = httpClient == null ? new UrlConnectionPlatformHttpClient() : httpClient;
+        this.httpClient = new CachedPlatformHttpClient(httpClient);
     }
 
     List<ServerCreationOption> listCreationOptions() throws IOException {
@@ -36,15 +37,11 @@ class PurpurDownloadsClient {
         }
         sortedVersions.sort(VersionStringComparator.descending());
         for (String minecraftVersion : sortedVersions) {
-            String latestBuild = latestBuild(minecraftVersion);
-            if (latestBuild == null || latestBuild.isBlank()) {
-                continue;
-            }
             options.add(new ServerCreationOption(
                     ServerPlatform.PURPUR,
                     minecraftVersion,
-                    latestBuild,
-                    "Minecraft " + minecraftVersion + " (Purpur #" + latestBuild + ")",
+                    LATEST_BUILD,
+                    "Minecraft " + minecraftVersion + " (Purpur latest)",
                     "purpur-" + minecraftVersion + "-server"
             ));
             if (options.size() >= 40) {

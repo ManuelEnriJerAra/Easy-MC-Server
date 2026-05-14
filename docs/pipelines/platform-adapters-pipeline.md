@@ -64,6 +64,21 @@ Remote version clients:
 
 When changing a remote client, prefer primary APIs and keep parsing defensive. Network availability can fail; UI should surface a useful message.
 
+Remote metadata lookups follow the shared `PlatformRemoteLookupPolicy`:
+
+- connect timeout: 5 seconds
+- read timeout: 10 seconds
+- successful metadata cache: in-memory only, 10 minutes
+- failed metadata lookup cooldown: in-memory only, 30 seconds
+- refresh behavior: app restart or cache expiry; do not add persistent metadata cache unless the UX explicitly needs it
+- user-facing lookup failures should use the shared remote-platform message so platform adapters fail consistently
+
+The policy covers JSON metadata through `CachedPlatformHttpClient` and Maven metadata XML through the repository clients. It does not cache actual server jars or installers.
+
+Quilt creation options should filter game metadata by Quilt's `stable` flag before applying the option cap. The wizard does not expose snapshots for non-Vanilla platforms, so unstable Quilt entries must not hide older stable releases.
+
+Purpur creation options should use the API's `latest` build alias instead of resolving every Minecraft version's build metadata during list rendering. Resolving the concrete build number per version makes the wizard perform one remote call per listed version and can make platform selection feel stalled.
+
 ## Installation
 
 Installation typically:

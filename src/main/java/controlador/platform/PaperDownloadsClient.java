@@ -20,7 +20,7 @@ class PaperDownloadsClient {
     }
 
     PaperDownloadsClient(PlatformHttpClient httpClient) {
-        this.httpClient = httpClient == null ? new UrlConnectionPlatformHttpClient() : httpClient;
+        this.httpClient = new CachedPlatformHttpClient(httpClient);
     }
 
     List<ServerCreationOption> listCreationOptions() throws IOException {

@@ -68,6 +68,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -2875,7 +2876,7 @@ public class GestorServidores {
         platformSelector.setSelectionListener(selected -> {
             if (selected != state.adapter) {
                 state.adapter = selected;
-                state.options = null;
+                state.options = selected == null ? null : state.optionsByPlatform.get(selected.getPlatform());
                 state.option = null;
                 versionListModel.clear();
                 boolean snapshotsDisponibles = soportaSnapshotsCreacion(selected);
@@ -3116,6 +3117,7 @@ public class GestorServidores {
             return false;
         }
         state.options = options;
+        state.optionsByPlatform.put(state.adapter.getPlatform(), options);
         actualizarListadoVersiones(state, versionListModel, versionList);
         return !versionListModel.isEmpty();
     }
@@ -3525,6 +3527,8 @@ public class GestorServidores {
         private ServerPlatformAdapter adapter;
         private List<ServerCreationOption> options;
         private ServerCreationOption option;
+        private final Map<ServerPlatform, List<ServerCreationOption>> optionsByPlatform =
+                new EnumMap<>(ServerPlatform.class);
         private File parentDirectory;
         private String suggestedFolderName;
         private String folderName;

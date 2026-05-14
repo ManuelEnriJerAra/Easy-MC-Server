@@ -2,6 +2,7 @@ package controlador.platform;
 
 import modelo.extensions.ServerPlatform;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -13,14 +14,17 @@ import java.util.Map;
 class NeoForgeRepositoryClient {
     private static final URI METADATA_URI = URI.create("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml");
     private static final String BASE_MAVEN_URL = "https://maven.neoforged.net/releases/net/neoforged/neoforge/";
-    private static final int CONNECT_TIMEOUT_MS = 5_000;
-    private static final int READ_TIMEOUT_MS = 10_000;
 
     List<ServerCreationOption> listCreationOptions() throws IOException {
-        List<String> artifactVersions;
-        try (InputStream in = openMetadataStream()) {
-            artifactVersions = ForgeRepositoryClient.parseArtifactVersions(in);
-        }
+        byte[] metadata = PlatformRemoteLookupPolicy.getBytes(
+                METADATA_URI.toString(),
+                () -> {
+                    try (InputStream in = openMetadataStream()) {
+                        return in.readAllBytes();
+                    }
+                }
+        );
+        List<String> artifactVersions = ForgeRepositoryClient.parseArtifactVersions(new ByteArrayInputStream(metadata));
 
         Map<String, String> latestByMinecraftVersion = new LinkedHashMap<>();
         for (String artifactVersion : artifactVersions) {
@@ -99,9 +103,9 @@ class NeoForgeRepositoryClient {
 
     protected InputStream openMetadataStream() throws IOException {
         URLConnection connection = METADATA_URI.toURL().openConnection();
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
-        connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://github.com/)");
+        connection.setConnectTimeout(PlatformRemoteLookupPolicy.CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(PlatformRemoteLookupPolicy.READ_TIMEOUT_MS);
+        connection.setRequestProperty("User-Agent", PlatformRemoteLookupPolicy.USER_AGENT);
         return connection.getInputStream();
     }
 }

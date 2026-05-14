@@ -12,6 +12,7 @@ import java.util.List;
 class QuiltMetaClient {
     private static final String BASE_URL = "https://meta.quiltmc.org/v3/versions";
     private static final String PLATFORM_VERSION_SEPARATOR = "|";
+    private static final int MAX_CREATION_OPTIONS = 80;
     private final PlatformHttpClient httpClient;
 
     QuiltMetaClient() {
@@ -19,7 +20,7 @@ class QuiltMetaClient {
     }
 
     QuiltMetaClient(PlatformHttpClient httpClient) {
-        this.httpClient = httpClient == null ? new UrlConnectionPlatformHttpClient() : httpClient;
+        this.httpClient = new CachedPlatformHttpClient(httpClient);
     }
 
     List<ServerCreationOption> listCreationOptions() throws IOException {
@@ -35,7 +36,7 @@ class QuiltMetaClient {
                     "Minecraft " + minecraftVersion + " (Quilt Loader " + loaderVersion + ")",
                     "quilt-" + minecraftVersion + "-server"
             ));
-            if (options.size() >= 40) {
+            if (options.size() >= MAX_CREATION_OPTIONS) {
                 break;
             }
         }
@@ -78,6 +79,9 @@ class QuiltMetaClient {
         List<String> result = new ArrayList<>();
         for (JsonElement element : versions) {
             JsonObject object = element.getAsJsonObject();
+            if (!booleanValue(object, "stable")) {
+                continue;
+            }
             String version = stringValue(object, "version");
             if (version != null && !version.isBlank()) {
                 result.add(version);
@@ -107,6 +111,11 @@ class QuiltMetaClient {
     private String stringValue(JsonObject object, String field) {
         JsonElement element = object == null ? null : object.get(field);
         return element == null || element.isJsonNull() ? null : element.getAsString();
+    }
+
+    private boolean booleanValue(JsonObject object, String field) {
+        JsonElement element = object == null ? null : object.get(field);
+        return element != null && !element.isJsonNull() && element.getAsBoolean();
     }
 
     record QuiltSelection(String loaderVersion, String installerVersion) {
