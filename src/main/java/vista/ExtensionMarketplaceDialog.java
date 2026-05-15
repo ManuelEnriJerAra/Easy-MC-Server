@@ -108,6 +108,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private static final Logger LOGGER = Logger.getLogger(ExtensionMarketplaceDialog.class.getName());
     private static final int DEFAULT_SEARCH_BATCH_SIZE = 25;
     private static final int MAX_SEARCH_RESULTS = 1000;
+    private static final String NO_PROVIDER_ID = "__none__";
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s)]+");
     private static final Pattern MARKDOWN_LINK_PATTERN = Pattern.compile("\\[([^\\]]+)]\\((https?://[^)\\s]+)(?:\\s+\"[^\"]*\")?\\)");
 
@@ -871,15 +872,17 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private void loadProviderOptions() {
         providerModel.removeAllElements();
         providerLabelsById.clear();
-        providerModel.addElement(ProviderFilterOption.all());
         if (!hasExtensionEcosystem()) {
+            providerModel.addElement(ProviderFilterOption.provider(null, "No disponible"));
             providerCombo.setSelectedIndex(0);
             return;
         }
         try {
             List<ExtensionCatalogProviderDescriptor> providers = gestorServidores.obtenerRepositoriosExtensiones().stream()
                     .filter(this::providerAllowedForServer)
-                    .sorted(Comparator.comparing(ExtensionCatalogProviderDescriptor::displayName, String.CASE_INSENSITIVE_ORDER))
+                    .sorted(Comparator
+                            .comparingInt(this::providerDefaultRank)
+                            .thenComparing(ExtensionCatalogProviderDescriptor::displayName, String.CASE_INSENSITIVE_ORDER))
                     .toList();
             for (ExtensionCatalogProviderDescriptor provider : providers) {
                 providerLabelsById.put(normalized(provider.providerId()), provider.displayName());
@@ -888,7 +891,18 @@ final class ExtensionMarketplaceDialog extends JDialog {
         } catch (RuntimeException ex) {
             LOGGER.log(Level.FINE, "No se ha podido cargar la lista de proveedores del marketplace.", ex);
         }
+        if (providerModel.getSize() == 0) {
+            providerModel.addElement(ProviderFilterOption.provider(null, "No disponible"));
+        }
         providerCombo.setSelectedIndex(0);
+    }
+
+    private int providerDefaultRank(ExtensionCatalogProviderDescriptor provider) {
+        String providerId = provider == null ? null : normalized(provider.providerId());
+        if ("hangar".equals(providerId)) {
+            return 0;
+        }
+        return 1;
     }
 
     private void loadPlatformOptions() {
@@ -3546,8 +3560,15 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 Math.min(MAX_SEARCH_RESULTS, Math.max(1, providerLimit)),
                 selectedSearchSort().providerSort(),
                 toCatalogSideFilter(sideFilter),
-                providerFilter == null || providerFilter.allProviders() ? null : providerFilter.providerId()
+                selectedProviderId(providerFilter)
         );
+    }
+
+    private String selectedProviderId(ProviderFilterOption providerFilter) {
+        if (providerFilter == null || providerFilter.providerId() == null || providerFilter.providerId().isBlank()) {
+            return NO_PROVIDER_ID;
+        }
+        return providerFilter.providerId();
     }
 
     private SearchSortOption selectedSearchSort() {
@@ -3587,7 +3608,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         SideFilterOption sideFilter = selectedSideFilter();
         return new MarketplaceSearchSpec(
                 buildSearchQuery(providerOption, sideFilter),
-                providerOption == null ? ProviderFilterOption.all() : providerOption,
+                providerOption,
                 sideFilter,
                 true,
                 selectedSearchSort(),
@@ -3655,8 +3676,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private boolean matchesProviderFilter(ExtensionCatalogEntry entry, ProviderFilterOption option) {
-        if (entry == null || option == null || option.allProviders) {
-            return true;
+        if (entry == null || option == null || option.providerId == null || option.providerId.isBlank()) {
+            return false;
         }
         return option.providerId.equalsIgnoreCase(entry.providerId());
     }
@@ -4932,13 +4953,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
     ) {
     }
 
-    private record ProviderFilterOption(String providerId, String displayName, boolean allProviders) {
-        static ProviderFilterOption all() {
-            return new ProviderFilterOption("*", "Todos los proveedores", true);
-        }
-
+    private record ProviderFilterOption(String providerId, String displayName) {
         static ProviderFilterOption provider(String providerId, String displayName) {
-            return new ProviderFilterOption(providerId, displayName, false);
+            return new ProviderFilterOption(providerId, displayName);
         }
 
         @Override

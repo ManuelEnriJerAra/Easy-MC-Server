@@ -52,6 +52,7 @@ public class Main {
     }
 
     public static void main(String[] args){
+        AppErrorReporter.installGlobalHandler();
         if (!adquirirBloqueoInstancia()) {
             return;
         }

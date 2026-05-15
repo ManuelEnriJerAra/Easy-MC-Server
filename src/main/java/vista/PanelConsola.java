@@ -2,12 +2,14 @@ package vista;
 
 import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
+import controlador.AppErrorReporter;
 import modelo.Server;
 import com.formdev.flatlaf.extras.components.FlatCheckBox;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.Element;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
@@ -32,6 +34,7 @@ public class PanelConsola extends JPanel {
     private static final Color COLOR_ERROR = AppTheme.getConsoleErrorForeground();
 
     private final int MAX_LINEAS = 5000;
+    private static final int MAX_LINEAS_POR_DRENAJE = 250;
 
     private final JTextPane consolaPane = new JTextPane();
     private JTextPane comandoPane = new JTextPane();
@@ -42,7 +45,10 @@ public class PanelConsola extends JPanel {
     private Style styleError;
 
     private final Deque<String> rawLineas = new ArrayDeque<>();
+    private final Deque<String> pendingLineas = new ArrayDeque<>();
     private final Set<String> jugadoresConectados = new LinkedHashSet<>();
+    private boolean drenajeConsolaProgramado;
+    private int lineasRenderizadas;
 
     private final GestorServidores gestorServidores;
     private final FlatCheckBox vistaSimpleCheckbox = new FlatCheckBox();
@@ -198,6 +204,10 @@ public class PanelConsola extends JPanel {
         Server server = gestorServidores.getServidorSeleccionado();
         if(server == null) return;
 
+        synchronized (pendingLineas) {
+            pendingLineas.clear();
+            drenajeConsolaProgramado = false;
+        }
         rawLineas.clear();
         rawLineas.addAll(server.getRawLogLines());
         jugadoresConectados.clear();
@@ -206,31 +216,58 @@ public class PanelConsola extends JPanel {
     }
 
     public void escribirLinea(String raw){
-        SwingUtilities.invokeLater(()->{
-            if(raw.isBlank()) return;
+        if(raw == null || raw.isBlank()) return;
 
-            rawLineas.addLast(raw);
-
-            boolean recortado = false;
-            while(rawLineas.size()>MAX_LINEAS){
-                rawLineas.removeFirst();
-                recortado = true;
-            }
-
-            if(recortado){
-                reconstruirDocumentoCompleto();
+        synchronized (pendingLineas) {
+            pendingLineas.addLast(raw);
+            if(drenajeConsolaProgramado) {
                 return;
             }
+            drenajeConsolaProgramado = true;
+        }
+        SwingUtilities.invokeLater(this::drenarLineasPendientes);
+    }
 
-            boolean vistaSimple = vistaSimpleCheckbox.isSelected();
-            RenderLine renderLine = render(raw, vistaSimple);
-            actualizarJugadoresConectados(raw);
+    private void drenarLineasPendientes() {
+        int procesadas = 0;
+        try {
+            while(procesadas < MAX_LINEAS_POR_DRENAJE) {
+                String raw;
+                synchronized (pendingLineas) {
+                    raw = pendingLineas.pollFirst();
+                    if(raw == null) {
+                        drenajeConsolaProgramado = false;
+                        return;
+                    }
+                }
+                procesarLineaEnEdt(raw);
+                procesadas++;
+            }
+        } catch (RuntimeException ex) {
+            AppErrorReporter.report("No se ha podido pintar una línea de consola.", ex);
+        }
+        synchronized (pendingLineas) {
+            if(pendingLineas.isEmpty()) {
+                drenajeConsolaProgramado = false;
+            } else {
+                SwingUtilities.invokeLater(this::drenarLineasPendientes);
+            }
+        }
+    }
 
-            // si no hay traducción no imprimimos nada
-            if(vistaSimple && renderLine.texto==null) return;
+    private void procesarLineaEnEdt(String raw) {
+        rawLineas.addLast(raw);
+        while(rawLineas.size()>MAX_LINEAS){
+            rawLineas.removeFirst();
+        }
 
-            appendStyledLine(renderLine.texto, renderLine.estilo);
-        });
+        boolean vistaSimple = vistaSimpleCheckbox.isSelected();
+        RenderLine renderLine = render(raw, vistaSimple);
+        actualizarJugadoresConectados(raw);
+
+        if(vistaSimple && renderLine.texto==null) return;
+
+        appendStyledLine(renderLine.texto, renderLine.estilo);
     }
 
     private void reconstruirDocumentoCompleto(){
@@ -241,6 +278,7 @@ public class PanelConsola extends JPanel {
         }
         boolean vistaSimple = vistaSimpleCheckbox.isSelected();
         jugadoresConectados.clear();
+        lineasRenderizadas = 0;
         for(String raw : rawLineas){
             RenderLine renderLine = render(raw, vistaSimple);
             actualizarJugadoresConectados(raw);
@@ -258,7 +296,26 @@ public class PanelConsola extends JPanel {
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
         }
+        lineasRenderizadas++;
+        recortarLineasRenderizadas();
         consolaPane.setCaretPosition(documento.getLength());
+    }
+
+    private void recortarLineasRenderizadas() {
+        while(lineasRenderizadas > MAX_LINEAS) {
+            try {
+                Element root = documento.getDefaultRootElement();
+                if(root.getElementCount() == 0) {
+                    lineasRenderizadas = 0;
+                    return;
+                }
+                Element first = root.getElement(0);
+                documento.remove(0, first.getEndOffset());
+                lineasRenderizadas--;
+            } catch (BadLocationException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private RenderLine render(String raw, boolean vistaSimple){
@@ -372,4 +429,3 @@ public class PanelConsola extends JPanel {
         return null;
     }
 }
-

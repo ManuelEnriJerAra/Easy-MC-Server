@@ -157,6 +157,19 @@ class ModrinthExtensionCatalogProviderTest {
                       "server_side": "required"
                     },
                     {
+                      "project_id": "GEYSER",
+                      "slug": "geyser",
+                      "project_type": "mod",
+                      "title": "Geyser",
+                      "author": "GeyserMC",
+                      "description": "Multi-loader plugin marked as a mod by the API",
+                      "categories": ["bungeecord", "fabric", "neoforge", "paper", "spigot", "velocity"],
+                      "versions": ["1.21.1"],
+                      "latest_version": "v-geyser",
+                      "client_side": "unsupported",
+                      "server_side": "required"
+                    },
+                    {
                       "project_id": "M1",
                       "slug": "viamod",
                       "project_type": "mod",
@@ -182,8 +195,8 @@ class ModrinthExtensionCatalogProviderTest {
                 ExtensionSideFilter.SERVER
         ));
 
-        assertThat(results).hasSize(2);
-        assertThat(results).extracting(ExtensionCatalogEntry::projectId).containsExactly("P1", "MM");
+        assertThat(results).hasSize(3);
+        assertThat(results).extracting(ExtensionCatalogEntry::projectId).containsExactly("P1", "MM", "GEYSER");
         assertThat(results).anySatisfy(entry -> {
             assertThat(entry.projectId()).isEqualTo("P1");
             assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.PLUGIN);
@@ -195,6 +208,13 @@ class ModrinthExtensionCatalogProviderTest {
             assertThat(entry.displayName()).isEqualTo("MythicMobs");
             assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.PLUGIN);
             assertThat(entry.projectUrl()).contains("/plugin/mythicmobs");
+        });
+        assertThat(results).anySatisfy(entry -> {
+            assertThat(entry.projectId()).isEqualTo("GEYSER");
+            assertThat(entry.displayName()).isEqualTo("Geyser");
+            assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.PLUGIN);
+            assertThat(entry.compatiblePlatforms()).contains(ServerPlatform.PAPER, ServerPlatform.FABRIC);
+            assertThat(entry.projectUrl()).contains("/plugin/geyser");
         });
     }
 
@@ -338,7 +358,7 @@ class ModrinthExtensionCatalogProviderTest {
     }
 
     @Test
-    void shouldRespectSelectedVersionIdWhenResolvingDownloadPlan() throws IOException {
+    void shouldRespectSelectedVersionIdAndFallbackWhenResolvingDownloadPlan() throws IOException {
         ModrinthExtensionCatalogProvider provider = new ModrinthExtensionCatalogProvider(new FakeHttpClient(Map.of(
                 "https://api.modrinth.com/v2/project/geyser",
                 """
@@ -389,7 +409,11 @@ class ModrinthExtensionCatalogProviderTest {
         assertThat(selected.versionId()).isEqualTo("selected");
         assertThat(selected.versionNumber()).isEqualTo("1.9.0");
         assertThat(selected.downloadUrl()).endsWith("geyser-selected.jar");
-        assertThat(provider.resolveDownload("geyser", "missing", server)).isEmpty();
+        ExtensionDownloadPlan fallback = provider.resolveDownload("geyser", "missing", server).orElseThrow();
+
+        assertThat(fallback.versionId()).isEqualTo("latest");
+        assertThat(fallback.versionNumber()).isEqualTo("2.0.0");
+        assertThat(fallback.downloadUrl()).endsWith("geyser-latest.jar");
     }
 
     @Test

@@ -18,7 +18,9 @@ import java.io.*;
 import java.awt.image.BufferedImage;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -91,8 +93,8 @@ public class Server {
     @JsonIgnore transient StringBuilder consoleBuffer = new StringBuilder(); // buffer de consola NO LO GUARDO
     @JsonIgnore transient List<Consumer<String>> consoleListeners = new ArrayList<>(); // es transient, no se guarda
     @JsonIgnore transient Boolean logReaderIniciado = false; // NO LO GUARDO
+    @JsonIgnore transient Deque<String> rawLogLineQueue = new ArrayDeque<>();
     @JsonIgnore transient Boolean restartPending = false; // reinicio pendiente
-    @JsonIgnore transient List<String> rawLogLines = new ArrayList<>(); // líneas de logs sin traducir
     @JsonIgnore transient Boolean iniciando = false; // arranque en progreso
 
     // ===== CONSTRUCTORES =====
@@ -381,18 +383,29 @@ public class Server {
         return "["+hora+"] "+linea;
     }
 
-    public synchronized void appendConsoleLinea(String linea){
-        linea = Utilidades.limpiarSecuenciasConsola(linea);
-        linea = conHoraSiFalta(linea);
-        if(!Objects.equals(linea, "")){
-            consoleBuffer.append(linea).append("\n");
+    public void appendConsoleLinea(String linea){
+        List<Consumer<String>> listenersSnapshot;
+        synchronized (this) {
+            linea = Utilidades.limpiarSecuenciasConsola(linea);
+            linea = conHoraSiFalta(linea);
+            if(!Objects.equals(linea, "")){
+                consoleBuffer.append(linea).append("\n");
+            }
+            // limitamos el tamaño
+            if(consoleBuffer.length()>300_000){
+                consoleBuffer.delete(0, consoleBuffer.length()-200_000);
+            }
+            appendRawLogLine(linea);
+            listenersSnapshot = new ArrayList<>(consoleListeners);
         }
-        // limitamos el tamaño
-        if(consoleBuffer.length()>300_000){
-            consoleBuffer.delete(0, consoleBuffer.length()-200_000);
+        for(var listener: listenersSnapshot) {
+            try {
+                listener.accept(linea);
+            } catch (RuntimeException ex) {
+                System.err.println("Error notificando linea de consola: " + ex.getMessage());
+                ex.printStackTrace(System.err);
+            }
         }
-        for(var listener: consoleListeners) listener.accept(linea);
-        appendRawLogLine(linea);
     }
 
     @JsonIgnore public synchronized String getConsoleText(){
@@ -416,16 +429,25 @@ public class Server {
     }
 
     public synchronized void appendRawLogLine(String linea){
-        rawLogLines.add(linea);
+        if(rawLogLineQueue == null) {
+            rawLogLineQueue = new ArrayDeque<>();
+        }
+        rawLogLineQueue.addLast(linea);
 
         // límite para no sobrecargar memoria
-        if(rawLogLines.size()>5000){
-            rawLogLines.remove(0);
+        if(rawLogLineQueue.size()>5000){
+            rawLogLineQueue.removeFirst();
         }
     }
 
     public synchronized List<String> getRawLogLines(){
-        return new ArrayList<>(rawLogLines);
+        if(rawLogLineQueue == null) {
+            rawLogLineQueue = new ArrayDeque<>();
+        }
+        while(rawLogLineQueue.size()>5000) {
+            rawLogLineQueue.removeFirst();
+        }
+        return new ArrayList<>(rawLogLineQueue);
     }
 
     // ===== GET =====

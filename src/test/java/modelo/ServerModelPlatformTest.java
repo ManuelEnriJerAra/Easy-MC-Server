@@ -8,7 +8,10 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.EnumSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,6 +60,27 @@ class ServerModelPlatformTest {
         assertThat(paper.isPluginServer()).isTrue();
         assertThat(paper.supportsPluginExtensions()).isTrue();
         assertThat(paper.supportsModExtensions()).isFalse();
+    }
+
+    @Test
+    void appendConsoleLinea_debeAislarFallosDeListenersYGuardarLogCrudo() {
+        Server server = new Server();
+        AtomicInteger delivered = new AtomicInteger();
+        List<String> received = new ArrayList<>();
+
+        server.addConsoleListener(line -> {
+            throw new RuntimeException("listener roto");
+        });
+        server.addConsoleListener(line -> {
+            delivered.incrementAndGet();
+            received.add(line);
+        });
+
+        server.appendConsoleLinea("Alex joined the game");
+
+        assertThat(delivered).hasValue(1);
+        assertThat(received).singleElement().satisfies(line -> assertThat(line).contains("Alex joined the game"));
+        assertThat(server.getRawLogLines()).singleElement().satisfies(line -> assertThat(line).contains("Alex joined the game"));
     }
 
     @Test

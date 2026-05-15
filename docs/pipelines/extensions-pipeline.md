@@ -76,7 +76,7 @@ Avoid installing plugins into mod directories or mods into plugin directories un
 Flow:
 
 1. Build `ExtensionCatalogQuery`.
-2. Search providers through `ExtensionCatalogService`.
+2. Search the selected provider through `ExtensionCatalogService`.
 3. Load details/versions.
 4. Evaluate compatibility and dependencies.
 5. Build `ExtensionDownloadPlan`.
@@ -88,6 +88,8 @@ Providers:
 - Modrinth
 - Hangar
 - CurseForge currently has stub/provider support plus modpack service behavior.
+
+Marketplace search is provider-scoped from the UI. The provider selector does not offer an "all providers" mode because cross-provider aggregation can show the same plugin twice and can mix dependency identities from different catalogs. Hangar is the default provider when available because its plugin dependency metadata is usually better; users can switch to Modrinth for its broader catalog.
 
 ## Dependency Resolution
 

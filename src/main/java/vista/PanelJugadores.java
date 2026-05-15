@@ -84,6 +84,7 @@ import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import controlador.GestorUsuariosConocidos;
 import controlador.MojangAPI;
+import controlador.AppErrorReporter;
 import controlador.Utilidades;
 import modelo.Server;
 import tools.jackson.databind.JsonNode;
@@ -320,9 +321,8 @@ public class PanelJugadores extends JPanel {
         if (mJoin.find()) {
             String name = mJoin.group(1);
             if (name != null && !name.isBlank()) {
-                SwingUtilities.invokeLater(() -> addJugador(name.strip()));
+                runOnEdtSafely(() -> addJugador(name.strip()), "No se ha podido registrar el jugador conectado.");
             }
-            SwingUtilities.invokeLater(this::recargarContadores);
             return;
         }
 
@@ -330,10 +330,22 @@ public class PanelJugadores extends JPanel {
         if (mLeft.find()) {
             String name = mLeft.group(1);
             if (name != null && !name.isBlank()) {
-                SwingUtilities.invokeLater(() -> removeJugador(name.strip()));
+                runOnEdtSafely(() -> removeJugador(name.strip()), "No se ha podido quitar el jugador desconectado.");
             }
-            SwingUtilities.invokeLater(this::recargarContadores);
         }
+    }
+
+    private void runOnEdtSafely(Runnable task, String errorMessage) {
+        if (task == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            try {
+                task.run();
+            } catch (RuntimeException ex) {
+                AppErrorReporter.report(errorMessage, ex);
+            }
+        });
     }
 
     private void recomputarDesdeLogs(List<String> rawLogLines) {
@@ -399,9 +411,13 @@ public class PanelJugadores extends JPanel {
         for (String name : target) {
             if (name == null || name.isBlank()) continue;
             if (getPlayerPanelKeyIgnoreCase(name) != null) continue;
-            PlayerPanel panel = new PlayerPanel(name);
-            panelsPorJugador.put(name, panel);
-            contenedorJugadores.add(panel);
+            try {
+                PlayerPanel panel = new PlayerPanel(name);
+                panelsPorJugador.put(name, panel);
+                contenedorJugadores.add(panel);
+            } catch (RuntimeException ex) {
+                AppErrorReporter.report("No se ha podido crear la tarjeta del jugador '" + name + "'.", ex);
+            }
         }
 
         actualizarIndicadoresOperador();
@@ -463,7 +479,10 @@ public class PanelJugadores extends JPanel {
         int whitelistCount = cargarListaDesdeArchivo(TipoLista.WHITELIST).size();
         int bannedPlayersCount = cargarListaDesdeArchivo(TipoLista.BANNED_PLAYERS).size();
         int bannedIpsCount = cargarListaDesdeArchivo(TipoLista.BANNED_IPS).size();
-        int opsCount = cargarListaDesdeArchivo(TipoLista.OPS).size();
+        List<String> ops = cargarListaDesdeArchivo(TipoLista.OPS);
+        int opsCount = ops.size();
+        operadores.clear();
+        operadores.addAll(ops);
 
         btnWhitelist.setToolTipText("Abrir Whitelist (" + whitelistCount + ")");
         btnBaneados.setToolTipText("Abrir Baneados: IDs baneadas (" + bannedPlayersCount + "), IPs baneadas (" + bannedIpsCount + ")");
@@ -1414,8 +1433,6 @@ public class PanelJugadores extends JPanel {
     }
 
     private void actualizarIndicadoresOperador() {
-        operadores.clear();
-        operadores.addAll(cargarListaDesdeArchivo(TipoLista.OPS));
         for (Map.Entry<String, PlayerPanel> entry : panelsPorJugador.entrySet()) {
             PlayerPanel panel = entry.getValue();
             if (panel == null) continue;

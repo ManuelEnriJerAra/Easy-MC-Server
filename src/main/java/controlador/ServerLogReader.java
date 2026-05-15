@@ -30,6 +30,13 @@ public class ServerLogReader implements Runnable{
             }
         } catch (IOException e) {
             server.appendConsoleLinea("[ERROR] Error leyendo logs: "+e.getMessage());
+        } catch (RuntimeException e) {
+            try {
+                server.appendConsoleLinea("[ERROR] Error procesando logs: " + e.getMessage());
+            } catch (RuntimeException ignored) {
+                System.err.println("Error procesando logs: " + e.getMessage());
+                e.printStackTrace(System.err);
+            }
         } finally {
             server.setLogReaderIniciado(false);
         }

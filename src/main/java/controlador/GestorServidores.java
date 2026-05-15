@@ -1196,7 +1196,11 @@ public class GestorServidores {
 
     // este método notifica a los oyentes de que ha ocurrido un cambio en el estado del servidor
     public void notificarEstadoServidor(Server server){
-        pcs.firePropertyChange("estadoServidor", null, server);
+        try {
+            pcs.firePropertyChange("estadoServidor", null, server);
+        } catch (RuntimeException ex) {
+            AppErrorReporter.report("Error notificando el estado del servidor.", ex);
+        }
     }
 
     public void notificarConfiguracionServidor(Server server){
@@ -2785,28 +2789,33 @@ public class GestorServidores {
 
             // detecto cuando el proceso finaliza
             proceso.onExit().thenRun(()->{
-               if(server.getServerProcess() == proceso){
-                   server.setServerProcess(null);
-               }
-               server.setIniciando(false);
-               server.setLogReaderIniciado(false);
-               server.appendConsoleLinea("[INFO] El servidor se ha detenido.");
-               notificarEstadoServidor(server);
-               // si el usuario ha pedido un reinicio y hemos parado el servidor entonces lo iniciamos de nuevo
-               if(server.getRestartPending()){
-                   server.setRestartPending(false);
-                   try {
-                       iniciarServidor(server);
-                   } catch (IOException e) {
-                       server.appendConsoleLinea("[ERROR] Error al reiniciar el servidor: " + e.getMessage());
+               try {
+                   if(server.getServerProcess() == proceso){
+                       server.setServerProcess(null);
                    }
+                   server.setIniciando(false);
+                   server.setLogReaderIniciado(false);
+                   server.appendConsoleLinea("[INFO] El servidor se ha detenido.");
+                   notificarEstadoServidor(server);
+                   // si el usuario ha pedido un reinicio y hemos parado el servidor entonces lo iniciamos de nuevo
+                   if(server.getRestartPending()){
+                       server.setRestartPending(false);
+                       try {
+                           iniciarServidor(server);
+                       } catch (IOException e) {
+                           server.appendConsoleLinea("[ERROR] Error al reiniciar el servidor: " + e.getMessage());
+                       }
+                   }
+               } catch (RuntimeException ex) {
+                   AppErrorReporter.report("Error al procesar la parada del servidor.", ex);
+                   server.appendConsoleLinea("[ERROR] Error al procesar la parada del servidor: " + ex.getMessage());
                }
             });
 
         } catch (IOException e) {
             server.setIniciando(false);
             server.appendConsoleLinea("[ERROR] El servidor no se pudo iniciar"+e.getMessage());
-            throw new RuntimeException(e);
+            AppErrorReporter.report("El proceso del servidor no se pudo iniciar.", e);
         }
     }
 

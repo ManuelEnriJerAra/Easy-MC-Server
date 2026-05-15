@@ -65,6 +65,7 @@ import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import com.formdev.flatlaf.ui.FlatLineBorder;
 
 import controlador.GestorServidores;
+import controlador.AppErrorReporter;
 import modelo.Server;
 import modelo.extensions.ServerPlatform;
 
@@ -934,8 +935,11 @@ public class PanelServidores extends FlatScrollPane {
         iniciar.addActionListener(e -> {
             try {
                 gestorServidores.iniciarServidor(server);
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
+            } catch (IOException | RuntimeException ex) {
+                AppErrorReporter.reportSwing("No se ha podido iniciar el servidor desde la lista.", ex);
+                if (server != null) {
+                    server.appendConsoleLinea("[ERROR] No se ha podido iniciar el servidor: " + ex.getMessage());
+                }
             }
         });
         menu.add(iniciar);

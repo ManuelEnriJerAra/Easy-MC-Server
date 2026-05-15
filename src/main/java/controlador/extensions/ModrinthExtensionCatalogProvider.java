@@ -178,7 +178,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
                         : true)
                 .sorted(defaultVersionSelectionComparator(exactVersionRequested))
                 .findFirst()
-                .orElse(exactVersionRequested || versions.isEmpty() ? null : versions.getFirst());
+                .orElse(versions.isEmpty() ? null : versions.getFirst());
         if (target == null) {
             return Optional.empty();
         }
@@ -277,7 +277,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
     private ExtensionCatalogEntry toSearchEntry(JsonNode hit, ExtensionCatalogQuery query) {
         String projectType = text(hit, "project_type");
         Set<ServerPlatform> platforms = extractPlatforms(hit.path("categories"));
-        ServerExtensionType extensionType = inferExtensionType(projectType, platforms, query.extensionType());
+        ServerExtensionType extensionType = inferExtensionType(projectType, platforms, query.extensionType(), query.platform());
         if (query.extensionType() != ServerExtensionType.UNKNOWN && extensionType != query.extensionType()) {
             return null;
         }
@@ -325,7 +325,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
     private ExtensionCatalogEntry toProjectEntry(JsonNode projectNode, List<ExtensionCatalogVersion> versions) {
         ExtensionCatalogVersion latest = versions.isEmpty() ? null : versions.getFirst();
         Set<ServerPlatform> platforms = latest == null ? extractPlatforms(projectNode.path("categories")) : latest.supportedPlatforms();
-        ServerExtensionType extensionType = inferExtensionType(text(projectNode, "project_type"), platforms, ServerExtensionType.UNKNOWN);
+        ServerExtensionType extensionType = inferExtensionType(text(projectNode, "project_type"), platforms, ServerExtensionType.UNKNOWN, ServerPlatform.UNKNOWN);
         return new ExtensionCatalogEntry(
                 getProviderId(),
                 firstNonBlank(text(projectNode, "id"), text(projectNode, "slug")),
@@ -628,10 +628,16 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
 
     private ServerExtensionType inferExtensionType(String projectType,
                                                    Set<ServerPlatform> platforms,
-                                                   ServerExtensionType requestedType) {
+                                                   ServerExtensionType requestedType,
+                                                   ServerPlatform requestedPlatform) {
         ServerExtensionType declaredType = toExtensionType(projectType);
         ServerExtensionType platformType = inferExtensionTypeFromPlatforms(platforms);
         if (requestedType != null && requestedType != ServerExtensionType.UNKNOWN && platformType == requestedType) {
+            return requestedType;
+        }
+        if (requestedType != null
+                && requestedType != ServerExtensionType.UNKNOWN
+                && hasRequestedPlatformType(platforms, requestedPlatform, requestedType)) {
             return requestedType;
         }
         if (declaredType != ServerExtensionType.UNKNOWN && platformType == ServerExtensionType.UNKNOWN) {
@@ -644,6 +650,32 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
             return ServerExtensionType.PLUGIN;
         }
         return declaredType;
+    }
+
+    private boolean hasRequestedPlatformType(Set<ServerPlatform> platforms,
+                                             ServerPlatform requestedPlatform,
+                                             ServerExtensionType requestedType) {
+        if (platforms == null || platforms.isEmpty()
+                || requestedPlatform == null || requestedPlatform == ServerPlatform.UNKNOWN
+                || requestedType == null || requestedType == ServerExtensionType.UNKNOWN) {
+            return false;
+        }
+        ServerPlatform normalizedRequested = canonicalizePlatform(requestedPlatform);
+        for (ServerPlatform platform : platforms) {
+            if (platform == null || platform == ServerPlatform.UNKNOWN) {
+                continue;
+            }
+            if (canonicalizePlatform(platform) != normalizedRequested) {
+                continue;
+            }
+            if (requestedType == ServerExtensionType.PLUGIN && platform.isPluginPlatform()) {
+                return true;
+            }
+            if (requestedType == ServerExtensionType.MOD && platform.isModPlatform()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ServerExtensionType inferExtensionTypeFromPlatforms(Set<ServerPlatform> platforms) {

@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
@@ -33,6 +34,7 @@ import javax.swing.SwingUtilities;
 
 import controlador.MojangAPI;
 import controlador.Utilidades;
+import controlador.AppErrorReporter;
 
 public class PlayerIdentityView extends JPanel {
     public enum SizePreset {
@@ -56,6 +58,7 @@ public class PlayerIdentityView extends JPanel {
     private static final MojangAPI MOJANG_API = new MojangAPI();
     private static final Map<String, ImageIcon> PLAYER_HEAD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, List<Runnable>> PLAYER_HEAD_WAITERS = new ConcurrentHashMap<>();
+    private static final Pattern JAVA_USERNAME_PATTERN = Pattern.compile("[A-Za-z0-9_]{3,16}");
 
     private final JLabel avatarLabel = new JLabel();
     private final JLabel nameLabel = new JLabel();
@@ -262,6 +265,10 @@ public class PlayerIdentityView extends JPanel {
         avatarLabel.setIcon(null);
         avatarLabel.setFont(avatarLabel.getFont().deriveFont(Font.BOLD, Math.max(11f, sizePreset.fontSize - 1f)));
 
+        if (!isLikelyJavaUsername(username)) {
+            return;
+        }
+
         requestHead(username, sizePreset.avatarSize, () -> {
             if (!username.equals(this.username)) {
                 return;
@@ -292,6 +299,7 @@ public class PlayerIdentityView extends JPanel {
         List<String> resolvedUsernames = usernames.stream()
                 .filter(name -> name != null && !name.isBlank())
                 .map(String::strip)
+                .filter(PlayerIdentityView::isLikelyJavaUsername)
                 .distinct()
                 .toList();
         if (resolvedUsernames.isEmpty()) {
@@ -337,6 +345,10 @@ public class PlayerIdentityView extends JPanel {
             return "?";
         }
         return username.substring(0, 1).toUpperCase(Locale.ROOT);
+    }
+
+    private static boolean isLikelyJavaUsername(String username) {
+        return username != null && JAVA_USERNAME_PATTERN.matcher(username.strip()).matches();
     }
 
     private void refreshActionButtonIcons() {
@@ -443,6 +455,8 @@ public class PlayerIdentityView extends JPanel {
                 if (head != null && head.getImage() != null) {
                     PLAYER_HEAD_CACHE.put(key, head);
                 }
+            } catch (Throwable throwable) {
+                AppErrorReporter.report("No se ha podido cargar la cabeza del jugador '" + username + "'.", throwable);
             } finally {
                 List<Runnable> waiters = PLAYER_HEAD_WAITERS.remove(key);
                 if (waiters == null || waiters.isEmpty()) {
@@ -452,7 +466,15 @@ public class PlayerIdentityView extends JPanel {
                 synchronized (waiters) {
                     callbacks = new ArrayList<>(waiters);
                 }
-                SwingUtilities.invokeLater(() -> callbacks.forEach(Runnable::run));
+                SwingUtilities.invokeLater(() -> {
+                    for (Runnable callback : callbacks) {
+                        try {
+                            callback.run();
+                        } catch (RuntimeException ex) {
+                            AppErrorReporter.report("Error actualizando la cabeza de jugador en la interfaz.", ex);
+                        }
+                    }
+                });
             }
         });
     }

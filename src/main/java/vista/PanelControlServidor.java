@@ -35,6 +35,7 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.formdev.flatlaf.extras.components.FlatButton;
 
 import controlador.GestorServidores;
+import controlador.AppErrorReporter;
 import modelo.Server;
 
 public class PanelControlServidor extends JPanel {
@@ -105,8 +106,11 @@ public class PanelControlServidor extends JPanel {
         btnIniciarServidor.addActionListener((ActionEvent e) -> {
             try {
                 gestorServidores.iniciarServidor(server);
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
+            } catch (IOException | RuntimeException ex) {
+                AppErrorReporter.reportSwing("No se ha podido iniciar el servidor.", ex);
+                if (server != null) {
+                    server.appendConsoleLinea("[ERROR] No se ha podido iniciar el servidor: " + ex.getMessage());
+                }
             }
         });
         btnPararServidor.addActionListener((ActionEvent e) -> {
