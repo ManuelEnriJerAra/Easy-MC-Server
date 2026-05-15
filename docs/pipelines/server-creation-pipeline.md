@@ -20,6 +20,12 @@ The server creation flow is centered in `src/main/java/controlador/GestorServido
 
 The wizard keeps loaded creation options per platform for the lifetime of the dialog. The underlying platform metadata clients also use the shared in-memory cache from `platform-adapters-pipeline.md`, so switching platforms in one wizard session should not repeat identical remote version calls.
 
+Release/snapshot filtering is driven by `ServerCreationOption.versionType` and adapter `supportsUnstableCreationOptions()`. Releases are shown by default. When snapshots are enabled, adapters that support unstable creation options may also show Minecraft snapshot, pre-release, release-candidate, or other unstable Minecraft-version entries. Do not use this checkbox as a loader-channel filter; beta/alpha loader artifacts for stable Minecraft releases belong in the release list only when no stable loader artifact exists yet for that Minecraft release.
+
+Existing-server conversion reuses the creation option model but first detects the source platform and Minecraft version from the server directory. Before rendering the target platform tiles, load each target adapter's creation options and filter them against the detected Minecraft version. Platform tiles with no compatible build should be unavailable with a tooltip explaining that there is no version for the current Minecraft version. The conversion version picker should show the source context, including the full Minecraft version such as `26.2-snapshot-7`, before listing compatible target builds.
+
+Before installing the target platform, conversion uses `ProcessWizardDialog` steps for destination platform and compatible version. The backup choice belongs below the compatible version selector in that final step, so the combined version/backup step uses the wizard's rocket action. The backup choice should default to enabled. If the user declines the full backup, conversion must still preserve existing config, world, and extension data through an internal temporary preservation snapshot so platform installers cannot delete user data.
+
 The `folderName` step uses a custom visual path editor:
 
 - The parent path is rendered with leading ellipsis when it cannot fit.

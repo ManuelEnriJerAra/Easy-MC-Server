@@ -13,6 +13,9 @@ import java.util.Map;
 class PaperDownloadsClient {
     private static final String PROJECT = "paper";
     private static final String BASE_URL = "https://fill.papermc.io/v3/projects/" + PROJECT;
+    private static final String LATEST_STABLE_BUILD = "latest-stable";
+    private static final String LATEST_UNSTABLE_BUILD = "latest-unstable";
+    private static final String LEGACY_LATEST_BUILD = "latest";
     private final PlatformHttpClient httpClient;
 
     PaperDownloadsClient() {
@@ -27,31 +30,43 @@ class PaperDownloadsClient {
         List<String> versions = listVersions();
         List<ServerCreationOption> options = new ArrayList<>();
         for (String minecraftVersion : versions) {
-            PaperBuild build = latestStableBuild(minecraftVersion);
-            if (build == null) {
-                continue;
-            }
+            String versionType = ServerCreationOption.versionTypeFromText(minecraftVersion);
+            boolean stableMinecraftVersion = ServerCreationOption.VERSION_TYPE_RELEASE.equals(versionType);
             options.add(new ServerCreationOption(
                     ServerPlatform.PAPER,
                     minecraftVersion,
-                    build.id(),
-                    "Minecraft " + minecraftVersion + " (Paper #" + build.id() + ")",
-                    "paper-" + minecraftVersion + "-server"
+                    stableMinecraftVersion ? LATEST_STABLE_BUILD : LATEST_UNSTABLE_BUILD,
+                    "Minecraft " + minecraftVersion + (stableMinecraftVersion ? " (Paper latest)" : " (Paper unstable)"),
+                    "paper-" + minecraftVersion + "-server",
+                    versionType
             ));
-            if (options.size() >= 40) {
-                break;
-            }
         }
         return options;
     }
 
     String downloadUrl(String minecraftVersion, String buildId) throws IOException {
-        PaperBuild build = latestStableBuild(minecraftVersion);
-        if (build == null) {
-            throw new IOException("No se ha encontrado una build estable de Paper para Minecraft " + minecraftVersion + ".");
+        return resolveBuild(minecraftVersion, buildId).downloadUrl();
+    }
+
+    PaperBuild resolveBuild(String minecraftVersion, String buildId) throws IOException {
+        if (buildId == null || buildId.isBlank()
+                || LATEST_STABLE_BUILD.equalsIgnoreCase(buildId)
+                || LEGACY_LATEST_BUILD.equalsIgnoreCase(buildId)) {
+            PaperBuild build = latestStableBuild(minecraftVersion);
+            if (build == null) {
+                build = latestDownloadableBuild(minecraftVersion);
+            }
+            if (build == null) {
+                throw new IOException("No se ha encontrado una build de Paper para Minecraft " + minecraftVersion + ".");
+            }
+            return build;
         }
-        if (buildId == null || buildId.isBlank() || build.id().equals(buildId)) {
-            return build.downloadUrl();
+        if (LATEST_UNSTABLE_BUILD.equalsIgnoreCase(buildId)) {
+            PaperBuild build = latestDownloadableBuild(minecraftVersion);
+            if (build == null) {
+                throw new IOException("No se ha encontrado una build de Paper para Minecraft " + minecraftVersion + ".");
+            }
+            return build;
         }
         JsonArray builds = httpClient.getJson(BASE_URL + "/versions/" + minecraftVersion + "/builds").getAsJsonArray();
         for (JsonElement element : builds) {
@@ -60,7 +75,7 @@ class PaperDownloadsClient {
             if (buildId.equals(id)) {
                 String url = downloadUrlFromBuild(object);
                 if (url != null && !url.isBlank()) {
-                    return url;
+                    return new PaperBuild(id, url);
                 }
             }
         }
@@ -85,7 +100,7 @@ class PaperDownloadsClient {
                 }
             }
         }
-        values.sort(VersionStringComparator.descending());
+        values.sort(VersionStringComparator.minecraftVersionsDescending());
         return values;
     }
 
@@ -106,6 +121,19 @@ class PaperDownloadsClient {
         return null;
     }
 
+    private PaperBuild latestDownloadableBuild(String minecraftVersion) throws IOException {
+        JsonArray builds = httpClient.getJson(BASE_URL + "/versions/" + minecraftVersion + "/builds").getAsJsonArray();
+        for (JsonElement element : builds) {
+            JsonObject object = element.getAsJsonObject();
+            String url = downloadUrlFromBuild(object);
+            String id = stringValue(object, "id");
+            if (url != null && !url.isBlank() && id != null && !id.isBlank()) {
+                return new PaperBuild(id, url);
+            }
+        }
+        return null;
+    }
+
     private String downloadUrlFromBuild(JsonObject build) {
         JsonObject downloads = build == null ? null : build.getAsJsonObject("downloads");
         JsonObject serverDefault = downloads == null ? null : downloads.getAsJsonObject("server:default");
@@ -117,6 +145,6 @@ class PaperDownloadsClient {
         return element == null || element.isJsonNull() ? null : element.getAsString();
     }
 
-    private record PaperBuild(String id, String downloadUrl) {
+    record PaperBuild(String id, String downloadUrl) {
     }
 }

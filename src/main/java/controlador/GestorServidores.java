@@ -59,6 +59,7 @@ import java.io.*;
 
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -112,7 +113,7 @@ public class GestorServidores {
     );
     private static final Set<String> DIRECTORIOS_EXTENSION_PRESERVABLES = Set.of("mods", "plugins", "config");
     private static final DateTimeFormatter BACKUP_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-    private static final Pattern MINECRAFT_VERSION_PATTERN = Pattern.compile("(?i)(?:1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?|\\d{2}w\\d{2}[a-z]|[ab]\\d+\\.\\d+(?:\\.\\d+)?)");
+    private static final Pattern MINECRAFT_VERSION_PATTERN = Pattern.compile("(?i)(?:1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:snapshot|pre|rc)-?\\d+)?|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:snapshot|pre|rc)-?\\d+)?|\\d{2}w\\d{2}[a-z]|[ab]\\d+\\.\\d+(?:\\.\\d+)?)");
 
     // ===== ATRIBUTOS =====
     private static final MojangAPI MOJANG_API = new MojangAPI();
@@ -1296,50 +1297,227 @@ public class GestorServidores {
             return null;
         }
 
-        ServerPlatformAdapter targetAdapter = seleccionarAdaptadorConversion(source.platform());
-        if (targetAdapter == null) return null;
-        if (!targetAdapter.supportsAutomatedCreation()) {
+        List<ConversionTargetAvailability> targetAvailability = cargarDisponibilidadConversion(server, source.platform());
+        if (targetAvailability.isEmpty()) {
             JOptionPane.showMessageDialog(
                     null,
-                    targetAdapter.getCreationUnavailableReason(),
+                    "No se ha encontrado ninguna plataforma destino compatible para convertir este servidor.",
+                    "Convertir servidor",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return null;
+        }
+        if (targetAvailability.stream().noneMatch(ConversionTargetAvailability::available)) {
+            JOptionPane.showMessageDialog(
+                    null,
+                    "No hay conversiones disponibles para Minecraft " + textoODesconocido(server == null ? null : server.getVersion()) + ".",
                     "Convertir servidor",
                     JOptionPane.WARNING_MESSAGE
             );
             return null;
         }
 
-        List<ServerCreationOption> conversionOptions = cargarOpcionesConversion(server, targetAdapter);
-        if (conversionOptions.isEmpty()) {
-            JOptionPane.showMessageDialog(
-                    null,
-                    "No se ha encontrado una version de " + targetAdapter.getCreationDisplayName()
-                            + " compatible con Minecraft " + textoODesconocido(server.getVersion()) + ".",
-                    "Convertir servidor",
-                    JOptionPane.WARNING_MESSAGE
-            );
-            return null;
-        }
-        ServerCreationOption selectedOption = seleccionarOpcionConversion(
-                "Selecciona una version de " + targetAdapter.getCreationDisplayName(),
-                conversionOptions
-        );
-        if (selectedOption == null) return null;
-
-        ConversionWarning warning = construirAvisoConversion(source, selectedOption.platform());
-        if (!confirmarConversion(warning, source, selectedOption)) {
-            return null;
-        }
+        ConversionWizardResult wizardResult = mostrarAsistenteConversion(server, source, targetAvailability);
+        if (wizardResult == null) return null;
 
         Server converted = convertirServidorExistente(
                 server,
-                targetAdapter,
-                selectedOption,
-                (url, destination) -> MOJANG_API.descargar(url, destination, null)
+                wizardResult.adapter(),
+                wizardResult.option(),
+                (url, destination) -> MOJANG_API.descargar(url, destination, null),
+                wizardResult.createBackup()
         );
-        if (converted != null && warning.crossEcosystem()) {
-            mostrarAvisoPostConversionEcosistema(server, source.ecosystemType(), selectedOption.platform().getDefaultEcosystemType());
+        if (converted != null && wizardResult.warning().crossEcosystem()) {
+            mostrarAvisoPostConversionEcosistema(server, source.ecosystemType(), wizardResult.option().platform().getDefaultEcosystemType());
         }
         return converted;
+    }
+
+    private ConversionWizardResult mostrarAsistenteConversion(Server server,
+                                                              ConversionSource source,
+                                                              List<ConversionTargetAvailability> targetAvailability) {
+        if (source == null || targetAvailability == null || targetAvailability.isEmpty()) {
+            return null;
+        }
+        List<ServerPlatformAdapter> targetAdapters = targetAvailability.stream()
+                .map(ConversionTargetAvailability::adapter)
+                .filter(Objects::nonNull)
+                .toList();
+        if (targetAdapters.isEmpty()) {
+            return null;
+        }
+
+        Map<ServerPlatform, String> disabledTooltips = new java.util.LinkedHashMap<>();
+        for (ConversionTargetAvailability availability : targetAvailability) {
+            if (availability != null && availability.adapter() != null && !availability.available()) {
+                disabledTooltips.put(availability.adapter().getPlatform(), availability.unavailableReason());
+            }
+        }
+
+        ConversionWizardState state = new ConversionWizardState();
+        state.adapter = targetAvailability.stream()
+                .filter(ConversionTargetAvailability::available)
+                .map(ConversionTargetAvailability::adapter)
+                .findFirst()
+                .orElse(null);
+
+        AtomicReference<ProcessWizardDialog> wizardRef = new AtomicReference<>();
+        AtomicReference<ConversionWizardResult> result = new AtomicReference<>();
+        DefaultComboBoxModel<ServerCreationOption> versionModel = new DefaultComboBoxModel<>();
+        JComboBox<ServerCreationOption> versionBox = new JComboBox<>(versionModel);
+        versionBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
+            JLabel label = new JLabel(value == null ? "" : value.displayName());
+            label.setOpaque(true);
+            if (isSelected) {
+                label.setBackground(list.getSelectionBackground());
+                label.setForeground(list.getSelectionForeground());
+            } else {
+                label.setBackground(list.getBackground());
+                label.setForeground(list.getForeground());
+            }
+            return label;
+        });
+        versionBox.addActionListener(e -> state.option = (ServerCreationOption) versionBox.getSelectedItem());
+
+        Runnable updateVersions = () -> {
+            versionModel.removeAllElements();
+            state.option = null;
+            ConversionTargetAvailability availability = conversionAvailabilityFor(targetAvailability, state.adapter);
+            if (availability != null) {
+                for (ServerCreationOption option : availability.options()) {
+                    versionModel.addElement(option);
+                }
+            }
+            if (versionModel.getSize() > 0) {
+                versionBox.setSelectedIndex(0);
+                state.option = (ServerCreationOption) versionBox.getSelectedItem();
+            }
+        };
+
+        PlatformSelectorPanel platformSelector = new PlatformSelectorPanel(
+                targetAdapters,
+                state.adapter,
+                adapter -> {
+                    state.adapter = adapter;
+                    updateVersions.run();
+                    ProcessWizardDialog wizard = wizardRef.get();
+                    if (wizard != null) {
+                        wizard.refresh();
+                    }
+                },
+                disabledTooltips
+        );
+        updateVersions.run();
+
+        JPanel versionPanel = new JPanel(new BorderLayout(0, 12));
+        JLabel versionContext = new JLabel(
+                "Servidor actual: " + source.platform().getLegacyTypeName()
+                        + " | Minecraft " + textoODesconocido(server == null ? null : server.getVersion())
+        );
+        versionContext.setForeground(AppTheme.getMutedForeground());
+        versionPanel.add(versionContext, BorderLayout.NORTH);
+
+        JCheckBox backupCheck = new JCheckBox("Crear backup completo antes de continuar", true);
+        backupCheck.setOpaque(false);
+        backupCheck.addActionListener(e -> state.createBackup = backupCheck.isSelected());
+        JLabel conversionWarningLabel = new JLabel();
+        conversionWarningLabel.setVerticalAlignment(SwingConstants.TOP);
+        JLabel backupDetailLabel = new JLabel("<html>Los mundos, server.properties, EULA, icono y carpetas de extensiones existentes se conservaran cuando sea posible.</html>");
+        backupDetailLabel.setForeground(AppTheme.getMutedForeground());
+        JPanel backupPanel = new JPanel(new BorderLayout(0, 10));
+        backupPanel.add(conversionWarningLabel, BorderLayout.NORTH);
+        JPanel backupChoicePanel = new JPanel(new BorderLayout(0, 4));
+        backupChoicePanel.setOpaque(false);
+        backupChoicePanel.add(backupCheck, BorderLayout.NORTH);
+        backupChoicePanel.add(backupDetailLabel, BorderLayout.CENTER);
+        backupPanel.add(backupChoicePanel, BorderLayout.CENTER);
+        JPanel versionAndBackupPanel = new JPanel(new BorderLayout(0, 12));
+        versionAndBackupPanel.setOpaque(false);
+        versionAndBackupPanel.add(versionBox, BorderLayout.NORTH);
+        versionAndBackupPanel.add(backupPanel, BorderLayout.CENTER);
+        versionPanel.add(versionAndBackupPanel, BorderLayout.CENTER);
+
+        Runnable updateWarning = () -> {
+            ConversionWarning warning = construirAvisoConversion(source, state.option == null ? null : state.option.platform());
+            conversionWarningLabel.setText("""
+                    <html>
+                    Se va a convertir el servidor seleccionado de %s a %s.<br><br>
+                    %s
+                    </html>
+                    """.formatted(
+                    source.platform().getLegacyTypeName(),
+                    state.option == null || state.option.platform() == null ? "desconocida" : state.option.platform().getLegacyTypeName(),
+                    warning.message().replace("\n", "<br>")
+            ));
+        };
+        versionBox.addActionListener(e -> updateWarning.run());
+
+        List<ProcessWizardDialog.Step> steps = ProcessWizardDialog.steps(
+                new ProcessWizardDialog.Step(
+                        "platform",
+                        "Plataforma destino",
+                        platformSelector,
+                        () -> {
+                            ConversionTargetAvailability availability = conversionAvailabilityFor(targetAvailability, state.adapter);
+                            return availability != null && availability.available();
+                        },
+                        ignored -> {
+                            if (state.adapter == null) {
+                                return "Selecciona una plataforma destino.";
+                            }
+                            ConversionTargetAvailability availability = conversionAvailabilityFor(targetAvailability, state.adapter);
+                            return availability == null || !availability.available()
+                                    ? firstNonBlank(availability == null ? null : availability.unavailableReason(), "La plataforma seleccionada no esta disponible.")
+                                    : null;
+                        }
+                ),
+                new ProcessWizardDialog.Step(
+                        "version",
+                        "Version compatible",
+                        versionPanel,
+                        () -> state.option != null,
+                        ignored -> {
+                            state.option = (ServerCreationOption) versionBox.getSelectedItem();
+                            if (state.option == null) {
+                                return "Selecciona una version compatible.";
+                            }
+                            state.createBackup = backupCheck.isSelected();
+                            ConversionWarning warning = construirAvisoConversion(source, state.option.platform());
+                            result.set(new ConversionWizardResult(state.adapter, state.option, state.createBackup, warning));
+                            return null;
+                        }
+                )
+        );
+
+        ProcessWizardDialog wizard = ProcessWizardDialog.create(
+                null,
+                "Convertir servidor",
+                steps,
+                new ProcessWizardDialog.Options(
+                        new Dimension(760, 520),
+                        "Convertir servidor",
+                        () -> true,
+                        step -> {
+                            if (step == 1) {
+                                updateVersions.run();
+                                updateWarning.run();
+                            }
+                        }
+                )
+        );
+        wizardRef.set(wizard);
+        return wizard.showDialog() ? result.get() : null;
+    }
+
+    private ConversionTargetAvailability conversionAvailabilityFor(List<ConversionTargetAvailability> availability,
+                                                                  ServerPlatformAdapter adapter) {
+        if (availability == null || adapter == null) {
+            return null;
+        }
+        return availability.stream()
+                .filter(entry -> entry != null && Objects.equals(entry.adapter(), adapter))
+                .findFirst()
+                .orElse(null);
     }
 
     private ConversionSource resolverOrigenConversion(Server server) {
@@ -1391,32 +1569,6 @@ public class GestorServidores {
                 new ConversionSource(resolvedSource, resolvedSource.getDefaultEcosystemType()),
                 targetPlatform
         );
-    }
-
-    private boolean confirmarConversion(ConversionWarning warning, ConversionSource source, ServerCreationOption option) {
-        String sourceName = source == null || source.platform() == null
-                ? "desconocida"
-                : source.platform().getLegacyTypeName();
-        String targetName = option == null || option.platform() == null
-                ? "desconocida"
-                : option.platform().getLegacyTypeName();
-        String warningText = warning == null ? "" : warning.message();
-        int confirm = JOptionPane.showConfirmDialog(
-                null,
-                """
-                Se va a convertir el servidor seleccionado de %s a %s.
-
-                %s
-
-                Easy-MC-Server creará un backup completo antes de continuar.
-                Los mundos, server.properties, EULA, icono y carpetas de extensiones existentes se conservarán cuando sea posible.
-                """
-                        .formatted(sourceName, targetName, warningText),
-                "Convertir servidor",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE
-        );
-        return confirm == JOptionPane.OK_OPTION;
     }
 
     private void mostrarAvisoPostConversionEcosistema(Server server,
@@ -1505,7 +1657,7 @@ public class GestorServidores {
             } catch (RuntimeException ignored){}
             JOptionPane.showMessageDialog(
                     null,
-                    "No se ha podido descargar el servidor: " + e.getMessage(),
+                    "No se ha podido descargar el servidor: " + mensajeErrorDescarga(e),
                     "Descarga",
                     JOptionPane.ERROR_MESSAGE
             );
@@ -1557,23 +1709,54 @@ public class GestorServidores {
 
     private List<ServerCreationOption> cargarOpcionesConversion(Server server, ServerPlatformAdapter adapter) {
         List<ServerCreationOption> options = cargarOpcionesCreacion(adapter);
+        return filtrarOpcionesConversion(server, options);
+    }
+
+    private List<ServerCreationOption> filtrarOpcionesConversion(Server server, List<ServerCreationOption> options) {
+        if (options == null || options.isEmpty()) {
+            return List.of();
+        }
         if (server == null || server.getVersion() == null || server.getVersion().isBlank()) {
             return options;
         }
         return options.stream()
-                .filter(option -> Objects.equals(option.minecraftVersion(), server.getVersion()))
+                .filter(option -> ServerCreationOption.isCompatibleMinecraftVersion(option.minecraftVersion(), server.getVersion()))
                 .toList();
     }
 
     private ServerPlatformAdapter seleccionarAdaptadorConversion(ServerPlatform sourcePlatform) {
+        return seleccionarAdaptadorConversion(sourcePlatform, null);
+    }
+
+    private ServerPlatformAdapter seleccionarAdaptadorConversion(ServerPlatform sourcePlatform,
+                                                                List<ConversionTargetAvailability> targetAvailability) {
         List<ServerPlatformAdapter> targetAdapters = plataformasObjetivoConversion(sourcePlatform);
         if (targetAdapters.isEmpty()) {
             return null;
         }
+        Map<ServerPlatform, String> disabledTooltips = new java.util.LinkedHashMap<>();
+        if (targetAvailability != null) {
+            targetAdapters = targetAvailability.stream()
+                    .map(ConversionTargetAvailability::adapter)
+                    .toList();
+            for (ConversionTargetAvailability availability : targetAvailability) {
+                if (!availability.available()) {
+                    disabledTooltips.put(availability.adapter().getPlatform(), availability.unavailableReason());
+                }
+            }
+        }
+        ServerPlatformAdapter initialSelection = targetAvailability == null
+                ? null
+                : targetAvailability.stream()
+                .filter(ConversionTargetAvailability::available)
+                .map(ConversionTargetAvailability::adapter)
+                .findFirst()
+                .orElse(null);
         PlatformSelectorPanel platformSelector = new PlatformSelectorPanel(
                 targetAdapters,
+                initialSelection,
                 null,
-                null
+                disabledTooltips
         );
 
         int option = JOptionPane.showConfirmDialog(
@@ -1587,6 +1770,62 @@ public class GestorServidores {
             return null;
         }
         return platformSelector.getSelectedAdapter();
+    }
+
+    private List<ConversionTargetAvailability> cargarDisponibilidadConversion(Server server, ServerPlatform sourcePlatform) {
+        List<ServerPlatformAdapter> targetAdapters = plataformasObjetivoConversion(sourcePlatform);
+        if (targetAdapters.isEmpty()) {
+            return List.of();
+        }
+        try {
+            return ejecutarTareaConDialogo(
+                    "Cargando versiones",
+                    "Consultando conversiones compatibles con Minecraft " + textoODesconocido(server == null ? null : server.getVersion()) + "...",
+                    () -> evaluarDisponibilidadConversion(server, targetAdapters)
+            );
+        } catch (IOException e) {
+            return targetAdapters.stream()
+                    .map(adapter -> ConversionTargetAvailability.unavailable(
+                            adapter,
+                            "No se han podido consultar las versiones de " + adapter.getCreationDisplayName() + "."
+                    ))
+                    .toList();
+        }
+    }
+
+    List<ConversionTargetAvailability> evaluarDisponibilidadConversion(Server server,
+                                                                       List<ServerPlatformAdapter> targetAdapters) {
+        if (targetAdapters == null || targetAdapters.isEmpty()) {
+            return List.of();
+        }
+        List<ConversionTargetAvailability> availability = new ArrayList<>();
+        String minecraftVersion = textoODesconocido(server == null ? null : server.getVersion());
+        for (ServerPlatformAdapter adapter : targetAdapters) {
+            if (adapter == null) {
+                continue;
+            }
+            if (!adapter.supportsAutomatedCreation()) {
+                availability.add(ConversionTargetAvailability.unavailable(adapter, adapter.getCreationUnavailableReason()));
+                continue;
+            }
+            try {
+                List<ServerCreationOption> options = filtrarOpcionesConversion(server, adapter.listCreationOptions());
+                if (options.isEmpty()) {
+                    availability.add(ConversionTargetAvailability.unavailable(
+                            adapter,
+                            "No disponible para Minecraft " + minecraftVersion + "."
+                    ));
+                } else {
+                    availability.add(ConversionTargetAvailability.available(adapter, options));
+                }
+            } catch (IOException e) {
+                availability.add(ConversionTargetAvailability.unavailable(
+                        adapter,
+                        "No se han podido consultar las versiones de " + adapter.getCreationDisplayName() + "."
+                ));
+            }
+        }
+        return availability;
     }
 
     private List<ServerPlatformAdapter> plataformasObjetivoConversion(ServerPlatform sourcePlatform) {
@@ -1603,11 +1842,20 @@ public class GestorServidores {
     private ServerCreationOption seleccionarOpcionCreacion(ServerPlatformAdapter adapter, List<ServerCreationOption> options) {
         return seleccionarOpcionConversion(
                 "Selecciona una versión de " + adapter.getCreationDisplayName(),
-                options
+                options,
+                null,
+                null
         );
     }
 
     private ServerCreationOption seleccionarOpcionConversion(String title, List<ServerCreationOption> options) {
+        return seleccionarOpcionConversion(title, options, null, null);
+    }
+
+    private ServerCreationOption seleccionarOpcionConversion(String title,
+                                                             List<ServerCreationOption> options,
+                                                             ConversionSource source,
+                                                             String sourceMinecraftVersion) {
         JComboBox<ServerCreationOption> versionBox = new JComboBox<>(options.toArray(ServerCreationOption[]::new));
         versionBox.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
             JLabel label = new JLabel(value == null ? "" : value.displayName());
@@ -1621,10 +1869,26 @@ public class GestorServidores {
             }
             return label;
         });
+        JComponent content = versionBox;
+        if ((source != null && source.platform() != null)
+                || (sourceMinecraftVersion != null && !sourceMinecraftVersion.isBlank())) {
+            JPanel panel = new JPanel(new BorderLayout(0, 8));
+            String platformName = source == null || source.platform() == null
+                    ? "desconocida"
+                    : source.platform().getLegacyTypeName();
+            JLabel contextLabel = new JLabel(
+                    "Servidor actual: " + platformName
+                            + " | Minecraft " + textoODesconocido(sourceMinecraftVersion)
+            );
+            contextLabel.setForeground(AppTheme.getMutedForeground());
+            panel.add(contextLabel, BorderLayout.NORTH);
+            panel.add(versionBox, BorderLayout.CENTER);
+            content = panel;
+        }
 
         int option = JOptionPane.showConfirmDialog(
                 null,
-                versionBox,
+                content,
                 title,
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE
@@ -1888,7 +2152,7 @@ public class GestorServidores {
         } catch (IOException e) {
             JOptionPane.showMessageDialog(
                     null,
-                    "No se ha podido instalar el servidor: " + e.getMessage(),
+                    "No se ha podido instalar el servidor: " + mensajeErrorDescarga(e),
                     "Instalacion",
                     JOptionPane.ERROR_MESSAGE
             );
@@ -1918,6 +2182,14 @@ public class GestorServidores {
                                       ServerPlatformAdapter targetAdapter,
                                       ServerCreationOption option,
                                       controlador.platform.FileDownloader downloader) {
+        return convertirServidorExistente(server, targetAdapter, option, downloader, true);
+    }
+
+    Server convertirServidorExistente(Server server,
+                                      ServerPlatformAdapter targetAdapter,
+                                      ServerCreationOption option,
+                                      controlador.platform.FileDownloader downloader,
+                                      boolean createBackup) {
         if (server == null || targetAdapter == null || option == null) return null;
         if (server.getServerDir() == null || server.getServerDir().isBlank()) return null;
         if (server.getServerProcess() != null && server.getServerProcess().isAlive()) return null;
@@ -1927,13 +2199,18 @@ public class GestorServidores {
         Path serverDir = Path.of(server.getServerDir());
         if (!Files.isDirectory(serverDir)) return null;
 
+        Path preservationSource = null;
+        boolean temporaryPreservation = false;
         try {
             ConversionSource source = resolverOrigenConversion(server);
             ServerEcosystemType sourceEcosystem = source == null ? ServerEcosystemType.UNKNOWN : source.ecosystemType();
             ServerEcosystemType targetEcosystem = option.platform() == null
                     ? ServerEcosystemType.UNKNOWN
                     : option.platform().getDefaultEcosystemType();
-            Path backupDir = crearBackupConversion(serverDir, option.platform());
+            preservationSource = createBackup
+                    ? crearBackupConversion(serverDir, option.platform())
+                    : crearSnapshotPreservacionConversion(serverDir);
+            temporaryPreservation = !createBackup;
             Properties preservedProperties = cargarPropertiesSilenciosamente(serverDir.resolve("server.properties"));
 
             ejecutarTareaConDialogo(
@@ -1953,7 +2230,7 @@ public class GestorServidores {
                     }
             );
 
-            restaurarDatosTrasConversion(backupDir, serverDir, preservedProperties);
+            restaurarDatosTrasConversion(preservationSource, serverDir, preservedProperties);
             for (Path extensionDirectory : targetAdapter.getExtensionDirectories(serverDir)) {
                 if (extensionDirectory != null) {
                     Files.createDirectories(extensionDirectory);
@@ -1982,6 +2259,13 @@ public class GestorServidores {
                     JOptionPane.ERROR_MESSAGE
             );
             return null;
+        } finally {
+            if (temporaryPreservation && preservationSource != null) {
+                try {
+                    Utilidades.eliminarDirectorio(preservationSource);
+                } catch (IOException ignored) {
+                }
+            }
         }
     }
 
@@ -2034,6 +2318,25 @@ public class GestorServidores {
         Path backupDir = parent.resolve(backupName);
         Utilidades.copiarDirectorio(serverDir, backupDir);
         return backupDir;
+    }
+
+    private Path crearSnapshotPreservacionConversion(Path serverDir) throws IOException {
+        Path snapshotDir = Files.createTempDirectory("easy-mc-conversion-preserve-");
+        for (String fileName : ARCHIVOS_CONFIG_PRESERVABLES) {
+            Path source = serverDir.resolve(fileName);
+            if (Files.isRegularFile(source)) {
+                Files.copy(source, snapshotDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        try (Stream<Path> children = Files.list(serverDir)) {
+            for (Path child : children.toList()) {
+                if (!Files.isDirectory(child)) continue;
+                String name = child.getFileName().toString();
+                if (!debePreservarseDirectorioEnConversion(child, name)) continue;
+                Utilidades.copiarDirectorio(child, snapshotDir.resolve(name));
+            }
+        }
+        return snapshotDir;
     }
 
     private void restaurarDatosTrasConversion(Path backupDir, Path targetDir, Properties preservedProperties) throws IOException {
@@ -2864,11 +3167,15 @@ public class GestorServidores {
                         state.serverJarAvailableVersions.add(versionId);
                     } else {
                         state.serverJarUnavailableVersions.add(versionId);
+                        actualizarListadoVersiones(state, versionListModel, versionList);
                     }
                     if (Objects.equals(state.pendingServerJarVersion, versionId)) {
                         state.pendingServerJarVersion = null;
                     }
                     refreshNextState[0].run();
+                    if (!finalAvailable) {
+                        SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
+                    }
                 });
             });
         };
@@ -3122,6 +3429,39 @@ public class GestorServidores {
         return !versionListModel.isEmpty();
     }
 
+    static String mensajeErrorDescarga(Throwable throwable) {
+        if (hasCause(throwable, SocketTimeoutException.class)) {
+            return "La descarga ha tardado demasiado. Comprueba tu conexion e intentalo de nuevo.";
+        }
+        Throwable root = rootCause(throwable);
+        String message = root == null ? null : root.getMessage();
+        if (message == null || message.isBlank()) {
+            message = throwable == null ? null : throwable.getMessage();
+        }
+        return message == null || message.isBlank() ? "Error desconocido." : message;
+    }
+
+    private static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        Throwable previous = null;
+        while (current != null && current != previous) {
+            previous = current;
+            current = current.getCause();
+        }
+        return previous;
+    }
+
     private void actualizarListadoVersiones(ServerCreationWizardState state,
                                             DefaultListModel<ServerCreationOption> versionListModel,
                                             JList<ServerCreationOption> versionList) {
@@ -3139,6 +3479,7 @@ public class GestorServidores {
             }
             List<ServerCreationOption> filteredOptions = state.options.stream()
                     .filter(option -> debeMostrarOpcionCreacion(option, state.includeSnapshots, state.includeReleases))
+                    .filter(option -> !esOpcionCreacionNoDescargableConocida(state, option))
                     .toList();
             versionListModel.clear();
             versionListModel.addAll(filteredOptions);
@@ -3175,6 +3516,14 @@ public class GestorServidores {
         return snapshot ? includeSnapshots : includeReleases;
     }
 
+    private boolean esOpcionCreacionNoDescargableConocida(ServerCreationWizardState state,
+                                                          ServerCreationOption option) {
+        if (state == null || option == null || option.platform() != modelo.extensions.ServerPlatform.VANILLA) {
+            return false;
+        }
+        return state.serverJarUnavailableVersions.contains(option.minecraftVersion());
+    }
+
     private void asegurarAlMenosUnFiltroVersionActivo(JCheckBox snapshotsCheck,
                                                       JCheckBox releasesCheck,
                                                       JCheckBox changedCheck) {
@@ -3192,7 +3541,7 @@ public class GestorServidores {
     }
 
     private boolean soportaSnapshotsCreacion(ServerPlatformAdapter adapter) {
-        return adapter != null && adapter.getPlatform() == modelo.extensions.ServerPlatform.VANILLA;
+        return adapter != null && adapter.supportsUnstableCreationOptions();
     }
 
     private String validarOpcionCreacionDescargable(ServerCreationWizardState state,
@@ -3405,6 +3754,34 @@ public class GestorServidores {
     }
 
     private record ConversionSource(ServerPlatform platform, ServerEcosystemType ecosystemType) {
+    }
+
+    record ConversionWizardResult(ServerPlatformAdapter adapter,
+                                  ServerCreationOption option,
+                                  boolean createBackup,
+                                  ConversionWarning warning) {
+    }
+
+    private static final class ConversionWizardState {
+        private ServerPlatformAdapter adapter;
+        private ServerCreationOption option;
+        private boolean createBackup = true;
+    }
+
+    record ConversionTargetAvailability(ServerPlatformAdapter adapter,
+                                        List<ServerCreationOption> options,
+                                        String unavailableReason) {
+        boolean available() {
+            return adapter != null && options != null && !options.isEmpty();
+        }
+
+        static ConversionTargetAvailability available(ServerPlatformAdapter adapter, List<ServerCreationOption> options) {
+            return new ConversionTargetAvailability(adapter, options == null ? List.of() : List.copyOf(options), null);
+        }
+
+        static ConversionTargetAvailability unavailable(ServerPlatformAdapter adapter, String unavailableReason) {
+            return new ConversionTargetAvailability(adapter, List.of(), unavailableReason);
+        }
     }
 
     record ConversionWarning(String message, boolean crossEcosystem) {

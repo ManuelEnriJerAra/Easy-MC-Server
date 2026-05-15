@@ -81,6 +81,11 @@ public final class FabricServerPlatformAdapter extends AbstractServerPlatformAda
     }
 
     @Override
+    public boolean supportsUnstableCreationOptions() {
+        return true;
+    }
+
+    @Override
     public String getCreationDisplayName() {
         return "Fabric";
     }

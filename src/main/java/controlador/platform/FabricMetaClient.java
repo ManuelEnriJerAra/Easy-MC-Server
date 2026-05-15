@@ -27,19 +27,18 @@ class FabricMetaClient {
     List<ServerCreationOption> listCreationOptions() throws IOException {
         String loaderVersion = latestStableVersion(BASE_URL + "/loader", "version");
         String installerVersion = latestStableVersion(BASE_URL + "/installer", "version");
-        List<String> gameVersions = stableGameVersions();
+        List<FabricGameVersion> gameVersions = gameVersions();
         List<ServerCreationOption> options = new ArrayList<>();
-        for (String minecraftVersion : gameVersions) {
+        for (FabricGameVersion gameVersion : gameVersions) {
+            String minecraftVersion = gameVersion.version();
             options.add(new ServerCreationOption(
                     ServerPlatform.FABRIC,
                     minecraftVersion,
                     encodePlatformVersion(loaderVersion, installerVersion),
                     "Minecraft " + minecraftVersion + " (Fabric Loader " + loaderVersion + ")",
-                    "fabric-" + minecraftVersion + "-server"
+                    "fabric-" + minecraftVersion + "-server",
+                    ServerCreationOption.versionTypeFromStability(gameVersion.stable())
             ));
-            if (options.size() >= 40) {
-                break;
-            }
         }
         return options;
     }
@@ -74,17 +73,17 @@ class FabricMetaClient {
         return new FabricSelection(parts[0], parts[1]);
     }
 
-    private List<String> stableGameVersions() throws IOException {
+    private List<FabricGameVersion> gameVersions() throws IOException {
         JsonArray versions = httpClient.getJson(BASE_URL + "/game").getAsJsonArray();
-        List<String> result = new ArrayList<>();
+        List<FabricGameVersion> result = new ArrayList<>();
         for (JsonElement element : versions) {
             JsonObject object = element.getAsJsonObject();
-            if (booleanValue(object, "stable")) {
-                result.add(stringValue(object, "version"));
+            String version = stringValue(object, "version");
+            if (version != null && !version.isBlank()) {
+                result.add(new FabricGameVersion(version, booleanValue(object, "stable")));
             }
         }
-        result.removeIf(value -> value == null || value.isBlank());
-        result.sort(VersionStringComparator.descending());
+        result.sort((left, right) -> VersionStringComparator.minecraftVersionsDescending().compare(left.version(), right.version()));
         return result;
     }
 
@@ -119,5 +118,8 @@ class FabricMetaClient {
     }
 
     record FabricSelection(String loaderVersion, String installerVersion) {
+    }
+
+    private record FabricGameVersion(String version, boolean stable) {
     }
 }

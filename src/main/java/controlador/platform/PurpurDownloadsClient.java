@@ -35,18 +35,18 @@ class PurpurDownloadsClient {
                 sortedVersions.add(element.getAsString());
             }
         }
-        sortedVersions.sort(VersionStringComparator.descending());
+        sortedVersions.sort(VersionStringComparator.minecraftVersionsDescending());
         for (String minecraftVersion : sortedVersions) {
+            String versionType = ServerCreationOption.versionTypeFromText(minecraftVersion);
+            boolean stableMinecraftVersion = ServerCreationOption.VERSION_TYPE_RELEASE.equals(versionType);
             options.add(new ServerCreationOption(
                     ServerPlatform.PURPUR,
                     minecraftVersion,
                     LATEST_BUILD,
-                    "Minecraft " + minecraftVersion + " (Purpur latest)",
-                    "purpur-" + minecraftVersion + "-server"
+                    "Minecraft " + minecraftVersion + (stableMinecraftVersion ? " (Purpur latest)" : " (Purpur unstable)"),
+                    "purpur-" + minecraftVersion + "-server",
+                    versionType
             ));
-            if (options.size() >= 40) {
-                break;
-            }
         }
         return options;
     }

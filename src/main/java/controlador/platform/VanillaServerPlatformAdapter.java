@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAdapter {
+    private static final String FIRST_RELEASE_WITH_SERVER_JAR = "1.2.5";
     private final MojangAPI mojangApi;
 
     public VanillaServerPlatformAdapter() {
@@ -45,6 +46,11 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
     }
 
     @Override
+    public boolean supportsUnstableCreationOptions() {
+        return true;
+    }
+
+    @Override
     public String getCreationDisplayName() {
         return "Vanilla";
     }
@@ -52,6 +58,7 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
     @Override
     public java.util.List<ServerCreationOption> listCreationOptions() {
         return mojangApi.obtenerListaVersionesConTipo().stream()
+                .filter(VanillaServerPlatformAdapter::hasKnownServerJar)
                 .map(version -> new ServerCreationOption(
                         ServerPlatform.VANILLA,
                         version.id(),
@@ -80,7 +87,8 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
         }
 
         Files.createDirectories(request.targetDirectory());
-        String url = mojangApi.obtenerUrlServerJar(request.minecraftVersion());
+        MojangAPI api = request.mojangApi() == null ? mojangApi : request.mojangApi();
+        String url = api.obtenerUrlServerJar(request.minecraftVersion());
         if (url == null || url.isBlank()) {
             throw new IOException("No se ha podido obtener la URL del servidor para la versión " + request.minecraftVersion());
         }
@@ -98,5 +106,13 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
                 "Easy-MC Vanilla " + request.minecraftVersion(),
                 List.of()
         );
+    }
+
+    private static boolean hasKnownServerJar(MojangAPI.MinecraftVersionInfo version) {
+        if (version == null || version.id() == null || version.id().isBlank()) {
+            return false;
+        }
+        return !version.isRelease()
+                || VersionStringComparator.compareVersionStrings(version.id(), FIRST_RELEASE_WITH_SERVER_JAR) >= 0;
     }
 }

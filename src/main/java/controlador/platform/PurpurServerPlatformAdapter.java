@@ -59,6 +59,11 @@ public final class PurpurServerPlatformAdapter extends AbstractServerPlatformAda
     }
 
     @Override
+    public boolean supportsUnstableCreationOptions() {
+        return true;
+    }
+
+    @Override
     public String getCreationDisplayName() {
         return "Purpur";
     }

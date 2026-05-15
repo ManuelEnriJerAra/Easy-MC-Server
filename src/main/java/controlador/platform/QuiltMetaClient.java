@@ -12,7 +12,6 @@ import java.util.List;
 class QuiltMetaClient {
     private static final String BASE_URL = "https://meta.quiltmc.org/v3/versions";
     private static final String PLATFORM_VERSION_SEPARATOR = "|";
-    private static final int MAX_CREATION_OPTIONS = 80;
     private final PlatformHttpClient httpClient;
 
     QuiltMetaClient() {
@@ -24,21 +23,20 @@ class QuiltMetaClient {
     }
 
     List<ServerCreationOption> listCreationOptions() throws IOException {
-        String loaderVersion = latestVersion(BASE_URL + "/loader");
+        String loaderVersion = latestStableVersion(BASE_URL + "/loader");
         QuiltInstaller installer = latestInstaller();
-        List<String> gameVersions = gameVersions();
+        List<QuiltGameVersion> gameVersions = gameVersions();
         List<ServerCreationOption> options = new ArrayList<>();
-        for (String minecraftVersion : gameVersions) {
+        for (QuiltGameVersion gameVersion : gameVersions) {
+            String minecraftVersion = gameVersion.version();
             options.add(new ServerCreationOption(
                     ServerPlatform.QUILT,
                     minecraftVersion,
                     encodePlatformVersion(loaderVersion, installer.version()),
                     "Minecraft " + minecraftVersion + " (Quilt Loader " + loaderVersion + ")",
-                    "quilt-" + minecraftVersion + "-server"
+                    "quilt-" + minecraftVersion + "-server",
+                    ServerCreationOption.versionTypeFromStability(gameVersion.stable())
             ));
-            if (options.size() >= MAX_CREATION_OPTIONS) {
-                break;
-            }
         }
         return options;
     }
@@ -74,29 +72,42 @@ class QuiltMetaClient {
         return new QuiltSelection(parts[0], parts[1]);
     }
 
-    private List<String> gameVersions() throws IOException {
+    private List<QuiltGameVersion> gameVersions() throws IOException {
         JsonArray versions = httpClient.getJson(BASE_URL + "/game").getAsJsonArray();
-        List<String> result = new ArrayList<>();
+        List<QuiltGameVersion> result = new ArrayList<>();
         for (JsonElement element : versions) {
             JsonObject object = element.getAsJsonObject();
-            if (!booleanValue(object, "stable")) {
-                continue;
-            }
             String version = stringValue(object, "version");
             if (version != null && !version.isBlank()) {
-                result.add(version);
+                result.add(new QuiltGameVersion(version, booleanValue(object, "stable")));
             }
         }
-        result.sort(VersionStringComparator.descending());
+        result.sort((left, right) -> VersionStringComparator.minecraftVersionsDescending().compare(left.version(), right.version()));
         return result;
     }
 
-    private String latestVersion(String url) throws IOException {
+    private String latestStableVersion(String url) throws IOException {
         JsonArray versions = httpClient.getJson(url).getAsJsonArray();
         if (versions.isEmpty()) {
             throw new IOException("No se han encontrado versiones disponibles.");
         }
-        return stringValue(versions.get(0).getAsJsonObject(), "version");
+        String fallback = null;
+        for (JsonElement element : versions) {
+            String version = stringValue(element.getAsJsonObject(), "version");
+            if (version == null || version.isBlank()) {
+                continue;
+            }
+            if (fallback == null) {
+                fallback = version;
+            }
+            if (ServerCreationOption.VERSION_TYPE_RELEASE.equals(ServerCreationOption.versionTypeFromText(version))) {
+                return version;
+            }
+        }
+        if (fallback != null) {
+            return fallback;
+        }
+        throw new IOException("No se han encontrado versiones disponibles.");
     }
 
     private QuiltInstaller latestInstaller() throws IOException {
@@ -122,5 +133,8 @@ class QuiltMetaClient {
     }
 
     private record QuiltInstaller(String version, String url) {
+    }
+
+    private record QuiltGameVersion(String version, boolean stable) {
     }
 }

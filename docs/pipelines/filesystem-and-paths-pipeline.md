@@ -56,6 +56,8 @@ Extension directories are resolved through platform adapters. Do not hard-code `
 
 When changing conversion/upgrade flows, inspect preservation lists in `GestorServidores`, such as preservable config files and extension directories.
 
+Server conversion asks the user whether to create a full durable backup. Skipping that backup must not skip preservation: use a temporary preservation snapshot for config files, worlds, and extension folders, then delete the temporary snapshot after conversion completes.
+
 ## Tests
 
 Relevant tests:

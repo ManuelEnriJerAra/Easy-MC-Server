@@ -33,6 +33,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -66,6 +67,256 @@ class GestorServidoresTest {
         assertThat(GestorServidores.validarNombreCarpetaServidor("server:name")).isNotNull();
         assertThat(GestorServidores.validarNombreCarpetaServidor("CON")).isNotNull();
         assertThat(GestorServidores.validarNombreCarpetaServidor("com1.txt")).isNotNull();
+    }
+
+    @Test
+    void filtrosCreacionVersiones_debenMostrarReleasesYSnapshotsCuandoAmbosEstanActivos() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Method debeMostrar = GestorServidores.class.getDeclaredMethod(
+                "debeMostrarOpcionCreacion",
+                ServerCreationOption.class,
+                boolean.class,
+                boolean.class
+        );
+        debeMostrar.setAccessible(true);
+        ServerCreationOption release = new ServerCreationOption(
+                ServerPlatform.FABRIC,
+                "1.21.2",
+                "loader",
+                "Minecraft 1.21.2",
+                "fabric-1.21.2-server",
+                ServerCreationOption.VERSION_TYPE_RELEASE
+        );
+        ServerCreationOption snapshot = new ServerCreationOption(
+                ServerPlatform.FABRIC,
+                "25w01a",
+                "loader",
+                "Minecraft 25w01a",
+                "fabric-25w01a-server",
+                ServerCreationOption.VERSION_TYPE_SNAPSHOT
+        );
+
+        assertThat((Boolean) debeMostrar.invoke(gestor, release, true, true)).isTrue();
+        assertThat((Boolean) debeMostrar.invoke(gestor, snapshot, true, true)).isTrue();
+        assertThat((Boolean) debeMostrar.invoke(gestor, release, true, false)).isFalse();
+        assertThat((Boolean) debeMostrar.invoke(gestor, snapshot, false, true)).isFalse();
+    }
+
+    @Test
+    void versionesMinecraftCanonicas_debenNormalizarSnapshotsPreYRcModernos() {
+        assertThat(ServerCreationOption.canonicalMinecraftVersion("1.7.10_pre4")).isEqualTo("1.7.10-pre-4");
+        assertThat(ServerCreationOption.canonicalMinecraftVersion("26.1.2_rc_1")).isEqualTo("26.1.2-rc-1");
+        assertThat(ServerCreationOption.canonicalMinecraftVersion("26.1.2-rc1")).isEqualTo("26.1.2-rc-1");
+        assertThat(ServerCreationOption.canonicalMinecraftVersion("26.2_snapshot_7")).isEqualTo("26.2-snapshot-7");
+        assertThat(ServerCreationOption.isCompatibleMinecraftVersion("26.1-pre-3", "26.1_pre3")).isTrue();
+        assertThat(ServerCreationOption.versionTypeFromText("26.1-pre-3")).isEqualTo(ServerCreationOption.VERSION_TYPE_SNAPSHOT);
+        assertThat(ServerCreationOption.versionTypeFromText("26.1.2-rc-1")).isEqualTo(ServerCreationOption.VERSION_TYPE_SNAPSHOT);
+    }
+
+    @Test
+    void cargarOpcionesConversion_debeEmparejarSnapshotsVanillaConVersionCanonicaDelLoader() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Server server = new Server();
+        server.setVersion("1.7.10_pre4");
+        ServerPlatformAdapter adapter = new ServerPlatformAdapter() {
+            @Override
+            public ServerPlatform getPlatform() {
+                return ServerPlatform.FORGE;
+            }
+
+            @Override
+            public boolean supportsAutomatedCreation() {
+                return true;
+            }
+
+            @Override
+            public List<ServerCreationOption> listCreationOptions() {
+                return List.of(
+                        new ServerCreationOption(
+                                ServerPlatform.FORGE,
+                                "1.7.10-pre4",
+                                "1.7.10_pre4-10.12.2.1149-prerelease",
+                                "Minecraft 1.7.10-pre4 (Forge 10.12.2.1149-prerelease)",
+                                "forge-1.7.10-pre4-server",
+                                ServerCreationOption.VERSION_TYPE_SNAPSHOT
+                        ),
+                        new ServerCreationOption(
+                                ServerPlatform.FORGE,
+                                "1.7.10",
+                                "1.7.10-10.13.4.1614",
+                                "Minecraft 1.7.10 (Forge 10.13.4.1614)",
+                                "forge-1.7.10-server",
+                                ServerCreationOption.VERSION_TYPE_RELEASE
+                        )
+                );
+            }
+
+            @Override
+            public ServerPlatformProfile detect(Path serverDir) {
+                return null;
+            }
+
+            @Override
+            public ServerValidationResult validate(Path serverDir) {
+                return ServerValidationResult.ok();
+            }
+
+            @Override
+            public void install(Server server, ServerInstallationRequest request) {
+            }
+
+            @Override
+            public ProcessBuilder buildStartProcess(Server server, Path executableJar) {
+                return new ProcessBuilder("java", "-jar", executableJar.toString());
+            }
+
+            @Override
+            public Path resolveExecutableJar(Path serverDir) {
+                return serverDir.resolve("server.jar");
+            }
+        };
+        Method cargarOpcionesConversion = GestorServidores.class.getDeclaredMethod(
+                "cargarOpcionesConversion",
+                Server.class,
+                ServerPlatformAdapter.class
+        );
+        cargarOpcionesConversion.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        List<ServerCreationOption> options = (List<ServerCreationOption>) cargarOpcionesConversion.invoke(gestor, server, adapter);
+
+        assertThat(options)
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("1.7.10_pre4-10.12.2.1149-prerelease");
+    }
+
+    @Test
+    void cargarOpcionesConversion_debeEmparejarSnapshotModernoConFabric() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Server server = new Server();
+        server.setVersion("26.2-snapshot-7");
+        ServerPlatformAdapter adapter = new ServerPlatformAdapter() {
+            @Override
+            public ServerPlatform getPlatform() {
+                return ServerPlatform.FABRIC;
+            }
+
+            @Override
+            public boolean supportsAutomatedCreation() {
+                return true;
+            }
+
+            @Override
+            public List<ServerCreationOption> listCreationOptions() {
+                return List.of(
+                        new ServerCreationOption(
+                                ServerPlatform.FABRIC,
+                                "26.2-snapshot-7",
+                                "0.19.2|1.1.1",
+                                "Minecraft 26.2-snapshot-7 (Fabric Loader 0.19.2)",
+                                "fabric-26.2-snapshot-7-server",
+                                ServerCreationOption.VERSION_TYPE_SNAPSHOT
+                        ),
+                        new ServerCreationOption(
+                                ServerPlatform.FABRIC,
+                                "26.1.2",
+                                "0.19.2|1.1.1",
+                                "Minecraft 26.1.2 (Fabric Loader 0.19.2)",
+                                "fabric-26.1.2-server",
+                                ServerCreationOption.VERSION_TYPE_RELEASE
+                        )
+                );
+            }
+
+            @Override
+            public ServerPlatformProfile detect(Path serverDir) {
+                return null;
+            }
+
+            @Override
+            public ServerValidationResult validate(Path serverDir) {
+                return ServerValidationResult.ok();
+            }
+
+            @Override
+            public void install(Server server, ServerInstallationRequest request) {
+            }
+
+            @Override
+            public ProcessBuilder buildStartProcess(Server server, Path executableJar) {
+                return new ProcessBuilder("java", "-jar", executableJar.toString());
+            }
+
+            @Override
+            public Path resolveExecutableJar(Path serverDir) {
+                return serverDir.resolve("server.jar");
+            }
+        };
+        Method cargarOpcionesConversion = GestorServidores.class.getDeclaredMethod(
+                "cargarOpcionesConversion",
+                Server.class,
+                ServerPlatformAdapter.class
+        );
+        cargarOpcionesConversion.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        List<ServerCreationOption> options = (List<ServerCreationOption>) cargarOpcionesConversion.invoke(gestor, server, adapter);
+
+        assertThat(options)
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("26.2-snapshot-7");
+    }
+
+    @Test
+    void evaluarDisponibilidadConversion_debeMarcarPlataformasSinVersionCompatibleComoNoDisponibles() {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Server server = new Server();
+        server.setVersion("26.2-snapshot-7");
+
+        ServerPlatformAdapter forge = adapterConversionConOpciones(
+                ServerPlatform.FORGE,
+                List.of(new ServerCreationOption(
+                        ServerPlatform.FORGE,
+                        "1.7.10-pre4",
+                        "1.7.10_pre4-10.12.2.1149-prerelease",
+                        "Minecraft 1.7.10-pre4 (Forge 10.12.2.1149-prerelease)",
+                        "forge-1.7.10-pre4-server",
+                        ServerCreationOption.VERSION_TYPE_SNAPSHOT
+                ))
+        );
+        ServerPlatformAdapter fabric = adapterConversionConOpciones(
+                ServerPlatform.FABRIC,
+                List.of(new ServerCreationOption(
+                        ServerPlatform.FABRIC,
+                        "26.2-snapshot-7",
+                        "0.19.2|1.1.1",
+                        "Minecraft 26.2-snapshot-7 (Fabric Loader 0.19.2)",
+                        "fabric-26.2-snapshot-7-server",
+                        ServerCreationOption.VERSION_TYPE_SNAPSHOT
+                ))
+        );
+
+        List<GestorServidores.ConversionTargetAvailability> availability = gestor.evaluarDisponibilidadConversion(
+                server,
+                List.of(forge, fabric)
+        );
+
+        assertThat(availability)
+                .filteredOn(entry -> entry.adapter().getPlatform() == ServerPlatform.FORGE)
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.available()).isFalse();
+                    assertThat(entry.unavailableReason()).contains("No disponible").contains("26.2-snapshot-7");
+                });
+        assertThat(availability)
+                .filteredOn(entry -> entry.adapter().getPlatform() == ServerPlatform.FABRIC)
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.available()).isTrue();
+                    assertThat(entry.options())
+                            .extracting(ServerCreationOption::minecraftVersion)
+                            .containsExactly("26.2-snapshot-7");
+                });
     }
 
     @Test
@@ -946,6 +1197,94 @@ class GestorServidoresTest {
     }
 
     @Test
+    void convertirServidorExistente_puedeOmitirBackupCompletoYPreservarDatos() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
+        Path serverDir = tempDir.resolve("vanilla-to-forge-no-backup");
+        TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"1.20.1\"}");
+        Files.createDirectories(serverDir.resolve("world"));
+        Files.writeString(serverDir.resolve("world").resolve("level.dat"), "world-data");
+        Properties props = new Properties();
+        props.setProperty("motd", "No Backup MOTD");
+        props.setProperty("level-name", "world");
+        TestWorldFixtures.writeServerProperties(serverDir, props);
+
+        Server server = new Server();
+        server.setServerDir(serverDir.toString());
+        server.setDisplayName("Convertible");
+        server.setVersion("1.20.1");
+        server.setPlatform(ServerPlatform.VANILLA);
+        gestor.guardarServidor(server);
+
+        ServerPlatformAdapter forgeInstaller = new ServerPlatformAdapter() {
+            @Override
+            public ServerPlatform getPlatform() {
+                return ServerPlatform.FORGE;
+            }
+
+            @Override
+            public boolean supportsAutomatedCreation() {
+                return true;
+            }
+
+            @Override
+            public ServerPlatformProfile detect(Path serverDir) {
+                return null;
+            }
+
+            @Override
+            public ServerValidationResult validate(Path serverDir) {
+                return ServerValidationResult.ok();
+            }
+
+            @Override
+            public void install(Server transientServer, ServerInstallationRequest request) throws java.io.IOException {
+                deleteDirectoryIfExists(request.targetDirectory().resolve("world"));
+                Files.deleteIfExists(request.targetDirectory().resolve("server.properties"));
+                TestWorldFixtures.createValidServerJar(
+                        request.targetDirectory(),
+                        "runtime.jar",
+                        "{\"id\":\"1.20.1\"}",
+                        "net/minecraftforge/server/ServerMain.class"
+                );
+                Files.createDirectories(request.targetDirectory().resolve("libraries"));
+                Files.createDirectories(request.targetDirectory().resolve("mods"));
+                Files.writeString(request.targetDirectory().resolve("run.bat"), "@echo off");
+            }
+
+            @Override
+            public ProcessBuilder buildStartProcess(Server server, Path executableJar) {
+                return new ProcessBuilder("java", "-jar", executableJar.toString());
+            }
+
+            @Override
+            public Path resolveExecutableJar(Path serverDir) {
+                return serverDir.resolve("runtime.jar");
+            }
+        };
+
+        Server converted = gestor.convertirServidorExistente(
+                server,
+                forgeInstaller,
+                new ServerCreationOption(ServerPlatform.FORGE, "1.20.1", "1.20.1-47.4.18", "Forge 1.20.1", "ignored"),
+                (url, destination) -> {},
+                false
+        );
+
+        assertThat(converted).isNotNull();
+        assertThat(converted.getPlatform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(
+                Files.exists(serverDir.resolve("world").resolve("level.dat"))
+                        || Files.exists(serverDir.resolve(GestorMundos.DIRECTORIO_MUNDOS).resolve("world").resolve("level.dat"))
+        ).isTrue();
+        assertThat(Utilidades.leerMotdDesdeProperties(serverDir)).isEqualTo("No Backup MOTD");
+        try (var backups = Files.list(tempDir)) {
+            assertThat(backups.map(path -> path.getFileName().toString())
+                    .filter(name -> name.contains("backup_before_forge"))
+                    .toList()).isEmpty();
+        }
+    }
+
+    @Test
     void convertirServidorExistente_deModsAPluginsDebePreservarModsYReiniciarCache() throws Exception {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
         Path serverDir = tempDir.resolve("forge-to-paper");
@@ -1324,6 +1663,62 @@ class GestorServidoresTest {
     }
 
     @Test
+    void importarServidorDebeAceptarSnapshotSemanticoFuturoDesdeVersionJson() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("future-snapshot-vanilla");
+        TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"26.2-snapshot-7\",\"name\":\"26.2-snapshot-7\"}");
+
+        Server imported = gestor.importarServidorDesdeDirectorio(serverDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getPlatform()).isEqualTo(modelo.extensions.ServerPlatform.VANILLA);
+        assertThat(imported.getVersion()).isEqualTo("26.2-snapshot-7");
+    }
+
+    @Test
+    void importarServidorDebePreferirIdSnapshotSobreNombreReleaseDesdeVersionJson() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("future-snapshot-vanilla-release-name");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "server.jar",
+                "{\"id\":\"26.2-snapshot-7\",\"name\":\"26.2\"}"
+        );
+
+        Server imported = gestor.importarServidorDesdeDirectorio(serverDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getPlatform()).isEqualTo(modelo.extensions.ServerPlatform.VANILLA);
+        assertThat(imported.getVersion()).isEqualTo("26.2-snapshot-7");
+        assertThat(imported.getVersion()).isNotEqualTo("26.2");
+    }
+
+    @Test
+    void resolverOrigenConversionDebeActualizarSnapshotTruncadoDesdeJar() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("existing-snapshot-vanilla-release-name");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "server.jar",
+                "{\"id\":\"26.2-snapshot-7\",\"name\":\"26.2\"}"
+        );
+        Server server = new Server();
+        server.setServerDir(serverDir.toString());
+        server.setPlatform(modelo.extensions.ServerPlatform.VANILLA);
+        server.setVersion("26.2");
+        Method resolverOrigenConversion = GestorServidores.class.getDeclaredMethod(
+                "resolverOrigenConversion",
+                Server.class
+        );
+        resolverOrigenConversion.setAccessible(true);
+
+        Object source = resolverOrigenConversion.invoke(gestor, server);
+
+        assertThat(source).isNotNull();
+        assertThat(server.getVersion()).isEqualTo("26.2-snapshot-7");
+    }
+
+    @Test
     void eliminarServidor_debeFallarSiProcesoSigueVivo() {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
         Server server = new Server();
@@ -1369,6 +1764,50 @@ class GestorServidoresTest {
                         }
                         """.formatted(id, id))
         );
+    }
+
+    private static ServerPlatformAdapter adapterConversionConOpciones(ServerPlatform platform,
+                                                                      List<ServerCreationOption> options) {
+        return new ServerPlatformAdapter() {
+            @Override
+            public ServerPlatform getPlatform() {
+                return platform;
+            }
+
+            @Override
+            public boolean supportsAutomatedCreation() {
+                return true;
+            }
+
+            @Override
+            public List<ServerCreationOption> listCreationOptions() {
+                return options;
+            }
+
+            @Override
+            public ServerPlatformProfile detect(Path serverDir) {
+                return null;
+            }
+
+            @Override
+            public ServerValidationResult validate(Path serverDir) {
+                return ServerValidationResult.ok();
+            }
+
+            @Override
+            public void install(Server server, ServerInstallationRequest request) {
+            }
+
+            @Override
+            public ProcessBuilder buildStartProcess(Server server, Path executableJar) {
+                return new ProcessBuilder("java", "-jar", executableJar.toString());
+            }
+
+            @Override
+            public Path resolveExecutableJar(Path serverDir) {
+                return serverDir.resolve("server.jar");
+            }
+        };
     }
 
     private static final class FakeModrinthModpackService extends ModrinthModpackService {

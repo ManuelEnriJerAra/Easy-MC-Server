@@ -29,6 +29,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -39,6 +40,7 @@ public final class PlatformSelectorPanel extends JPanel {
     private static final int ICON_SIZE = 38;
 
     private final List<ServerPlatformAdapter> adapters;
+    private final Map<ServerPlatform, String> disabledTooltips;
     private final List<PlatformOptionButton> optionButtons = new ArrayList<>();
     private final ButtonGroup buttonGroup = new ButtonGroup();
     private Consumer<ServerPlatformAdapter> selectionListener;
@@ -47,14 +49,24 @@ public final class PlatformSelectorPanel extends JPanel {
     public PlatformSelectorPanel(List<ServerPlatformAdapter> adapters,
                                  ServerPlatformAdapter initialSelection,
                                  Consumer<ServerPlatformAdapter> selectionListener) {
+        this(adapters, initialSelection, selectionListener, Map.of());
+    }
+
+    public PlatformSelectorPanel(List<ServerPlatformAdapter> adapters,
+                                 ServerPlatformAdapter initialSelection,
+                                 Consumer<ServerPlatformAdapter> selectionListener,
+                                 Map<ServerPlatform, String> disabledTooltips) {
         this.adapters = adapters == null ? List.of() : List.copyOf(adapters);
+        this.disabledTooltips = disabledTooltips == null ? Map.of() : Map.copyOf(disabledTooltips);
         this.selectionListener = selectionListener;
         setLayout(new GridBagLayout());
         setOpaque(false);
         setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
         build();
 
-        ServerPlatformAdapter initial = initialSelection != null && this.adapters.contains(initialSelection)
+        ServerPlatformAdapter initial = initialSelection != null
+                && this.adapters.contains(initialSelection)
+                && isAdapterEnabled(initialSelection)
                 ? initialSelection
                 : null;
         setSelectedAdapter(initial, false);
@@ -120,9 +132,17 @@ public final class PlatformSelectorPanel extends JPanel {
         for (int i = 0; i < rowAdapters.size(); i++) {
             ServerPlatformAdapter adapter = rowAdapters.get(i);
             PlatformOptionButton button = new PlatformOptionButton(adapter);
-            buttonGroup.add(button);
+            if (isAdapterEnabled(adapter)) {
+                buttonGroup.add(button);
+            }
             optionButtons.add(button);
             button.addItemListener(e -> {
+                if (!isAdapterEnabled(adapter)) {
+                    if (button.isSelected()) {
+                        button.setSelected(false);
+                    }
+                    return;
+                }
                 if (e.getStateChange() == ItemEvent.SELECTED) {
                     setSelectedAdapter(adapter, true);
                 }
@@ -188,6 +208,9 @@ public final class PlatformSelectorPanel extends JPanel {
         if (adapter != null && !adapters.contains(adapter)) {
             return;
         }
+        if (adapter != null && !isAdapterEnabled(adapter)) {
+            return;
+        }
         boolean changed = !Objects.equals(selectedAdapter, adapter);
         selectedAdapter = adapter;
         if (selectedAdapter == null) {
@@ -224,6 +247,19 @@ public final class PlatformSelectorPanel extends JPanel {
         };
     }
 
+    private boolean isAdapterEnabled(ServerPlatformAdapter adapter) {
+        return disabledTooltipFor(adapter) == null;
+    }
+
+    private String disabledTooltipFor(ServerPlatformAdapter adapter) {
+        ServerPlatform platform = adapter == null ? null : adapter.getPlatform();
+        if (platform == null) {
+            return null;
+        }
+        String tooltip = disabledTooltips.get(platform);
+        return tooltip == null || tooltip.isBlank() ? null : tooltip;
+    }
+
     private static String iconResourceFor(ServerPlatformAdapter adapter) {
         ServerPlatform platform = adapter == null ? ServerPlatform.UNKNOWN : adapter.getPlatform();
         String platformName = platform == null ? "" : platform.name().toLowerCase(java.util.Locale.ROOT);
@@ -256,12 +292,15 @@ public final class PlatformSelectorPanel extends JPanel {
     private final class PlatformOptionButton extends JToggleButton {
         private final ServerPlatformAdapter adapter;
         private final String iconResource;
+        private final boolean available;
         private boolean hovered;
 
         private PlatformOptionButton(ServerPlatformAdapter adapter) {
             super(optionText(adapter));
             this.adapter = adapter;
             this.iconResource = iconResourceFor(adapter);
+            String disabledTooltip = disabledTooltipFor(adapter);
+            this.available = disabledTooltip == null;
             setHorizontalAlignment(SwingConstants.CENTER);
             setHorizontalTextPosition(SwingConstants.CENTER);
             setVerticalTextPosition(SwingConstants.BOTTOM);
@@ -270,11 +309,13 @@ public final class PlatformSelectorPanel extends JPanel {
             setContentAreaFilled(false);
             setBorderPainted(false);
             setOpaque(false);
-            setFocusable(true);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setFocusable(available);
+            setCursor(Cursor.getPredefinedCursor(available ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
             setPreferredSize(new Dimension(OPTION_WIDTH, OPTION_HEIGHT));
             setMinimumSize(new Dimension(OPTION_WIDTH, OPTION_HEIGHT));
-            setToolTipText(adapter == null ? null : adapter.getCreationDisplayName());
+            setToolTipText(disabledTooltip == null
+                    ? adapter == null ? null : adapter.getCreationDisplayName()
+                    : disabledTooltip);
             addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseEntered(MouseEvent e) {
@@ -292,7 +333,9 @@ public final class PlatformSelectorPanel extends JPanel {
         }
 
         private void refreshVisualState() {
-            Color foreground = isSelected() ? AppTheme.getMainAccent() : AppTheme.getForeground();
+            Color foreground = !available
+                    ? AppTheme.getMutedForeground()
+                    : isSelected() ? AppTheme.getMainAccent() : AppTheme.getForeground();
             setForeground(foreground);
             Icon icon = SvgIconFactory.create(iconResource, ICON_SIZE, ICON_SIZE, () -> foreground);
             setIcon(icon);
@@ -306,8 +349,8 @@ public final class PlatformSelectorPanel extends JPanel {
             int arc = Math.max(8, AppTheme.getArc());
             Color fill = isSelected()
                     ? AppTheme.getSoftSelectionBackground()
-                    : hovered ? AppTheme.getHoverBackground() : UIManager.getColor("Panel.background");
-            if (fill != null && (isSelected() || hovered || isFocusOwner())) {
+                    : hovered && available ? AppTheme.getHoverBackground() : UIManager.getColor("Panel.background");
+            if (fill != null && (isSelected() || (available && (hovered || isFocusOwner())))) {
                 g2.setColor(fill);
                 g2.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, arc, arc);
             }
@@ -315,7 +358,7 @@ public final class PlatformSelectorPanel extends JPanel {
             Color border = isSelected()
                     ? AppTheme.getMainAccent()
                     : isFocusOwner() ? AppTheme.withAlpha(AppTheme.getMainAccent(), 180) : AppTheme.withAlpha(AppTheme.getBorderColor(), 90);
-            if (isSelected() || hovered || isFocusOwner()) {
+            if (available && (isSelected() || hovered || isFocusOwner())) {
                 g2.setColor(border);
                 g2.setStroke(new BasicStroke(isSelected() ? 1.5f : 1f));
                 g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, arc, arc);

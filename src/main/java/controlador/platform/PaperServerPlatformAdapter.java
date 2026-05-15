@@ -61,6 +61,11 @@ public final class PaperServerPlatformAdapter extends AbstractServerPlatformAdap
     }
 
     @Override
+    public boolean supportsUnstableCreationOptions() {
+        return true;
+    }
+
+    @Override
     public String getCreationDisplayName() {
         return "Paper";
     }
@@ -74,16 +79,16 @@ public final class PaperServerPlatformAdapter extends AbstractServerPlatformAdap
     public void install(Server server, ServerInstallationRequest request) throws IOException {
         ServerPlatformInstallSupport.requireServerAndRequest(server, request, "Paper");
         Files.createDirectories(request.targetDirectory());
-        String downloadUrl = downloadsClient.downloadUrl(request.minecraftVersion(), request.platformVersion());
-        Path destinationJar = request.targetDirectory().resolve("paper-" + request.minecraftVersion() + "-" + request.platformVersion() + ".jar");
+        PaperDownloadsClient.PaperBuild build = downloadsClient.resolveBuild(request.minecraftVersion(), request.platformVersion());
+        Path destinationJar = request.targetDirectory().resolve("paper-" + request.minecraftVersion() + "-" + build.id() + ".jar");
         if (!Files.isRegularFile(destinationJar)) {
-            request.downloader().download(downloadUrl, destinationJar.toFile());
+            request.downloader().download(build.downloadUrl(), destinationJar.toFile());
         }
         ServerPlatformInstallSupport.prepareCommonFiles(
                 server,
                 request,
                 ServerPlatform.PAPER,
-                request.platformVersion(),
+                build.id(),
                 "Easy-MC Paper " + request.minecraftVersion(),
                 getExtensionDirectories(request.targetDirectory())
         );

@@ -84,6 +84,11 @@ public final class QuiltServerPlatformAdapter extends AbstractServerPlatformAdap
     }
 
     @Override
+    public boolean supportsUnstableCreationOptions() {
+        return true;
+    }
+
+    @Override
     public String getCreationDisplayName() {
         return "Quilt";
     }

@@ -46,42 +46,38 @@ final class ServerJarLocator {
         if (name.contains("javadoc")) score -= 40;
         if (name.contains("server")) score += 20;
 
-        switch (platform == null ? ServerPlatform.UNKNOWN : platform) {
-            case FORGE -> {
-                if (name.contains("forge")) score += 50;
-                if (MinecraftServerJarInspector.looksLikeForgeServerJar(jar)) score += 80;
-            }
-            case NEOFORGE -> {
-                if (name.contains("neoforge")) score += 70;
-                if (MinecraftServerJarInspector.looksLikeNeoForgeServerJar(jar)) score += 90;
-            }
-            case PAPER, SPIGOT, BUKKIT, PURPUR, PUFFERFISH -> {
-                if (name.contains("paper")) score += 50;
-                if (name.contains("spigot")) score += 40;
-                if (name.contains("bukkit")) score += 40;
-                if (name.contains("purpur")) score += 40;
-                if (name.contains("pufferfish")) score += 40;
-                if (MinecraftServerJarInspector.looksLikePaperServerJar(jar)) score += 80;
-                if (MinecraftServerJarInspector.looksLikePurpurServerJar(jar)) score += 90;
-                if (MinecraftServerJarInspector.looksLikePufferfishServerJar(jar)) score += 90;
-                if (MinecraftServerJarInspector.looksLikeSpigotServerJar(jar)) score += 70;
-                if (MinecraftServerJarInspector.looksLikeBukkitServerJar(jar)) score += 60;
-            }
-            case FABRIC -> {
-                if (name.contains("fabric")) score += 50;
-                if (MinecraftServerJarInspector.looksLikeFabricServerJar(jar)) score += 80;
-            }
-            case QUILT -> {
-                if (name.contains("quilt")) score += 50;
-                if (MinecraftServerJarInspector.looksLikeQuiltServerJar(jar)) score += 80;
-            }
-            case VANILLA, UNKNOWN -> {
-                if (name.contains("minecraft")) score += 30;
-                if (name.contains("paper") || name.contains("forge") || name.contains("fabric") || name.contains("quilt")) {
-                    score -= 30;
-                }
-            }
-            default -> {
+        ServerPlatform resolvedPlatform = platform == null ? ServerPlatform.UNKNOWN : platform;
+        if (resolvedPlatform == ServerPlatform.FORGE) {
+            if (name.contains("forge")) score += 50;
+            if (MinecraftServerJarInspector.looksLikeForgeServerJar(jar)) score += 80;
+        } else if (resolvedPlatform == ServerPlatform.NEOFORGE) {
+            if (name.contains("neoforge")) score += 70;
+            if (MinecraftServerJarInspector.looksLikeNeoForgeServerJar(jar)) score += 90;
+        } else if (resolvedPlatform == ServerPlatform.PAPER
+                || resolvedPlatform == ServerPlatform.SPIGOT
+                || resolvedPlatform == ServerPlatform.BUKKIT
+                || resolvedPlatform == ServerPlatform.PURPUR
+                || resolvedPlatform == ServerPlatform.PUFFERFISH) {
+            if (name.contains("paper")) score += 50;
+            if (name.contains("spigot")) score += 40;
+            if (name.contains("bukkit")) score += 40;
+            if (name.contains("purpur")) score += 40;
+            if (name.contains("pufferfish")) score += 40;
+            if (MinecraftServerJarInspector.looksLikePaperServerJar(jar)) score += 80;
+            if (MinecraftServerJarInspector.looksLikePurpurServerJar(jar)) score += 90;
+            if (MinecraftServerJarInspector.looksLikePufferfishServerJar(jar)) score += 90;
+            if (MinecraftServerJarInspector.looksLikeSpigotServerJar(jar)) score += 70;
+            if (MinecraftServerJarInspector.looksLikeBukkitServerJar(jar)) score += 60;
+        } else if (resolvedPlatform == ServerPlatform.FABRIC) {
+            if (name.contains("fabric")) score += 50;
+            if (MinecraftServerJarInspector.looksLikeFabricServerJar(jar)) score += 80;
+        } else if (resolvedPlatform == ServerPlatform.QUILT) {
+            if (name.contains("quilt")) score += 50;
+            if (MinecraftServerJarInspector.looksLikeQuiltServerJar(jar)) score += 80;
+        } else if (resolvedPlatform == ServerPlatform.VANILLA || resolvedPlatform == ServerPlatform.UNKNOWN) {
+            if (name.contains("minecraft")) score += 30;
+            if (name.contains("paper") || name.contains("forge") || name.contains("fabric") || name.contains("quilt")) {
+                score -= 30;
             }
         }
 

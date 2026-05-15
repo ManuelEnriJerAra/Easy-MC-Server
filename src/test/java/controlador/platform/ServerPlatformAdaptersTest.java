@@ -221,6 +221,124 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
+    void detect_debeInferirSnapshotForgeDesdeCoordenadaRuntime() throws Exception {
+        Path forgeDir = tempDir.resolve("forge-script-snapshot-version");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries/net/minecraftforge/forge/1.20.3-pre1-49.0.0"));
+        Files.writeString(forgeDir.resolve("run.bat"), "@echo off\njava @libraries/net/minecraftforge/forge/1.20.3-pre1-49.0.0/win_args.txt nogui\n");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.20.3-pre1");
+    }
+
+    @Test
+    void detect_noDebeUsarVersionForgeDelJarComoVersionMinecraft() throws Exception {
+        Path forgeDir = tempDir.resolve("forge-loader-version-json");
+        TestWorldFixtures.createValidServerJar(
+                forgeDir,
+                "forge-1.19-41.1.0.jar",
+                "{\"id\":\"41.1.0\",\"name\":\"Forge 41.1.0\"}",
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries/net/minecraftforge/forge/1.19-41.1.0"));
+        Files.writeString(
+                forgeDir.resolve("run.bat"),
+                "@echo off\njava @libraries/net/minecraftforge/forge/1.19-41.1.0/win_args.txt nogui\n"
+        );
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.19");
+        assertThat(profile.minecraftVersion()).isNotEqualTo("41.1.0");
+    }
+
+    @Test
+    void detect_forgeDebePreferirClaseServidorSobreLogsAntiguos() throws Exception {
+        Path forgeDir = tempDir.resolve("forge-stale-log");
+        TestWorldFixtures.createJar(
+                forgeDir.resolve("forge-1.20.1-47.4.0.jar"),
+                Map.of(
+                        "version.json", "{\"id\":\"41.1.0\",\"name\":\"Forge 41.1.0\"}",
+                        "net/minecraft/server/MinecraftServer.class", "Minecraft server 1.20.1"
+                ),
+                "net/minecraftforge/server/ServerMain.class"
+        );
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.writeString(forgeDir.resolve("latest.log"), "[Server thread/INFO]: Starting minecraft server version 1.19.4");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("1.20.1");
+    }
+
+    @Test
+    void detect_debeExtraerVersionMinecraftDeVersionJsonConSufijoDePlataforma() throws Exception {
+        Path serverDir = tempDir.resolve("version-json-suffix");
+        TestWorldFixtures.createValidServerJar(
+                serverDir,
+                "server.jar",
+                "{\"id\":\"1.20.1-forge-47.4.0\",\"name\":\"Forge 47.4.0\"}"
+        );
+
+        ServerPlatformProfile profile = new VanillaServerPlatformAdapter().detect(serverDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.minecraftVersion()).isEqualTo("1.20.1");
+    }
+
+    @Test
+    void detect_debeNormalizarVersionMetadataConSufijoDePlataforma() throws Exception {
+        List<String> versions = List.of(
+                "1.20.1-forge-47.4.0",
+                "1.20.1-neoforge-47.4.0",
+                "1.20.1-fabric-0.15.11"
+        );
+
+        for (String version : versions) {
+            Path forgeDir = tempDir.resolve("metadata-suffix-" + version.replace('.', '_').replace('-', '_'));
+            Files.createDirectories(forgeDir.resolve("mods"));
+            Files.createDirectories(forgeDir.resolve("libraries"));
+            Files.writeString(forgeDir.resolve("minecraftinstance.json"), """
+                    {
+                      "minecraftVersion": "%s"
+                    }
+                    """.formatted(version));
+
+            ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+            assertThat(profile).isNotNull();
+            assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+            assertThat(profile.minecraftVersion()).isEqualTo("1.20.1");
+        }
+    }
+
+    @Test
+    void detect_noDebeNormalizarVersionMetadataConSufijoDesconocido() throws Exception {
+        Path forgeDir = tempDir.resolve("metadata-unknown-suffix");
+        Files.createDirectories(forgeDir.resolve("mods"));
+        Files.createDirectories(forgeDir.resolve("libraries"));
+        Files.writeString(forgeDir.resolve("minecraftinstance.json"), """
+                {
+                  "minecraftVersion": "1.20.1-custom-build"
+                }
+                """);
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(forgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FORGE);
+        assertThat(profile.minecraftVersion()).isNull();
+    }
+
+    @Test
     void detect_debeInferirVersionDesdeManifestDeModpackForge() throws Exception {
         Path forgeDir = tempDir.resolve("26.1.2_server_1");
         Files.createDirectories(forgeDir.resolve("mods"));
@@ -354,6 +472,35 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
+    void detect_debeInferirVersionSnapshotSemanticaDesdeJar() throws Exception {
+        Path vanillaDir = tempDir.resolve("vanilla-semantic-snapshot");
+        TestWorldFixtures.createValidServerJar(vanillaDir, "server.jar", "{\"id\":\"26.2-snapshot-7\"}");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(vanillaDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.VANILLA);
+        assertThat(profile.minecraftVersion()).isEqualTo("26.2-snapshot-7");
+    }
+
+    @Test
+    void detect_debePreferirIdSnapshotSobreNombreReleaseDesdeJar() throws Exception {
+        Path vanillaDir = tempDir.resolve("vanilla-semantic-snapshot-with-release-name");
+        TestWorldFixtures.createValidServerJar(
+                vanillaDir,
+                "server.jar",
+                "{\"id\":\"26.2-snapshot-7\",\"name\":\"26.2\"}"
+        );
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(vanillaDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.VANILLA);
+        assertThat(profile.minecraftVersion()).isEqualTo("26.2-snapshot-7");
+        assertThat(profile.minecraftVersion()).isNotEqualTo("26.2");
+    }
+
+    @Test
     void detect_debeInferirVersionDesdeMmcPack() throws Exception {
         Path fabricDir = tempDir.resolve("fabric-mmc-pack");
         Files.createDirectories(fabricDir.resolve("mods"));
@@ -425,6 +572,20 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
+    void detect_debeInferirSnapshotNeoForgeDesdeCoordenadaRuntime() throws Exception {
+        Path neoForgeDir = tempDir.resolve("neoforge-semantic-snapshot-coordinate-version");
+        Files.createDirectories(neoForgeDir.resolve("mods"));
+        Files.createDirectories(neoForgeDir.resolve("libraries/net/neoforged/neoforge/26.1.0.0-alpha.2+snapshot-1"));
+        Files.writeString(neoForgeDir.resolve("run.bat"), "@echo off\njava @libraries/net/neoforged/neoforge/26.1.0.0-alpha.2+snapshot-1/win_args.txt nogui\n");
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(neoForgeDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.NEOFORGE);
+        assertThat(profile.minecraftVersion()).isEqualTo("26.1-snapshot-1");
+    }
+
+    @Test
     void install_vanillaDebeEncapsularDescargaEulaYMetadatos() throws Exception {
         Path sourceJar = tempDir.resolve("downloads").resolve("source.jar");
         TestWorldFixtures.createValidServerJar(sourceJar.getParent(), sourceJar.getFileName().toString());
@@ -455,6 +616,29 @@ class ServerPlatformAdaptersTest {
         ServerPlatformProfile profile = adapter.detect(installDir);
         assertThat(profile).isNotNull();
         assertThat(profile.platform()).isEqualTo(ServerPlatform.VANILLA);
+    }
+
+    @Test
+    void creationClients_vanillaDebeExcluirReleasesSinServerJarConocido() {
+        VanillaServerPlatformAdapter adapter = new VanillaServerPlatformAdapter(new FakeMojangApi(null, List.of(
+                new MojangAPI.MinecraftVersionInfo("1.2.5", "release"),
+                new MojangAPI.MinecraftVersionInfo("1.2.4", "release"),
+                new MojangAPI.MinecraftVersionInfo("1.1", "release"),
+                new MojangAPI.MinecraftVersionInfo("1.0", "release"),
+                new MojangAPI.MinecraftVersionInfo("1.3", "snapshot")
+        )));
+
+        List<ServerCreationOption> options = adapter.listCreationOptions();
+
+        assertThat(options)
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("1.2.5", "1.3");
+        assertThat(options.stream().filter(ServerCreationOption::isRelease))
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("1.2.5");
+        assertThat(options.stream().filter(ServerCreationOption::isSnapshot))
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("1.3");
     }
 
     @Test
@@ -624,7 +808,7 @@ class ServerPlatformAdaptersTest {
         PaperDownloadsClient paperClient = new PaperDownloadsClient(new FakePlatformHttpClient(Map.of(
                 "https://fill.papermc.io/v3/projects/paper",
                 """
-                {"versions":{"1.21":["1.21.1","1.21.2"]}}
+                {"versions":{"1.21":["1.21.1","1.21.2","1.21.3-pre1"]}}
                 """,
                 "https://fill.papermc.io/v3/projects/paper/versions/1.21.2/builds",
                 """
@@ -637,7 +821,10 @@ class ServerPlatformAdaptersTest {
         )));
         assertThat(paperClient.listCreationOptions())
                 .extracting(ServerCreationOption::directoryName)
-                .contains("paper-1.21.2-server", "paper-1.21.1-server");
+                .contains("paper-1.21.3-pre1-server", "paper-1.21.2-server", "paper-1.21.1-server");
+        assertThat(paperClient.listCreationOptions().stream().filter(ServerCreationOption::isSnapshot))
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("1.21.3-pre1");
 
         FabricMetaClient fabricClient = new FabricMetaClient(new FakePlatformHttpClient(Map.of(
                 "https://meta.fabricmc.net/v2/versions/loader",
@@ -653,13 +840,21 @@ class ServerPlatformAdaptersTest {
                 [{"version":"1.21.2","stable":true},{"version":"1.21.1","stable":true},{"version":"25w01a","stable":false}]
                 """
         )));
-        assertThat(fabricClient.listCreationOptions().getFirst().directoryName()).isEqualTo("fabric-1.21.2-server");
-        assertThat(fabricClient.listCreationOptions().getFirst().platformVersion()).isEqualTo("0.19.2|1.1.1");
+        List<ServerCreationOption> fabricOptions = fabricClient.listCreationOptions();
+        assertThat(fabricOptions)
+                .extracting(ServerCreationOption::directoryName)
+                .contains("fabric-25w01a-server", "fabric-1.21.2-server");
+        assertThat(fabricOptions.stream().filter(ServerCreationOption::isRelease).findFirst().orElseThrow().directoryName())
+                .isEqualTo("fabric-1.21.2-server");
+        assertThat(fabricOptions.stream().filter(ServerCreationOption::isRelease).findFirst().orElseThrow().platformVersion())
+                .isEqualTo("0.19.2|1.1.1");
+        assertThat(fabricOptions.stream().filter(ServerCreationOption::isSnapshot).map(ServerCreationOption::minecraftVersion))
+                .contains("25w01a");
 
         QuiltMetaClient quiltClient = new QuiltMetaClient(new FakePlatformHttpClient(Map.of(
                 "https://meta.quiltmc.org/v3/versions/loader",
                 """
-                [{"version":"0.29.2"}]
+                [{"version":"0.30.0-beta.7"},{"version":"0.29.2"}]
                 """,
                 "https://meta.quiltmc.org/v3/versions/installer",
                 """
@@ -671,16 +866,25 @@ class ServerPlatformAdaptersTest {
                   {"version":"26.2-snapshot-6","stable":false},
                   {"version":"26.1.2","stable":true},
                   {"version":"26.1.2-rc-1","stable":false},
+                  {"version":"26w14a","stable":false},
                   {"version":"1.14.4","stable":true}
                 ]
                 """
         )));
         assertThat(quiltClient.listCreationOptions())
                 .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("26.2-snapshot-6", "26.1.2", "26.1.2-rc-1", "26w14a", "1.14.4");
+        assertThat(quiltClient.listCreationOptions().getFirst().platformVersion())
+                .startsWith("0.29.2|");
+        assertThat(quiltClient.listCreationOptions().stream().filter(ServerCreationOption::isRelease))
+                .extracting(ServerCreationOption::minecraftVersion)
                 .containsExactly("26.1.2", "1.14.4");
 
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("21.1.200")).isEqualTo("1.21.1");
+        assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("21.10.64")).isEqualTo("1.21.10");
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("20.6.120")).isEqualTo("1.20.6");
+        assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.0.0-alpha.2+snapshot-1")).isEqualTo("26.1-snapshot-1");
+        assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.0.0-alpha.15+pre-3")).isEqualTo("26.1-pre-3");
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.2.48-beta")).isEqualTo("26.1.2");
         assertThat(NeoForgeRepositoryClient.inferMinecraftVersion("26.1.2")).isEqualTo("26.1.2");
     }
@@ -734,7 +938,7 @@ class ServerPlatformAdaptersTest {
         CountingPlatformHttpClient httpClient = new CountingPlatformHttpClient(Map.of(
                 "https://api.purpurmc.org/v2/purpur",
                 """
-                {"versions":["1.21.1","1.21.2","1.21.3"]}
+                {"versions":["1.21.1","1.21.2","1.21.3","1.21.4-rc1"]}
                 """
         ));
         PurpurDownloadsClient purpurClient = new PurpurDownloadsClient(httpClient);
@@ -744,11 +948,105 @@ class ServerPlatformAdaptersTest {
         assertThat(options)
                 .extracting(ServerCreationOption::platformVersion)
                 .containsOnly("latest");
-        assertThat(options.getFirst().displayName()).contains("Purpur latest");
+        assertThat(options.stream().filter(ServerCreationOption::isSnapshot))
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("1.21.4-rc1");
+        assertThat(options.stream().filter(ServerCreationOption::isRelease).findFirst().orElseThrow().displayName())
+                .contains("Purpur latest");
         assertThat(httpClient.count("https://api.purpurmc.org/v2/purpur")).isEqualTo(1);
         assertThat(httpClient.count("https://api.purpurmc.org/v2/purpur/1.21.3")).isZero();
         assertThat(purpurClient.downloadUrl("1.21.3", "latest"))
                 .isEqualTo("https://api.purpurmc.org/v2/purpur/1.21.3/latest/download");
+    }
+
+    @Test
+    void paperCreationOptions_debenResolverBuildSoloParaLaDescargaSeleccionada() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingPlatformHttpClient httpClient = new CountingPlatformHttpClient(Map.of(
+                "https://fill.papermc.io/v3/projects/paper",
+                """
+                {"versions":{"1.21":["1.21.1","1.21.2","1.21.3-pre1"]}}
+                """,
+                "https://fill.papermc.io/v3/projects/paper/versions/1.21.2/builds",
+                """
+                [{"id":"55","channel":"STABLE","downloads":{"server:default":{"url":"https://example.test/paper-55.jar"}}}]
+                """,
+                "https://fill.papermc.io/v3/projects/paper/versions/1.21.3-pre1/builds",
+                """
+                [{"id":"12","channel":"ALPHA","downloads":{"server:default":{"url":"https://example.test/paper-12.jar"}}}]
+                """
+        ));
+        PaperDownloadsClient paperClient = new PaperDownloadsClient(httpClient);
+
+        List<ServerCreationOption> options = paperClient.listCreationOptions();
+
+        assertThat(options.stream().filter(ServerCreationOption::isRelease))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsOnly("latest-stable");
+        assertThat(options.stream().filter(ServerCreationOption::isSnapshot))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsOnly("latest-unstable");
+        assertThat(httpClient.count("https://fill.papermc.io/v3/projects/paper")).isEqualTo(1);
+        assertThat(httpClient.count("https://fill.papermc.io/v3/projects/paper/versions/1.21.2/builds")).isZero();
+        assertThat(httpClient.count("https://fill.papermc.io/v3/projects/paper/versions/1.21.3-pre1/builds")).isZero();
+
+        assertThat(paperClient.downloadUrl("1.21.2", "latest-stable"))
+                .isEqualTo("https://example.test/paper-55.jar");
+        assertThat(httpClient.count("https://fill.papermc.io/v3/projects/paper/versions/1.21.2/builds")).isEqualTo(1);
+        assertThat(paperClient.downloadUrl("1.21.2", "latest"))
+                .isEqualTo("https://example.test/paper-55.jar");
+        assertThat(httpClient.count("https://fill.papermc.io/v3/projects/paper/versions/1.21.2/builds")).isEqualTo(1);
+        assertThat(paperClient.downloadUrl("1.21.3-pre1", "latest-unstable"))
+                .isEqualTo("https://example.test/paper-12.jar");
+        assertThat(httpClient.count("https://fill.papermc.io/v3/projects/paper/versions/1.21.3-pre1/builds")).isEqualTo(1);
+    }
+
+    @Test
+    void paperCreationOptions_debenUsarBuildDescargableSiUnaReleaseAunNoTieneStable() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingPlatformHttpClient httpClient = new CountingPlatformHttpClient(Map.of(
+                "https://fill.papermc.io/v3/projects/paper",
+                """
+                {"versions":{"1.21":["1.21.12"]}}
+                """,
+                "https://fill.papermc.io/v3/projects/paper/versions/1.21.12/builds",
+                """
+                [{"id":"12","channel":"ALPHA","downloads":{"server:default":{"url":"https://example.test/paper-alpha-12.jar"}}}]
+                """
+        ));
+        PaperDownloadsClient paperClient = new PaperDownloadsClient(httpClient);
+
+        assertThat(paperClient.listCreationOptions())
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("latest-stable");
+        assertThat(paperClient.downloadUrl("1.21.12", "latest-stable"))
+                .isEqualTo("https://example.test/paper-alpha-12.jar");
+    }
+
+    @Test
+    void creationClients_noDebenAplicarCapsArbitrariosAOpcionesRemotas() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingPlatformHttpClient paperHttpClient = new CountingPlatformHttpClient(Map.of(
+                "https://fill.papermc.io/v3/projects/paper",
+                "{\"versions\":{\"1.21\":" + jsonArrayVersions("1.21.", 1, 45) + "}}"
+        ));
+        assertThat(new PaperDownloadsClient(paperHttpClient).listCreationOptions()).hasSize(45);
+
+        CountingPlatformHttpClient purpurHttpClient = new CountingPlatformHttpClient(Map.of(
+                "https://api.purpurmc.org/v2/purpur",
+                "{\"versions\":" + jsonArrayVersions("1.21.", 1, 45) + "}"
+        ));
+        assertThat(new PurpurDownloadsClient(purpurHttpClient).listCreationOptions()).hasSize(45);
+
+        CountingForgeRepositoryClient forgeClient = new CountingForgeRepositoryClient(
+                mavenMetadata("1.20.", "-47.4.0", 1, 45)
+        );
+        assertThat(forgeClient.listCreationOptions()).hasSize(45);
+
+        CountingNeoForgeRepositoryClient neoForgeClient = new CountingNeoForgeRepositoryClient(
+                mavenMetadata("26.1.", ".47", 1, 45)
+        );
+        assertThat(neoForgeClient.listCreationOptions()).hasSize(45);
     }
 
     @Test
@@ -769,6 +1067,170 @@ class ServerPlatformAdaptersTest {
         assertThat(forgeClient.listCreationOptions()).hasSize(1);
 
         assertThat(forgeClient.openCount()).isEqualTo(1);
+    }
+
+    @Test
+    void forgeCreationOptions_debenSepararBuildsEstablesEInestables() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingForgeRepositoryClient forgeClient = new CountingForgeRepositoryClient("""
+                <metadata>
+                  <versioning>
+                    <versions>
+                      <version>1.20.1-47.4.18</version>
+                      <version>1.20.1-47.4.19-beta</version>
+                      <version>1.20.3-pre1-49.0.0</version>
+                      <version>1.20.3-pre1-49.0.1</version>
+                      <version>1.21.10-60.1.0-beta</version>
+                      <version>1.21.1-52.1.12</version>
+                      <version>1.21.1-52.1.13-beta</version>
+                      <version>26.1-snapshot-1-62.0.0</version>
+                      <version>26.1-snapshot-1-62.0.1</version>
+                    </versions>
+                  </versioning>
+                </metadata>
+                """);
+
+        List<ServerCreationOption> options = forgeClient.listCreationOptions();
+
+        assertThat(options.stream().filter(ServerCreationOption::isRelease))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("1.21.10-60.1.0-beta", "1.21.1-52.1.12", "1.20.1-47.4.18");
+        assertThat(options.stream().filter(option -> "1.21.10".equals(option.minecraftVersion())))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("1.21.10-60.1.0-beta");
+        assertThat(options.stream().filter(ServerCreationOption::isSnapshot))
+                .extracting(ServerCreationOption::platformVersion)
+                .contains("26.1-snapshot-1-62.0.1", "26.1-snapshot-1-62.0.0",
+                        "1.20.3-pre1-49.0.1", "1.20.3-pre1-49.0.0");
+        assertThat(options.stream().filter(option -> "1.20.3-pre1".equals(option.minecraftVersion())))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("1.20.3-pre1-49.0.1", "1.20.3-pre1-49.0.0");
+        assertThat(options.stream().filter(option -> "26.1-snapshot-1".equals(option.minecraftVersion())))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("26.1-snapshot-1-62.0.1", "26.1-snapshot-1-62.0.0");
+        assertThat(options.stream()
+                .filter(option -> "1.20.3-pre1-49.0.0".equals(option.platformVersion()))
+                .findFirst()
+                .orElseThrow()
+                .minecraftVersion())
+                .isEqualTo("1.20.3-pre1");
+        assertThat(options)
+                .extracting(ServerCreationOption::platformVersion)
+                .doesNotContain("1.21.1-52.1.13-beta", "1.20.1-47.4.19-beta");
+    }
+
+    @Test
+    void forgeCreationOptions_debenParsearArtefactosAntiguosPorVersionMinecraftReal() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingForgeRepositoryClient forgeClient = new CountingForgeRepositoryClient("""
+                <metadata>
+                  <versioning>
+                    <versions>
+                      <version>1.7.10-10.13.4.1566-1.7.10</version>
+                      <version>1.7.10-10.13.4.1614-1.7.10</version>
+                      <version>1.8.9-11.15.1.1875</version>
+                      <version>1.8.9-11.15.1.2318-1.8.9</version>
+                      <version>1.10-12.18.0.1981-1.10.0</version>
+                      <version>1.10-12.18.0.2000-1.10.0</version>
+                      <version>1.20.1-47.4.18</version>
+                    </versions>
+                  </versioning>
+                </metadata>
+                """);
+
+        List<ServerCreationOption> options = forgeClient.listCreationOptions();
+
+        assertThat(options)
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("1.20.1", "1.10", "1.8.9", "1.7.10");
+        assertThat(options)
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly(
+                        "1.20.1-47.4.18",
+                        "1.10-12.18.0.2000-1.10.0",
+                        "1.8.9-11.15.1.2318-1.8.9",
+                        "1.7.10-10.13.4.1614-1.7.10"
+                );
+        assertThat(options)
+                .extracting(ServerCreationOption::displayName)
+                .noneMatch(displayName -> displayName.contains("1.10-12.18.0.2000")
+                        || displayName.contains("1.7.10-10.13.4.1614"));
+    }
+
+    @Test
+    void forgeCreationOptions_debenExcluirArtefactosSinInstalador() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingForgeRepositoryClient forgeClient = new CountingForgeRepositoryClient("""
+                <metadata>
+                  <versioning>
+                    <versions>
+                      <version>1.1-1.3.4.29</version>
+                      <version>1.2.5-3.4.9.171</version>
+                      <version>1.4.7-6.6.2.534</version>
+                      <version>1.5-7.7.0.598</version>
+                      <version>1.5.2-7.8.1.738</version>
+                      <version>1.6.4-9.11.1.1345</version>
+                    </versions>
+                  </versioning>
+                </metadata>
+                """);
+
+        List<ServerCreationOption> options = forgeClient.listCreationOptions();
+
+        assertThat(options)
+                .extracting(ServerCreationOption::minecraftVersion)
+                .containsExactly("1.6.4", "1.5.2");
+        assertThat(options)
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("1.6.4-9.11.1.1345", "1.5.2-7.8.1.738");
+        assertThat(options)
+                .extracting(ServerCreationOption::minecraftVersion)
+                .doesNotContain("1.1", "1.2.5", "1.4.7", "1.5");
+    }
+
+    @Test
+    void neoForgeCreationOptions_debenIgnorarBuildsInestablesDeLoaderParaReleasesMinecraft() throws Exception {
+        PlatformRemoteLookupPolicy.clearForTests();
+        CountingNeoForgeRepositoryClient neoForgeClient = new CountingNeoForgeRepositoryClient("""
+                <metadata>
+                  <versioning>
+                    <versions>
+                      <version>21.1.200</version>
+                      <version>21.1.201-beta</version>
+                      <version>21.10.64</version>
+                      <version>26.1.0.0-alpha.2+snapshot-1</version>
+                      <version>26.1.0.0-alpha.3+snapshot-1</version>
+                      <version>26.1.0.0-alpha.15+pre-3</version>
+                      <version>26.1.2.47</version>
+                      <version>26.1.2.48-beta</version>
+                      <version>26.1.3.50-beta</version>
+                    </versions>
+                  </versioning>
+                </metadata>
+                """);
+
+        List<ServerCreationOption> options = neoForgeClient.listCreationOptions();
+
+        assertThat(options.stream().filter(ServerCreationOption::isRelease))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("26.1.3.50-beta", "26.1.2.47", "21.10.64", "21.1.200");
+        assertThat(options.stream().filter(option -> "26.1.3".equals(option.minecraftVersion())))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("26.1.3.50-beta");
+        assertThat(options.stream().filter(option -> "1.21.10".equals(option.minecraftVersion())))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("21.10.64");
+        assertThat(options.stream().filter(ServerCreationOption::isSnapshot))
+                .extracting(ServerCreationOption::platformVersion)
+                .contains("26.1.0.0-alpha.15+pre-3",
+                        "26.1.0.0-alpha.3+snapshot-1",
+                        "26.1.0.0-alpha.2+snapshot-1");
+        assertThat(options.stream().filter(option -> "26.1-snapshot-1".equals(option.minecraftVersion())))
+                .extracting(ServerCreationOption::platformVersion)
+                .containsExactly("26.1.0.0-alpha.3+snapshot-1", "26.1.0.0-alpha.2+snapshot-1");
+        assertThat(options)
+                .extracting(ServerCreationOption::platformVersion)
+                .doesNotContain("26.1.2.48-beta", "21.1.201-beta");
     }
 
     @Test
@@ -830,9 +1292,20 @@ class ServerPlatformAdaptersTest {
 
     private static final class FakeMojangApi extends MojangAPI {
         private final Path sourceJar;
+        private final List<MojangAPI.MinecraftVersionInfo> versions;
 
         private FakeMojangApi(Path sourceJar) {
+            this(sourceJar, List.of());
+        }
+
+        private FakeMojangApi(Path sourceJar, List<MojangAPI.MinecraftVersionInfo> versions) {
             this.sourceJar = sourceJar;
+            this.versions = versions == null ? List.of() : List.copyOf(versions);
+        }
+
+        @Override
+        public List<MojangAPI.MinecraftVersionInfo> obtenerListaVersionesConTipo() {
+            return versions;
         }
 
         @Override
@@ -871,6 +1344,37 @@ class ServerPlatformAdaptersTest {
         assertThat(properties.getProperty("level-name")).isEqualTo("world");
         assertThat(properties.getProperty("gamemode")).isEqualTo("survival");
         assertThat(properties.size()).isGreaterThan(20);
+    }
+
+    private static String jsonArrayVersions(String prefix, int first, int last) {
+        StringBuilder builder = new StringBuilder("[");
+        for (int value = first; value <= last; value++) {
+            if (value > first) {
+                builder.append(',');
+            }
+            builder.append('"').append(prefix).append(value).append('"');
+        }
+        return builder.append(']').toString();
+    }
+
+    private static String mavenMetadata(String prefix, String suffix, int first, int last) {
+        StringBuilder builder = new StringBuilder("""
+                <metadata>
+                  <versioning>
+                    <versions>
+                """);
+        for (int value = first; value <= last; value++) {
+            builder.append("      <version>")
+                    .append(prefix)
+                    .append(value)
+                    .append(suffix)
+                    .append("</version>\n");
+        }
+        return builder.append("""
+                    </versions>
+                  </versioning>
+                </metadata>
+                """).toString();
     }
 
     private static final class FakePlatformHttpClient implements PlatformHttpClient {
@@ -929,6 +1433,19 @@ class ServerPlatformAdaptersTest {
 
         private int openCount() {
             return openCount;
+        }
+    }
+
+    private static final class CountingNeoForgeRepositoryClient extends NeoForgeRepositoryClient {
+        private final byte[] metadata;
+
+        private CountingNeoForgeRepositoryClient(String metadata) {
+            this.metadata = metadata.getBytes(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        protected InputStream openMetadataStream() {
+            return new ByteArrayInputStream(metadata);
         }
     }
 }

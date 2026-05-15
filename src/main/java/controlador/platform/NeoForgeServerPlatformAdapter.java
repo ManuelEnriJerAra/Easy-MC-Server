@@ -62,6 +62,11 @@ public final class NeoForgeServerPlatformAdapter extends AbstractServerPlatformA
     }
 
     @Override
+    public boolean supportsUnstableCreationOptions() {
+        return true;
+    }
+
+    @Override
     public String getCreationDisplayName() {
         return "NeoForge";
     }

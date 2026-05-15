@@ -22,10 +22,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.SocketTimeoutException;
 import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,6 +41,10 @@ public class MojangAPI {
     private static final String SESSION_PROFILE_URL = "https://sessionserver.mojang.com/session/minecraft/profile/";
     private static final int CONNECT_TIMEOUT_MS = 5_000;
     private static final int READ_TIMEOUT_MS = 8_000;
+    private static final int DOWNLOAD_READ_TIMEOUT_MS = 60_000;
+    private static final int DOWNLOAD_MAX_ATTEMPTS = 3;
+    private static final String NO_SERVER_JAR_URL = "";
+    private static final Map<String, String> SERVER_JAR_URL_CACHE = new ConcurrentHashMap<>();
     private static final ExecutorService BACKGROUND_REQUESTS = Executors.newFixedThreadPool(4, runnable -> {
         Thread thread = new Thread(runnable, "mojang-api-worker");
         thread.setDaemon(true);
@@ -82,6 +92,10 @@ public class MojangAPI {
             return;
         }
         BACKGROUND_REQUESTS.execute(task);
+    }
+
+    public static void clearCachesForTests() {
+        SERVER_JAR_URL_CACHE.clear();
     }
 
     public JsonNode getManifest() {
@@ -137,18 +151,40 @@ public class MojangAPI {
     }
 
     public String obtenerUrlServerJar(String versionId){
+        if (versionId == null || versionId.isBlank()) {
+            return null;
+        }
+        String cachedUrl = SERVER_JAR_URL_CACHE.get(versionId);
+        if (cachedUrl != null) {
+            return NO_SERVER_JAR_URL.equals(cachedUrl) ? null : cachedUrl;
+        }
         try{
             String versionJsonUrl = obtenerUrlVersionJson(versionId);
-            if (versionJsonUrl == null) return null;
+            if (versionJsonUrl == null) {
+                SERVER_JAR_URL_CACHE.put(versionId, NO_SERVER_JAR_URL);
+                return null;
+            }
 
             JsonNode versionJson = readJsonFromUrl(versionJsonUrl);
 
             JsonNode downloadsNode = versionJson.get("downloads");
-            if (downloadsNode == null) return null;
+            if (downloadsNode == null) {
+                SERVER_JAR_URL_CACHE.put(versionId, NO_SERVER_JAR_URL);
+                return null;
+            }
             JsonNode serverNode = downloadsNode.get("server");
-            if (serverNode == null || serverNode.get("url") == null) return null;
+            if (serverNode == null || serverNode.get("url") == null) {
+                SERVER_JAR_URL_CACHE.put(versionId, NO_SERVER_JAR_URL);
+                return null;
+            }
 
-            return serverNode.get("url").asString();
+            String serverUrl = serverNode.get("url").asString();
+            if (serverUrl == null || serverUrl.isBlank()) {
+                SERVER_JAR_URL_CACHE.put(versionId, NO_SERVER_JAR_URL);
+                return null;
+            }
+            SERVER_JAR_URL_CACHE.put(versionId, serverUrl);
+            return serverUrl;
 
         } catch (Exception e){
             throw new RuntimeException(e);
@@ -159,28 +195,80 @@ public class MojangAPI {
         void onProgress(long bytesLeidos, long totalBytes);
     }
 
-    public void descargar(String url, File destino, DownloadProgressListener listener){
-        try{
-            URLConnection conn = openConnection(url);
-            long total = conn.getContentLengthLong();
+    public void descargar(String url, File destino, DownloadProgressListener listener) {
+        if (url == null || url.isBlank()) {
+            throw new RuntimeException("No se ha indicado la URL de descarga.");
+        }
+        if (destino == null) {
+            throw new RuntimeException("No se ha indicado el archivo de destino.");
+        }
 
-            try(InputStream in = conn.getInputStream();
-                FileOutputStream out = new FileOutputStream(destino)){
+        Path destinationPath = destino.toPath();
+        Path parent = destinationPath.getParent();
+        Path tempPath = destinationPath.resolveSibling(destinationPath.getFileName() + ".part");
+        IOException lastFailure = null;
 
-                byte[] buffer = new byte[8192];
-                long leidos = 0;
-                int n;
-                while((n = in.read(buffer)) != -1){
-                    out.write(buffer, 0, n);
-                    leidos += n;
-                    if(listener != null){
-                        listener.onProgress(leidos, total);
+        try {
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            for (int attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
+                try {
+                    Files.deleteIfExists(tempPath);
+                    downloadOnce(url, tempPath, listener);
+                    Files.move(tempPath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+                    return;
+                } catch (SocketTimeoutException e) {
+                    lastFailure = e;
+                    if (attempt == DOWNLOAD_MAX_ATTEMPTS) {
+                        break;
                     }
+                } catch (IOException e) {
+                    lastFailure = e;
+                    break;
                 }
             }
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            lastFailure = e;
+        } finally {
+            try {
+                Files.deleteIfExists(tempPath);
+            } catch (IOException ignored) {
+            }
         }
+
+        throw new RuntimeException(downloadFailureMessage(lastFailure), lastFailure);
+    }
+
+    private void downloadOnce(String url, Path tempPath, DownloadProgressListener listener) throws IOException {
+        URLConnection conn = openConnection(url, CONNECT_TIMEOUT_MS, DOWNLOAD_READ_TIMEOUT_MS);
+        long total = conn.getContentLengthLong();
+
+        try (InputStream in = conn.getInputStream();
+             FileOutputStream out = new FileOutputStream(tempPath.toFile())) {
+
+            byte[] buffer = new byte[8192];
+            long leidos = 0;
+            int n;
+            while ((n = in.read(buffer)) != -1) {
+                out.write(buffer, 0, n);
+                leidos += n;
+                if (listener != null) {
+                    listener.onProgress(leidos, total);
+                }
+            }
+        }
+    }
+
+    private static String downloadFailureMessage(IOException failure) {
+        if (failure instanceof SocketTimeoutException) {
+            return "La descarga desde Mojang ha tardado demasiado. Comprueba la conexion e intentalo de nuevo.";
+        }
+        String detail = failure == null ? null : failure.getMessage();
+        if (detail == null || detail.isBlank()) {
+            return "No se ha podido descargar el archivo desde Mojang.";
+        }
+        return "No se ha podido descargar el archivo desde Mojang: " + detail;
     }
 
     public ImageIcon obtenerCabezaJugador(String username, int sizePx){
@@ -303,9 +391,13 @@ public class MojangAPI {
     }
 
     private URLConnection openConnection(String url) throws IOException {
+        return openConnection(url, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+    }
+
+    protected URLConnection openConnection(String url, int connectTimeoutMs, int readTimeoutMs) throws IOException {
         URLConnection connection = URI.create(url).toURL().openConnection();
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
+        connection.setConnectTimeout(connectTimeoutMs);
+        connection.setReadTimeout(readTimeoutMs);
         return connection;
     }
 }

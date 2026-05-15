@@ -12,17 +12,8 @@ import java.util.Enumeration;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 final class MinecraftServerJarInspector {
-    private static final Pattern VERSION_PATTERN = Pattern.compile(
-            "(?i)(?<![a-z0-9.])("
-                    + "1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
-                    + "|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
-                    + "|\\d{2}w\\d{2}[a-z]"
-                    + "|[ab]\\d+\\.\\d+(?:\\.\\d+)?"
-                    + ")(?![a-z0-9.])"
-    );
     private static final String[] FORGE_ENTRY_MARKERS = {
             "net/minecraftforge/server/ServerMain.class",
             "net/minecraftforge/common/MinecraftForge.class",
@@ -109,6 +100,24 @@ final class MinecraftServerJarInspector {
         }
     }
 
+    static String readMinecraftVersionFromServerClass(Path jarPath) {
+        if (jarPath == null) {
+            return null;
+        }
+        try (JarFile jar = new JarFile(jarPath.toFile())) {
+            JarEntry serverClass = jar.getJarEntry("net/minecraft/server/MinecraftServer.class");
+            if (serverClass == null) {
+                return null;
+            }
+            try (InputStream in = jar.getInputStream(serverClass)) {
+                String version = readVersionClass(in);
+                return version == null || version.isBlank() ? null : version;
+            }
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
     static boolean looksLikeForgeServerJar(Path jarPath) {
         return jarContainsAnyMarker(jarPath, FORGE_ENTRY_MARKERS);
     }
@@ -148,16 +157,16 @@ final class MinecraftServerJarInspector {
     private static String readVersionJson(InputStream in) {
         try {
             JsonObject json = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
-            if (json.has("name")) {
-                String version = extractMinecraftVersion(json.get("name").getAsString());
-                if (version != null) {
-                    return version;
-                }
+            String idVersion = json.has("id")
+                    ? extractMinecraftVersion(json.get("id").getAsString())
+                    : null;
+            String nameVersion = json.has("name")
+                    ? extractMinecraftVersion(json.get("name").getAsString())
+                    : null;
+            if (idVersion != null && (nameVersion == null || idVersion.length() >= nameVersion.length())) {
+                return idVersion;
             }
-            if (json.has("id")) {
-                return extractMinecraftVersion(json.get("id").getAsString());
-            }
-            return null;
+            return nameVersion != null ? nameVersion : idVersion;
         } catch (Exception e) {
             return null;
         }
@@ -165,16 +174,12 @@ final class MinecraftServerJarInspector {
 
     private static String readVersionClass(InputStream in) throws IOException {
         String text = new String(in.readAllBytes(), StandardCharsets.ISO_8859_1);
-        Matcher matcher = VERSION_PATTERN.matcher(text);
+        Matcher matcher = MinecraftVersionPatterns.VERSION_PATTERN.matcher(text);
         return matcher.find() ? matcher.group(1) : null;
     }
 
     private static String extractMinecraftVersion(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        Matcher matcher = VERSION_PATTERN.matcher(value.trim());
-        return matcher.find() ? matcher.group(1) : null;
+        return MinecraftVersionPatterns.extractMinecraftVersion(value);
     }
 
     private static boolean jarContainsAnyMarker(Path jarPath, String[] markers) {

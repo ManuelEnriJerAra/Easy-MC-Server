@@ -16,30 +16,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class MinecraftServerVersionDetector {
-    private static final Pattern VERSION_PATTERN = Pattern.compile(
-            "(?i)(?<![a-z0-9.])("
-                    + "1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
-                    + "|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
-                    + "|\\d{2}w\\d{2}[a-z]"
-                    + "|[ab]\\d+\\.\\d+(?:\\.\\d+)?"
-                    + ")(?![a-z0-9.])"
-    );
-    private static final String VERSION_PATTERN_BODY =
-            "1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
-                    + "|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:pre|rc)\\d+)?"
-                    + "|\\d{2}w\\d{2}[a-z]"
-                    + "|[ab]\\d+\\.\\d+(?:\\.\\d+)?";
     private static final Pattern EXPLICIT_MC_VERSION_PATTERN = Pattern.compile(
-            "(?i)--fml\\.mcversion\\s+(" + VERSION_PATTERN_BODY + ")(?=\\s|$)"
+            "(?i)--fml\\.mcversion\\s+(" + MinecraftVersionPatterns.VERSION_PATTERN_BODY + ")(?=\\s|$)"
     );
     private static final Pattern MINECRAFT_SERVER_COORDINATE_PATTERN = Pattern.compile(
-            "(?i)net/minecraft/server/(" + VERSION_PATTERN_BODY + ")(?=/|\\s|$)"
+            "(?i)net/minecraft/server/(" + MinecraftVersionPatterns.VERSION_PATTERN_BODY + ")(?=/|\\s|$)"
     );
     private static final Pattern FORGE_COORDINATE_PATTERN = Pattern.compile(
-            "(?i)(?:net/minecraftforge/forge/|--fml\\.mcversion\\s+)(1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?)(?:-|\\s|$)"
+            "(?i)(?:net/minecraftforge/forge/|--fml\\.mcversion\\s+)(" + MinecraftVersionPatterns.VERSION_PATTERN_BODY + ")(?=-\\d|/|\\s|$)"
     );
     private static final Pattern NEOFORGE_COORDINATE_PATTERN = Pattern.compile(
-            "(?i)(?:net/neoforged/neoforge/|--fml\\.neoforgeversion\\s+)(\\d+\\.\\d+\\.\\d+(?:[-+][a-z0-9.]+)?)"
+            "(?i)(?:net/neoforged/neoforge/|--fml\\.neoforgeversion\\s+)(\\d+(?:\\.\\d+)+(?:[-+][a-z0-9.+-]+)?)(?=/|\\s|$)"
     );
     private static final List<String> VERSION_HINT_FILES = List.of(
             "version_history.json",
@@ -86,6 +73,15 @@ final class MinecraftServerVersionDetector {
         return version == null ? null : version.trim();
     }
 
+    static String detectForge(Path serverDir, Path executableJar) {
+        String version = firstNonBlank(
+                MinecraftServerJarInspector.readMinecraftVersionFromServerClass(executableJar),
+                detectFromMetadataFiles(serverDir),
+                detectFromAllTopLevelNonForgeJars(serverDir)
+        );
+        return version == null ? null : version.trim();
+    }
+
     private static String detectFromAllTopLevelJars(Path serverDir) {
         if (serverDir == null || !Files.isDirectory(serverDir)) {
             return null;
@@ -94,6 +90,25 @@ final class MinecraftServerVersionDetector {
             return stream
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                    .map(MinecraftServerJarInspector::readMinecraftVersion)
+                    .filter(value -> value != null && !value.isBlank())
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static String detectFromAllTopLevelNonForgeJars(Path serverDir) {
+        if (serverDir == null || !Files.isDirectory(serverDir)) {
+            return null;
+        }
+        try (var stream = Files.list(serverDir)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+                    .filter(path -> !MinecraftServerJarInspector.looksLikeForgeServerJar(path))
                     .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
                     .map(MinecraftServerJarInspector::readMinecraftVersion)
                     .filter(value -> value != null && !value.isBlank())
@@ -265,7 +280,7 @@ final class MinecraftServerVersionDetector {
         }
 
         String lower = normalized.toLowerCase(Locale.ROOT);
-        Matcher matcher = VERSION_PATTERN.matcher(normalized);
+        Matcher matcher = MinecraftVersionPatterns.VERSION_PATTERN.matcher(normalized);
         while (matcher.find()) {
             int start = Math.max(0, matcher.start() - 96);
             int end = Math.min(normalized.length(), matcher.end() + 96);
@@ -333,8 +348,7 @@ final class MinecraftServerVersionDetector {
         if (value == null || value.isBlank()) {
             return null;
         }
-        Matcher matcher = VERSION_PATTERN.matcher(value.trim());
-        return matcher.find() ? matcher.group(1) : null;
+        return MinecraftVersionPatterns.extractMinecraftVersion(value);
     }
 
     private static String firstNonBlank(String... values) {

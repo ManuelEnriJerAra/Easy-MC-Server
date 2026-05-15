@@ -48,7 +48,21 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
             return null;
         }
         ServerValidationResult validation = validate(serverDir);
-        return validation.valid() ? buildProfileAllowingMissingJar(serverDir, null) : null;
+        return validation.valid() ? buildForgeProfile(serverDir, executableJar) : null;
+    }
+
+    private ServerPlatformProfile buildForgeProfile(Path serverDir, Path executableJar) {
+        String minecraftVersion = MinecraftServerVersionDetector.detectForge(serverDir, executableJar);
+        return new ServerPlatformProfile(
+                getPlatform(),
+                getLoader(),
+                null,
+                minecraftVersion,
+                getEcosystemType(),
+                getCapabilities(),
+                getExtensionDirectories(serverDir),
+                executableJar
+        );
     }
 
     @Override
@@ -63,6 +77,11 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
 
     @Override
     public boolean supportsAutomatedCreation() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsUnstableCreationOptions() {
         return true;
     }
 

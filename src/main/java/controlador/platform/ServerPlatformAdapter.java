@@ -36,6 +36,10 @@ public interface ServerPlatformAdapter {
         return false;
     }
 
+    default boolean supportsUnstableCreationOptions() {
+        return false;
+    }
+
     default String getCreationDisplayName() {
         return getPlatform().getLegacyTypeName();
     }
