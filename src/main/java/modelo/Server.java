@@ -510,7 +510,7 @@ public class Server {
             }
         }
         // si no se ha encontrado usamos la imagen por defecto
-        ImageIcon porDefecto = new ImageIcon(getClass().getResource("/default_image.png"));
+        ImageIcon porDefecto = new ImageIcon(getClass().getResource("/doraimages/default_image.png"));
         return porDefecto;
     }
 }

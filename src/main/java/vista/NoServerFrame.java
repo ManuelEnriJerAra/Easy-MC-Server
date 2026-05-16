@@ -43,7 +43,7 @@ public class NoServerFrame extends JFrame {
         });
 
         // Gestión del logo
-        URL urlImagen = getClass().getResource("/logo.png");
+        URL urlImagen = getClass().getResource("/doraapp/logo.png");
         if (urlImagen == null) {
             throw new RuntimeException("No se ha encontrado el logo");
         }

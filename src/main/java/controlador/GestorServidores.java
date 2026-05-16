@@ -2468,11 +2468,7 @@ public class GestorServidores {
     }
 
     private Path resolverIconoPorDefecto() {
-        Path local = Path.of("default_image.png");
-        if (Files.isRegularFile(local)) {
-            return local;
-        }
-        try (InputStream in = GestorServidores.class.getResourceAsStream("/default_image.png")) {
+        try (InputStream in = GestorServidores.class.getResourceAsStream("/doraimages/default_image.png")) {
             if (in == null) {
                 return null;
             }

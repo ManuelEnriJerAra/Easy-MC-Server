@@ -20,7 +20,7 @@ Managed Minecraft servers can be long-running processes. Closing the main frame 
 - Added a refreshed tray menu showing active server count and live server display names with per-server RAM usage.
 - Active server rows ellipsize long names and align RAM values in a fixed text column so long server names do not stretch the tray menu.
 - Kept the existing active-server confirmation and shutdown flow for explicit quit and for the fallback path when tray support is unavailable.
-- Reused `logo.png` for the frame and tray icon, with tray removal during true application disposal.
+- Reused `doraapp/logo.png` for the frame and tray icon, with tray removal during true application disposal.
 
 ## Files Changed
 

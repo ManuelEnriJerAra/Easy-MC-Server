@@ -1076,7 +1076,7 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private Image cargarLogoAplicacion(){
-        java.net.URL urlImagen = getClass().getResource("/logo.png");
+        java.net.URL urlImagen = getClass().getResource("/doraapp/logo.png");
         if(urlImagen == null) return null;
         return new ImageIcon(urlImagen).getImage();
     }

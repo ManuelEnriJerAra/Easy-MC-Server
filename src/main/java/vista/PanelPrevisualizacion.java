@@ -72,7 +72,8 @@ import modelo.Server;
 
 public class PanelPrevisualizacion extends JPanel {
     private static final String[] DORA_IMAGE_RESOURCES = {
-            "doraimages/logo_64.png"
+            "doraimages/default_image.png",
+            "doraimages/dora.png"
     };
 
     private final GestorServidores gestorServidores;
