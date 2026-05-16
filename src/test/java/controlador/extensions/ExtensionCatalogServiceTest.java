@@ -4,6 +4,7 @@ import modelo.Server;
 import modelo.extensions.ExtensionSource;
 import modelo.extensions.ExtensionSourceType;
 import modelo.extensions.ServerExtension;
+import modelo.extensions.ServerEcosystemType;
 import modelo.extensions.ServerExtensionType;
 import modelo.extensions.ServerPlatform;
 import org.junit.jupiter.api.Test;
@@ -426,6 +427,42 @@ class ExtensionCatalogServiceTest {
         server.setVersion("1.21.1");
 
         assertThat(service.resolveDownload("mixed", "plugin", "p1", server)).isEmpty();
+    }
+
+    @Test
+    void shouldInferDownloadSafetyEcosystemFromKnownServerPlatform() throws IOException {
+        ExtensionDownloadPlan pluginPlan = new ExtensionDownloadPlan(
+                "mixed",
+                "nova-framework",
+                "nova-2612",
+                "0.23.0",
+                null,
+                "Nova.jar",
+                "https://example.test/Nova.jar",
+                ExtensionSourceType.MODRINTH,
+                ServerExtensionType.PLUGIN,
+                ServerPlatform.PAPER,
+                "26.1.2",
+                true,
+                "Ready"
+        );
+        ExtensionCatalogProvider provider = new FakeProvider(
+                "mixed",
+                "Mixed",
+                ExtensionSourceType.MODRINTH,
+                List.of(),
+                Optional.empty(),
+                Optional.of(pluginPlan),
+                List.of()
+        );
+        ExtensionCatalogService service = new ExtensionCatalogService(new ExtensionCatalogRegistry(List.of(provider)));
+        Server server = new Server();
+        server.setPlatform(ServerPlatform.PAPER);
+        server.setEcosystemType(ServerEcosystemType.UNKNOWN);
+        server.setVersion("26.1.2");
+
+        assertThat(service.resolveDownload("mixed", "nova-framework", "nova-2612", server))
+                .contains(pluginPlan);
     }
 
     @Test

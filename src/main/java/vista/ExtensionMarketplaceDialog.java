@@ -14,6 +14,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.ComponentAdapter;
@@ -41,6 +42,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -109,6 +111,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private static final Logger LOGGER = Logger.getLogger(ExtensionMarketplaceDialog.class.getName());
     private static final int DEFAULT_SEARCH_BATCH_SIZE = 25;
     private static final int MAX_SEARCH_RESULTS = 1000;
+    private static final int RELAXED_CLICK_TOLERANCE_PX = 18;
+    private static final int RESULT_ACTION_HIT_WIDTH = 72;
     private static final String NO_PROVIDER_ID = "__none__";
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s)]+");
     private static final Pattern MARKDOWN_LINK_PATTERN = Pattern.compile("\\[([^\\]]+)]\\((https?://[^)\\s]+)(?:\\s+\"[^\"]*\")?\\)");
@@ -196,6 +200,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private String queueFeedbackMessage;
     private boolean suppressResultSelectionEvents;
     private boolean suppressVersionSelectionEvents;
+    private Point resultsListPressPoint;
+    private int resultsListPressIndex = -1;
+    private Point queueListPressPoint;
+    private int queueListPressIndex = -1;
+    private JList<DownloadQueueItem> queueListPressSource;
     private MarketplaceSearchSpec lastExecutedSearchSpec;
     private int searchLimit = DEFAULT_SEARCH_BATCH_SIZE;
     private JSplitPane marketplaceVerticalSplit;
@@ -723,35 +732,25 @@ final class ExtensionMarketplaceDialog extends JDialog {
         });
         resultsList.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                int index = resultsList.locationToIndex(e.getPoint());
-                if (index < 0) {
+            public void mousePressed(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    clearResultsListPress();
                     return;
                 }
-                MarketplaceEntryViewModel viewModel = resultsModel.get(index);
-                if (viewModel != null && viewModel.loadMoreRow()) {
-                    loadMoreResults();
-                    return;
-                }
-                if (viewModel != null && viewModel.entry() != null && e.getX() >= resultsList.getWidth() - 48) {
-                    ExtensionCatalogEntry entry = viewModel.entry();
-                    if (viewModel.installResolution() != null && viewModel.installResolution().alreadyInstalled()) {
-                        selectedEntryViewModel = viewModel;
-                        selectedEntry = entry;
-                        selectedInstallResolution = viewModel.installResolution();
-                        uninstallSelectedExtension();
-                    } else if (isQueued(entry)) {
-                        removeQueuedEntry(entry);
-                    } else {
-                        enqueueEntryAsync(entry, null);
-                    }
-                }
+                resultsListPressPoint = e.getPoint();
+                resultsListPressIndex = resultIndexAtPoint(e.getPoint());
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                handleResultsListRelease(e);
+                clearResultsListPress();
             }
         });
         resultsList.addMouseMotionListener(new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                int index = resultsList.locationToIndex(e.getPoint());
+                int index = resultIndexAtPoint(e.getPoint());
                 if (resultsListHoverIndex != index) {
                     int previous = resultsListHoverIndex;
                     resultsListHoverIndex = index;
@@ -785,6 +784,92 @@ final class ExtensionMarketplaceDialog extends JDialog {
         });
     }
 
+    private void handleResultsListRelease(MouseEvent event) {
+        if (!SwingUtilities.isLeftMouseButton(event)) {
+            return;
+        }
+        int index = resultIndexAtPoint(event.getPoint());
+        if (index < 0 && resultsListPressIndex >= 0 && isRelaxedClick(resultsListPressPoint, event.getPoint())) {
+            index = resultsListPressIndex;
+        }
+        if (index < 0 || index >= resultsModel.size()) {
+            return;
+        }
+        if (resultsListPressIndex >= 0
+                && resultsListPressIndex != index
+                && !isRelaxedClick(resultsListPressPoint, event.getPoint())) {
+            return;
+        }
+        MarketplaceEntryViewModel viewModel = resultsModel.get(index);
+        if (viewModel == null) {
+            return;
+        }
+        if (viewModel.loadMoreRow()) {
+            loadMoreResults();
+            return;
+        }
+        if (viewModel.entry() == null
+                || !isRelaxedClick(resultsListPressPoint, event.getPoint())
+                || !isTrailingHitZone(event.getX(), resultsList.getWidth(), RESULT_ACTION_HIT_WIDTH)) {
+            return;
+        }
+        triggerResultRowAction(index, viewModel);
+    }
+
+    private void triggerResultRowAction(int index, MarketplaceEntryViewModel viewModel) {
+        ExtensionCatalogEntry entry = viewModel == null ? null : viewModel.entry();
+        if (entry == null) {
+            return;
+        }
+        if (viewModel.installResolution() != null && viewModel.installResolution().alreadyInstalled()) {
+            selectedEntryViewModel = viewModel;
+            selectedEntry = entry;
+            selectedInstallResolution = viewModel.installResolution();
+            uninstallSelectedExtension();
+        } else if (isQueued(entry)) {
+            removeQueuedEntry(entry);
+        } else if (viewModel.compatibilityStatus() != ExtensionCompatibilityStatus.COMPATIBLE) {
+            resultsList.setSelectedIndex(index);
+            loadDetails(viewModel);
+        } else {
+            enqueueEntryAsync(entry, null);
+        }
+    }
+
+    private int resultIndexAtPoint(Point point) {
+        return listIndexAtPoint(resultsList, point);
+    }
+
+    private static int listIndexAtPoint(JList<?> list, Point point) {
+        if (list == null || point == null) {
+            return -1;
+        }
+        int index = list.locationToIndex(point);
+        if (index < 0) {
+            return -1;
+        }
+        Rectangle bounds = list.getCellBounds(index, index);
+        return bounds != null && bounds.contains(point) ? index : -1;
+    }
+
+    private void clearResultsListPress() {
+        resultsListPressPoint = null;
+        resultsListPressIndex = -1;
+    }
+
+    static boolean isRelaxedClick(Point pressPoint, Point releasePoint) {
+        if (pressPoint == null || releasePoint == null) {
+            return false;
+        }
+        int dx = pressPoint.x - releasePoint.x;
+        int dy = pressPoint.y - releasePoint.y;
+        return dx * dx + dy * dy <= RELAXED_CLICK_TOLERANCE_PX * RELAXED_CLICK_TOLERANCE_PX;
+    }
+
+    static boolean isTrailingHitZone(int x, int componentWidth, int hitWidth) {
+        return componentWidth > 0 && hitWidth > 0 && x >= componentWidth - hitWidth && x <= componentWidth;
+    }
+
     private void repaintListRows(JList<?> list, int firstIndex, int secondIndex) {
         if (list == null) {
             return;
@@ -809,14 +894,26 @@ final class ExtensionMarketplaceDialog extends JDialog {
         resolvedQueueList.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         pendingQueueList.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                handleQueueListClick(pendingQueueList, e);
+            public void mousePressed(MouseEvent e) {
+                rememberQueueListPress(pendingQueueList, e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                handleQueueListRelease(pendingQueueList, e);
+                clearQueueListPress();
             }
         });
         resolvedQueueList.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                handleQueueListClick(resolvedQueueList, e);
+            public void mousePressed(MouseEvent e) {
+                rememberQueueListPress(resolvedQueueList, e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                handleQueueListRelease(resolvedQueueList, e);
+                clearQueueListPress();
             }
         });
     }
@@ -1073,10 +1170,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         setDetailDescriptionText(detailBaseDescription);
         refreshSelectionActionState();
 
-        ExtensionCatalogQuery query = buildSearchQuery(
-                ProviderFilterOption.provider(entry.providerId(), describeProvider(entry.providerId())),
-                SideFilterOption.any()
-        );
+        ExtensionCatalogQuery query = buildDetailsQuery(entry);
         new MarketplaceDetailsWorker(entry, query, requestId).execute();
     }
 
@@ -1102,6 +1196,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         detailBaseDescription = buildDetailsDescription(entry, details);
         setDetailDescriptionText(detailBaseDescription);
         selectedDownloadPlan = enrichDownloadPlanDescription(entry, selectedDownloadPlan);
+        selectedEntryCompatibility = assessEntryCompatibility(detailEntry == null ? entry : detailEntry);
         persistCatalogDetailsOnInstalledExtension(entry, details);
 
         suppressVersionSelectionEvents = true;
@@ -1115,16 +1210,22 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
             if (versions.isEmpty()) {
                 VersionOption fallback = new VersionOption(
-                        defaultString(entry.versionId(), ""),
-                        defaultString(entry.version(), "Version por defecto"),
-                        "Sin historial de versiones detallado",
-                        assessEntryCompatibility(entry).status() == ExtensionCompatibilityStatus.COMPATIBLE
+                        null,
+                        "Sin build compatible",
+                        "El proveedor no devuelve versiones para este servidor",
+                        false
                 );
                 versionModel.addElement(fallback);
                 versionCombo.setEnabled(false);
                 versionCombo.setSelectedIndex(0);
                 setVersionSelectionVisible(true);
-                previewInstallPlan(entry, fallback.versionId());
+                selectedDownloadPlan = null;
+                selectedInstallResolution = evaluateInstallResolution(entry);
+                previewState = new PreviewViewState(ViewState.BLOCKED, "No hay build compatible para este servidor.", null, previewRequestSequence);
+                detailVersionLabel.setText("-");
+                detailFileLabel.setText("-");
+                detailDependenciesLabel.setText("Sin dependencias resueltas");
+                refreshSelectionActionState();
                 return;
             }
 
@@ -1217,9 +1318,34 @@ final class ExtensionMarketplaceDialog extends JDialog {
         refreshSelectionActionState();
     }
 
-    private void handleQueueListClick(JList<DownloadQueueItem> list, MouseEvent event) {
-        int index = list.locationToIndex(event.getPoint());
+    private void rememberQueueListPress(JList<DownloadQueueItem> list, MouseEvent event) {
+        if (!SwingUtilities.isLeftMouseButton(event)) {
+            clearQueueListPress();
+            return;
+        }
+        queueListPressSource = list;
+        queueListPressPoint = event.getPoint();
+        queueListPressIndex = listIndexAtPoint(list, event.getPoint());
+    }
+
+    private void handleQueueListRelease(JList<DownloadQueueItem> list, MouseEvent event) {
+        if (!SwingUtilities.isLeftMouseButton(event)) {
+            return;
+        }
+        int index = listIndexAtPoint(list, event.getPoint());
+        if (index < 0
+                && queueListPressSource == list
+                && queueListPressIndex >= 0
+                && isRelaxedClick(queueListPressPoint, event.getPoint())) {
+            index = queueListPressIndex;
+        }
         if (index < 0) {
+            return;
+        }
+        if (queueListPressSource == list
+                && queueListPressIndex >= 0
+                && queueListPressIndex != index
+                && !isRelaxedClick(queueListPressPoint, event.getPoint())) {
             return;
         }
         DownloadQueueItem item = list.getModel().getElementAt(index);
@@ -1229,11 +1355,19 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         int removeZoneStart = bounds.x + bounds.width - 72;
         int removeZoneEnd = bounds.x + bounds.width - 38;
-        if (event.getX() >= removeZoneStart && event.getX() <= removeZoneEnd) {
+        if (isRelaxedClick(queueListPressPoint, event.getPoint())
+                && event.getX() >= removeZoneStart
+                && event.getX() <= removeZoneEnd) {
             removeQueueItem(item);
             return;
         }
         showQueueItemDetails(item);
+    }
+
+    private void clearQueueListPress() {
+        queueListPressSource = null;
+        queueListPressPoint = null;
+        queueListPressIndex = -1;
     }
 
     private void removeQueueItem(DownloadQueueItem item) {
@@ -1283,7 +1417,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             return;
         }
         DownloadQueueItem preparationItem = beginQueuePreparation(entry, null, false);
-        new EnqueuePlanWorker(entry, entry.versionId(), afterQueued, preparationItem).execute();
+        new EnqueuePlanWorker(entry, null, afterQueued, preparationItem).execute();
     }
 
     private void enqueueEntryWithPlanAsync(ExtensionCatalogEntry entry,
@@ -1317,10 +1451,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
         DependencyResolutionResult resolution = dependencies == null
                 ? DependencyResolutionResult.empty()
                 : dependencies;
-        if (!resolution.unresolvedRequired().isEmpty()) {
+        boolean hasUnresolvedRequiredDependencies = !resolution.unresolvedRequired().isEmpty();
+        if (hasUnresolvedRequiredDependencies) {
             showUnresolvedRequiredDependencies(entry, resolution);
-            failQueuePreparation(preparationItem, "Faltan dependencias obligatorias.");
-            return;
         }
         DependencyPromptChoice dependencyChoice = confirmAddMissingDependencies(entry, resolution);
         if (dependencyChoice == DependencyPromptChoice.CANCEL) {
@@ -1367,7 +1500,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (existingOrPreparation != null) {
             existingOrPreparation.downloadPlan = plan;
             existingOrPreparation.state = QueueState.PENDING;
-            existingOrPreparation.message = immediate ? "Instalación inmediata" : "Pendiente de descarga";
+            existingOrPreparation.message = hasUnresolvedRequiredDependencies
+                    ? "Pendiente con aviso de dependencias"
+                    : immediate ? "Instalación inmediata" : "Pendiente de descarga";
             existingOrPreparation.requiredDependencyKeys = List.copyOf(requiredDependencyKeys);
             if (immediate) {
                 moveQueueItemToIndex(existingOrPreparation, insertIndex);
@@ -1379,6 +1514,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
             }
         } else {
             DownloadQueueItem requested = createQueueItem(entry, plan, immediate ? "Instalación inmediata" : "Pendiente de descarga");
+            if (hasUnresolvedRequiredDependencies) {
+                requested.message = "Pendiente con aviso de dependencias";
+            }
             requested.requiredDependencyKeys = List.copyOf(requiredDependencyKeys);
             if (immediate) {
                 queueModel.add(Math.min(insertIndex, queueModel.size()), requested);
@@ -1388,7 +1526,12 @@ final class ExtensionMarketplaceDialog extends JDialog {
             setQueueFeedback(immediate ? "Instalación prioritaria." : "Agregada a la cola.",
                     entry.displayName() + (immediate ? " se ha colocado al frente de la cola." : " espera su turno para instalarse."));
         }
-        setQueueFeedback("Añadida a la cola.", entry.displayName() + " queda lista para descargarse.");
+        if (hasUnresolvedRequiredDependencies) {
+            setQueueFeedback("Añadida con aviso.",
+                    entry.displayName() + " queda lista para descargarse, pero revisa sus dependencias si no arranca.");
+        } else {
+            setQueueFeedback("Añadida a la cola.", entry.displayName() + " queda lista para descargarse.");
+        }
         refreshQueueControls();
         refreshQueuedResultDecorations();
         refreshSelectionActionState();
@@ -1448,11 +1591,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return new DownloadQueueItem(
                 entry.providerId(),
                 entry.projectId(),
-                plan == null ? entry.versionId() : plan.versionId(),
+                plan == null ? null : plan.versionId(),
                 plan,
                 defaultString(plan == null ? null : plan.iconUrl(), entry.iconUrl()),
                 defaultString(plan == null ? null : plan.displayName(), entry.displayName()),
-                defaultString(plan == null ? null : plan.versionNumber(), defaultString(entry.version(), "version")),
+                defaultString(plan == null ? null : plan.versionNumber(), defaultString(entry.version(), "Pendiente")),
                 QueueState.RESOLVING,
                 immediate ? "Resolviendo para instalacion inmediata..." : "Resolviendo dependencias...",
                 null,
@@ -1548,11 +1691,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
         String title;
         int messageType;
         if (hasRequired && hasOptional) {
-            options = new Object[]{"A\u00f1adir todo", "Solo necesarias", "Cancelar"};
+            options = new Object[]{"A\u00f1adir todo", "Solo necesarias"};
             title = "Dependencias y complementos opcionales";
             messageType = JOptionPane.WARNING_MESSAGE;
         } else if (hasRequired) {
-            options = new Object[]{"A\u00f1adir necesarias", "Cancelar"};
+            options = new Object[]{"A\u00f1adir necesarias"};
             title = "Dependencias necesarias";
             messageType = JOptionPane.WARNING_MESSAGE;
         } else {
@@ -1572,11 +1715,10 @@ final class ExtensionMarketplaceDialog extends JDialog {
         );
         if (hasRequired && hasOptional) {
             return choice == 0 ? DependencyPromptChoice.ADD_ALL
-                    : choice == 1 ? DependencyPromptChoice.ADD_REQUIRED_ONLY
-                    : DependencyPromptChoice.CANCEL;
+                    : DependencyPromptChoice.ADD_REQUIRED_ONLY;
         }
         if (hasRequired) {
-            return choice == 0 ? DependencyPromptChoice.ADD_REQUIRED_ONLY : DependencyPromptChoice.CANCEL;
+            return DependencyPromptChoice.ADD_REQUIRED_ONLY;
         }
         return choice == 0 ? DependencyPromptChoice.ADD_ALL : DependencyPromptChoice.ADD_REQUIRED_ONLY;
     }
@@ -1602,9 +1744,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
     private void showUnresolvedRequiredDependencies(ExtensionCatalogEntry entry, DependencyResolutionResult dependencies) {
         StringBuilder message = new StringBuilder();
-        message.append("No se pueden resolver todas las dependencias obligatorias de ")
+        message.append("No se han podido resolver todas las dependencias obligatorias de ")
                 .append(defaultString(entry == null ? null : entry.displayName(), "la extensión seleccionada"))
-                .append(".\n\nInstala o revisa manualmente estos paquetes antes de continuar:\n\n");
+                .append(".\n\nLa descarga continuara, pero revisa o instala manualmente estos paquetes si la extension no arranca:\n\n");
         for (DependencyNotice dependency : dependencies.unresolvedRequired()) {
             message.append("- ").append(dependencyDisplayName(dependency.dependency()))
                     .append(" para ").append(defaultString(dependency.parentDisplayName(), "la extensión seleccionada"))
@@ -2143,7 +2285,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return plan;
     }
 
-    private String dependencyFailureMessage(DownloadQueueItem item, Set<String> completedKeys, Set<String> failedKeys) {
+    private String dependencyWarningMessage(DownloadQueueItem item, Set<String> completedKeys, Set<String> failedKeys) {
         if (item == null || item.requiredDependencyKeys == null || item.requiredDependencyKeys.isEmpty()) {
             return null;
         }
@@ -2152,7 +2294,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 continue;
             }
             if (failedKeys != null && failedKeys.contains(dependencyKey)) {
-                return "No se instala " + item.displayName + " porque una dependencia necesaria fallo. Reintenta la dependencia antes de continuar.";
+                return "Aviso: una dependencia necesaria fallo, pero " + item.displayName + " se intentara instalar de todos modos.";
             }
             if (completedKeys != null && completedKeys.contains(dependencyKey)) {
                 continue;
@@ -2160,7 +2302,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             if (isDependencyKeyInstalled(dependencyKey)) {
                 continue;
             }
-            return "No se instala " + item.displayName + " porque falta una dependencia necesaria.";
+            return "Aviso: falta una dependencia necesaria, pero " + item.displayName + " se intentara instalar de todos modos.";
         }
         return null;
     }
@@ -2292,11 +2434,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
         ActionAvailability availability = evaluateActionAvailability();
         installNowButton.setEnabled(availability.canInstallNow());
         queueButton.setEnabled(availability.canQueue());
-        updatePrimaryActionLabels();
+        updatePrimaryActionLabels(availability);
         updateDetailVisualState(availability.detailMessage());
     }
 
-    private void updatePrimaryActionLabels() {
+    private void updatePrimaryActionLabels(ActionAvailability availability) {
         ExtensionInstallResolution resolution = selectedInstallResolution;
         if (selectedEntry == null) {
             queueButton.setEnabled(false);
@@ -2309,7 +2451,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         String icon = installed || queued ? "doraicons/trash-unselected.svg" : "doraicons/plus.svg";
         queueButton.setIcon(SvgIconFactory.create(icon, 48, 48, AppTheme::getForeground));
         queueButton.setToolTipText(installed ? "Desinstalar" : queued ? "Quitar de la cola" : "Añadir a la cola");
-        queueButton.setEnabled(true);
+        queueButton.setEnabled(installed || queued || (availability != null && availability.canQueue()));
     }
 
     private ActionAvailability evaluateActionAvailability() {
@@ -3028,7 +3170,10 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private String downloadPlanCacheKey(String providerId, String projectId, String versionId) {
-        return defaultString(providerId, "") + "|" + defaultString(projectId, "") + "|" + defaultString(versionId, "");
+        return defaultString(providerId, "") + "|" + defaultString(projectId, "") + "|" + defaultString(versionId, "")
+                + "|" + defaultString(server == null || server.getPlatform() == null ? null : server.getPlatform().name(), "")
+                + "|" + defaultString(server == null || server.getLoader() == null ? null : server.getLoader().name(), "")
+                + "|" + defaultString(server == null ? null : server.getVersion(), "");
     }
 
     private String detailsCacheKey(ExtensionCatalogEntry entry, ExtensionCatalogQuery query) {
@@ -3696,6 +3841,26 @@ final class ExtensionMarketplaceDialog extends JDialog {
         );
     }
 
+    private ExtensionCatalogQuery buildDetailsQuery(ExtensionCatalogEntry entry) {
+        String queryText = defaultString(normalized(searchField.getText()), "");
+        ServerPlatform platform = server == null || server.getPlatform() == null
+                ? ServerPlatform.UNKNOWN
+                : server.getPlatform();
+        String version = server == null || server.getVersion() == null
+                ? ""
+                : defaultString(normalized(server.getVersion()), "");
+        return new ExtensionCatalogQuery(
+                queryText,
+                platform,
+                resolveServerExtensionType(),
+                version,
+                20,
+                selectedSearchSort().providerSort(),
+                ExtensionSideFilter.ANY,
+                entry == null ? NO_PROVIDER_ID : defaultString(entry.providerId(), NO_PROVIDER_ID)
+        );
+    }
+
     private String selectedProviderId(ProviderFilterOption providerFilter) {
         if (providerFilter == null || providerFilter.providerId() == null || providerFilter.providerId().isBlank()) {
             return NO_PROVIDER_ID;
@@ -3853,6 +4018,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         String key = defaultString(entry.providerId(), "") + "|" + defaultString(entry.projectId(), "")
                 + "|" + defaultString(entry.versionId(), "") + "|" + defaultString(entry.version(), "")
+                + "|" + defaultString(entry.extensionType() == null ? null : entry.extensionType().name(), "")
+                + "|" + metadataKey(entry.compatiblePlatforms())
+                + "|" + metadataKey(entry.compatibleMinecraftVersions())
                 + "|" + defaultString(server == null ? null : server.getVersion(), "")
                 + "|" + defaultString(server == null || server.getPlatform() == null ? null : server.getPlatform().name(), "")
                 + "|" + defaultString(server == null || server.getEcosystemType() == null ? null : server.getEcosystemType().name(), "");
@@ -3867,6 +4035,17 @@ final class ExtensionMarketplaceDialog extends JDialog {
         );
         compatibilityCache.put(key, assessment);
         return assessment;
+    }
+
+    private String metadataKey(java.util.Set<?> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .collect(Collectors.joining(","));
     }
 
     private MarketplaceCompatibilityAssessment assessVersionCompatibility(ExtensionCatalogVersion version) {
@@ -5396,9 +5575,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 }
                 publish(QueueProgress.starting(next));
                 try {
-                    String dependencyFailure = dependencyFailureMessage(next, completedKeys, failedKeys);
-                    if (dependencyFailure != null) {
-                        throw new IllegalStateException(dependencyFailure);
+                    String dependencyWarning = dependencyWarningMessage(next, completedKeys, failedKeys);
+                    if (dependencyWarning != null) {
+                        publish(QueueProgress.warning(next, next.downloadPlan, dependencyWarning));
                     }
                     ExtensionDownloadPlan plan = resolveQueueDownloadPlan(next);
                     gestorServidores.instalarExtensionExterna(server, plan);
@@ -5407,7 +5586,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     if (next.queueKey() != null) {
                         completedKeys.add(next.queueKey());
                     }
-                    publish(QueueProgress.completed(next, plan));
+                    publish(QueueProgress.completed(next, plan, dependencyWarning));
                 } catch (Exception ex) {
                     if (next.queueKey() != null) {
                         failedKeys.add(next.queueKey());
@@ -5431,19 +5610,28 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     item.state = QueueState.DOWNLOADING;
                     item.message = "Descargando archivos y preparando instalación...";
                     setQueueFeedback("Instalando " + item.displayName + "...", "Se está descargando y validando la extensión seleccionada.");
+                } else if (progress.phase() == QueueProgressPhase.WARNING) {
+                    if (progress.plan() != null) {
+                        item.downloadPlan = progress.plan();
+                    }
+                    item.message = progress.message();
+                    setQueueFeedback("Instalando con aviso.", progress.message());
                 } else if (progress.phase() == QueueProgressPhase.COMPLETED) {
                     if (progress.plan() != null) {
                         item.downloadPlan = progress.plan();
                     }
                     item.state = QueueState.COMPLETED;
-                    item.message = "Instalada correctamente en este servidor";
+                    item.message = progress.message() == null
+                            ? "Instalada correctamente en este servidor"
+                            : "Instalada correctamente. " + progress.message();
                     if (selectedEntry != null && item.matchesProject(selectedEntry.providerId(), selectedEntry.projectId())) {
                         selectedInstallResolution = selectedDownloadPlan != null
                                 ? evaluateInstallResolution(selectedDownloadPlan)
                                 : evaluateInstallResolution(selectedEntry);
                         previewState = new PreviewViewState(ViewState.BLOCKED, "Instalada correctamente en este servidor.", item.versionId, previewRequestSequence);
                     }
-                    setQueueFeedback("Instalación completada.", item.displayName + " ya está disponible en el servidor.");
+                    setQueueFeedback(progress.message() == null ? "Instalación completada." : "Instalación completada con aviso.",
+                            item.displayName + " ya está disponible en el servidor.");
                 } else if (progress.phase() == QueueProgressPhase.FAILED) {
                     if (progress.plan() != null) {
                         item.downloadPlan = progress.plan();

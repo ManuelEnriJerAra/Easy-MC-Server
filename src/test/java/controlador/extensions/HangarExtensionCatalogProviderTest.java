@@ -271,6 +271,53 @@ class HangarExtensionCatalogProviderTest {
     }
 
     @Test
+    void shouldResolveDirectExternalJarDownloadForNovaPaper2612() throws IOException {
+        HangarExtensionCatalogProvider provider = new HangarExtensionCatalogProvider(new FakeHttpClient(Map.of(
+                "https://hangar.papermc.io/api/v1/projects/626",
+                """
+                {
+                  "id": 626,
+                  "name": "Nova",
+                  "description": "A server-side modding framework for Paper",
+                  "namespace": { "owner": "xenondevs", "slug": "Nova" },
+                  "supportedPlatforms": { "PAPER": ["26.1.2"] }
+                }
+                """,
+                "https://hangar.papermc.io/api/v1/projects/xenondevs/Nova/versions?platform=PAPER&platformVersion=26.1.2&limit=20&offset=0",
+                """
+                {
+                  "result": [
+                    {
+                      "id": 25168,
+                      "name": "0.23.0",
+                      "createdAt": "2026-05-10T09:37:52.620899Z",
+                      "downloads": {
+                        "PAPER": {
+                          "fileInfo": null,
+                          "externalUrl": "https://github.com/xenondevs/Nova/releases/download/0.23.0/Nova-0.23.0%2BMC-26.1.2.jar",
+                          "downloadUrl": null
+                        }
+                      },
+                      "platformDependencies": { "PAPER": ["26.1.2"] }
+                    }
+                  ]
+                }
+                """
+        )));
+        Server server = new Server();
+        server.setPlatform(ServerPlatform.PAPER);
+        server.setVersion("26.1.2");
+
+        ExtensionDownloadPlan plan = provider.resolveDownload("626", null, server).orElseThrow();
+
+        assertThat(plan.versionId()).isEqualTo("25168");
+        assertThat(plan.versionNumber()).isEqualTo("0.23.0");
+        assertThat(plan.fileName()).isEqualTo("Nova-0.23.0+MC-26.1.2.jar");
+        assertThat(plan.downloadUrl()).isEqualTo("https://github.com/xenondevs/Nova/releases/download/0.23.0/Nova-0.23.0%2BMC-26.1.2.jar");
+        assertThat(plan.minecraftVersionConstraint()).isEqualTo("26.1.2");
+    }
+
+    @Test
     void shouldNotResolveExternalWebsiteAsDownloadWhenNoJarCanBeFound() throws IOException {
         HangarExtensionCatalogProvider provider = new HangarExtensionCatalogProvider(new FakeHttpClient(Map.of(
                 "https://hangar.papermc.io/api/v1/projects/99",

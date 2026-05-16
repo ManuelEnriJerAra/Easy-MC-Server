@@ -10,6 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -397,14 +398,17 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         String versionName = text(versionNode, "name");
         String externalUrl = text(downloadNode, "externalUrl");
         ExternalDownload externalDownload = resolveExternalDownload(externalUrl, versionName, query);
+        ExternalDownload directExternalDownload = directExternalDownload(externalUrl);
         String downloadUrl = firstNonBlank(
                 text(downloadNode, "downloadUrl"),
                 externalDownload == null ? null : externalDownload.downloadUrl(),
+                directExternalDownload == null ? null : directExternalDownload.downloadUrl(),
                 externalUrl == null ? buildDownloadEndpoint(namespace, versionName) : null
         );
         String fileName = firstNonBlank(
                 nestedText(downloadNode, "fileInfo", "name"),
-                externalDownload == null ? null : externalDownload.fileName()
+                externalDownload == null ? null : externalDownload.fileName(),
+                directExternalDownload == null ? null : directExternalDownload.fileName()
         );
         if (downloadUrl == null || downloadUrl.isBlank()) {
             return null;
@@ -424,6 +428,43 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
                 isStableRelease(versionName),
                 extractDependencies(versionNode)
         );
+    }
+
+    private ExternalDownload directExternalDownload(String externalUrl) {
+        if (externalUrl == null || externalUrl.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(externalUrl.trim());
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            if (!scheme.equals("https") && !scheme.equals("http")) {
+                return null;
+            }
+            String rawPath = uri.getRawPath();
+            if (rawPath == null || !rawPath.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                return null;
+            }
+            String fileName = fileNameFromRawPath(rawPath);
+            return new ExternalDownload(fileName, externalUrl.trim());
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private String fileNameFromRawPath(String rawPath) {
+        if (rawPath == null || rawPath.isBlank()) {
+            return null;
+        }
+        int slashIndex = rawPath.lastIndexOf('/');
+        String rawName = slashIndex >= 0 ? rawPath.substring(slashIndex + 1) : rawPath;
+        if (rawName.isBlank()) {
+            return null;
+        }
+        try {
+            return URLDecoder.decode(rawName.replace("+", "%2B"), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ex) {
+            return rawName;
+        }
     }
 
     private Comparator<ExtensionCatalogVersion> versionDisplayComparator() {

@@ -58,7 +58,7 @@ import java.util.regex.Pattern;
 public final class ServerExtensionsService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String YAML_STRING_PATTERN = "(?m)^\\s*%s\\s*:\\s*(.+?)\\s*$";
-    private static final Pattern MINECRAFT_VERSION_HINT_PATTERN = Pattern.compile("(?i)(?<![\\d.])(1\\.(?:1[0-9]|2[0-9])(?:\\.\\d+)?)(?![\\d.])");
+    private static final Pattern MINECRAFT_VERSION_HINT_PATTERN = Pattern.compile("(?i)(?<![\\d.])((?:1\\.(?:1[0-9]|2[0-9])|[2-9]\\d\\.\\d+)(?:\\.\\d+)?)(?![\\d.])");
     private static final Logger LOGGER = Logger.getLogger(ServerExtensionsService.class.getName());
 
     private final InstalledExtensionsCacheService installedExtensionsCacheService = new InstalledExtensionsCacheService();

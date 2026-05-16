@@ -272,8 +272,7 @@ record DependencyResolutionResult(
     }
 
     boolean hasRequiredPrompts() {
-        return resolvedDependencies.stream().anyMatch(dependency -> dependency.requiredByParent() && !dependency.optionalBranch())
-                || !unresolvedRequired.isEmpty();
+        return resolvedDependencies.stream().anyMatch(dependency -> dependency.requiredByParent() && !dependency.optionalBranch());
     }
 
     boolean hasOptionalPrompts() {
@@ -345,6 +344,7 @@ final class DependencyResolutionBuilder {
 
 enum QueueProgressPhase {
     STARTING,
+    WARNING,
     COMPLETED,
     FAILED
 }
@@ -354,8 +354,16 @@ record QueueProgress(QueueProgressPhase phase, DownloadQueueItem item, Extension
         return new QueueProgress(QueueProgressPhase.STARTING, item, item == null ? null : item.downloadPlan, null);
     }
 
+    static QueueProgress warning(DownloadQueueItem item, ExtensionDownloadPlan plan, String message) {
+        return new QueueProgress(QueueProgressPhase.WARNING, item, plan, message);
+    }
+
     static QueueProgress completed(DownloadQueueItem item, ExtensionDownloadPlan plan) {
         return new QueueProgress(QueueProgressPhase.COMPLETED, item, plan, null);
+    }
+
+    static QueueProgress completed(DownloadQueueItem item, ExtensionDownloadPlan plan, String message) {
+        return new QueueProgress(QueueProgressPhase.COMPLETED, item, plan, message);
     }
 
     static QueueProgress failed(DownloadQueueItem item, ExtensionDownloadPlan plan, String message) {

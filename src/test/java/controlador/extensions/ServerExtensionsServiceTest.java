@@ -710,7 +710,7 @@ class ServerExtensionsServiceTest {
     void shouldIgnoreNonMinecraftServerVersionDuringJarCompatibilityCheck() throws Exception {
         ServerExtensionsService service = new ServerExtensionsService();
         Server server = extensionServer("invalid-server-version", ServerPlatform.PAPER);
-        server.setVersion("26.1.2");
+        server.setVersion("custom-build");
         Path sourceJar = tempDir.resolve("legacy-api-plugin-invalid-server-version.jar");
         createJar(sourceJar, Map.of("plugin.yml", """
                 name: LegacyApiPlugin
@@ -851,6 +851,33 @@ class ServerExtensionsServiceTest {
 
         assertThat(resolution.state()).isEqualTo(ExtensionInstallResolutionState.INCOMPATIBLE);
         assertThat(resolution.message()).contains("Minecraft 1.21.1");
+    }
+
+    @Test
+    void shouldMarkCatalogPlanIncompatibleWhenModernNumericMinecraftVersionDoesNotMatch() throws Exception {
+        ServerExtensionsService service = new ServerExtensionsService();
+        Server server = extensionServer("plugin-modern-version-mismatch", ServerPlatform.PAPER);
+        server.setVersion("26.1.1");
+        ExtensionDownloadPlan plan = new ExtensionDownloadPlan(
+                "modrinth",
+                "nova-framework",
+                "nova-2612",
+                "0.23.0",
+                null,
+                "Nova-0.23.0+MC-26.1.2.jar",
+                "https://example.test/Nova.jar",
+                ExtensionSourceType.MODRINTH,
+                ServerExtensionType.PLUGIN,
+                ServerPlatform.PAPER,
+                "26.1.2",
+                true,
+                "Ready"
+        );
+
+        ExtensionInstallResolution resolution = service.evaluateCatalogInstallation(server, plan);
+
+        assertThat(resolution.state()).isEqualTo(ExtensionInstallResolutionState.INCOMPATIBLE);
+        assertThat(resolution.message()).contains("Minecraft 26.1.1");
     }
 
     @Test

@@ -10,7 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class ServerExtensionQueryFactory {
-    private static final Pattern MINECRAFT_VERSION_HINT_PATTERN = Pattern.compile("(?i)(?<![\\d.])(1\\.(?:1[0-9]|2[0-9])(?:\\.\\d+)?)(?![\\d.])");
+    private static final Pattern MINECRAFT_VERSION_HINT_PATTERN = Pattern.compile("(?i)(?<![\\d.])((?:1\\.(?:1[0-9]|2[0-9])|[2-9]\\d\\.\\d+)(?:\\.\\d+)?)(?![\\d.])");
 
     private ServerExtensionQueryFactory() {
     }

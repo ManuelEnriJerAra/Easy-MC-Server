@@ -197,6 +197,7 @@ class ExtensionMarketplaceDependencyTest {
 
         assertThat(item.state).isEqualTo(QueueState.RESOLVING);
         assertThat(item.displayName).isEqualTo("Plugin A");
+        assertThat(item.versionId).isNull();
         assertThat(item.message).contains("Resolviendo");
     }
 
@@ -215,6 +216,49 @@ class ExtensionMarketplaceDependencyTest {
 
         assertThat(admission.allowed()).isTrue();
         assertThat(admission.existingItem()).isSameAs(item);
+    }
+
+    @Test
+    void unresolvedRequiredDependenciesWarnWithoutPromptingForQueueDependencies() {
+        DependencyResolutionResult result = new DependencyResolutionResult(
+                List.of(),
+                List.of(new DependencyNotice(
+                        new ExtensionDependency("hangar", "plugin-b", null, "Plugin B", "required", true),
+                        "Plugin A",
+                        "hangar::plugin-a",
+                        false
+                )),
+                List.of(),
+                List.of(),
+                List.of()
+        );
+
+        assertThat(result.hasPromptableDependencies()).isFalse();
+        assertThat(result.hasRequiredPrompts()).isFalse();
+    }
+
+    @Test
+    void dependencyOrderWarningDoesNotBlockQueueItem() throws Exception {
+        ExtensionMarketplaceDialog dialog = dialogForDependencyResolution(new FakeGestorServidores(Map.of()));
+        DownloadQueueItem item = new DownloadQueueItem(
+                "hangar",
+                "plugin-a",
+                "version-plugin-a",
+                plan("plugin-a", "Plugin A", List.of()),
+                null,
+                "Plugin A",
+                "1.0.0",
+                QueueState.PENDING,
+                "Pendiente",
+                null,
+                List.of("hangar::plugin-b")
+        );
+
+        String warning = dependencyWarningMessage(dialog, item, Set.of(), Set.of());
+
+        assertThat(warning)
+                .contains("Aviso")
+                .contains("se intentara instalar de todos modos");
     }
 
     @Test
@@ -282,6 +326,20 @@ class ExtensionMarketplaceDependencyTest {
         );
         method.setAccessible(true);
         return (QueueAdmission) method.invoke(dialog, entry, plan, itemToIgnore);
+    }
+
+    private static String dependencyWarningMessage(ExtensionMarketplaceDialog dialog,
+                                                   DownloadQueueItem item,
+                                                   Set<String> completedKeys,
+                                                   Set<String> failedKeys) throws Exception {
+        Method method = ExtensionMarketplaceDialog.class.getDeclaredMethod(
+                "dependencyWarningMessage",
+                DownloadQueueItem.class,
+                Set.class,
+                Set.class
+        );
+        method.setAccessible(true);
+        return (String) method.invoke(dialog, item, completedKeys, failedKeys);
     }
 
     private static void persistCatalogDetails(ExtensionMarketplaceDialog dialog,

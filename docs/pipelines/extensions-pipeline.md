@@ -103,6 +103,10 @@ Dependency identity matching is shared through `controlador.extensions.Extension
 
 Adding an extension to the marketplace queue should acknowledge the click immediately. Long dependency and optional-complement resolution runs in the background while the queue shows a removable `RESOLVING` item; once resolution finishes, that same item becomes pending or failed so users do not need to click the add action again.
 
+Marketplace row actions should tolerate normal hand movement between mouse press and release. Prefer press/release handling with a small movement threshold for result-row and queue-row action zones instead of relying on exact `mouseClicked` events.
+
+Dependency warnings must not block marketplace downloads. If a required dependency cannot be resolved automatically, has failed earlier in the queue, or is installed after the dependent plugin, keep the selected plugin downloadable/installable and show a warning so the user can fix dependency order manually if the server rejects it later.
+
 Persisted installed-extension metadata may come from older cache entries or local jar detection, so nullable boxed fields such as download counts must be compared with explicit null handling before writing catalog details back into the installed cache.
 
 Marketplace dialog option records, queue/dependency helper models, and related view-state types may live beside the dialog in package-scoped helper files when extracted for size control. Keep the dialog focused on orchestration and rendering, and keep extracted types behavior-neutral unless a broader redesign is intentional.

@@ -172,11 +172,13 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
         JsonNode projectNode = OBJECT_MAPPER.readTree(httpClient.get(projectUri(projectId), null));
         List<ExtensionCatalogVersion> versions = fetchVersions(projectId, query);
         boolean exactVersionRequested = versionId != null && !versionId.isBlank();
-        ExtensionCatalogVersion target = versions.stream()
-                .filter(version -> exactVersionRequested
-                        ? versionId.equalsIgnoreCase(version.versionId())
-                        : true)
-                .sorted(defaultVersionSelectionComparator(exactVersionRequested))
+        ExtensionCatalogVersion target = exactVersionRequested
+                ? versions.stream()
+                .filter(version -> versionId.equalsIgnoreCase(version.versionId()))
+                .findFirst()
+                .orElse(null)
+                : versions.stream()
+                .sorted(defaultVersionSelectionComparator(false))
                 .findFirst()
                 .orElse(versions.isEmpty() ? null : versions.getFirst());
         if (target == null) {
@@ -276,27 +278,31 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
 
     private ExtensionCatalogEntry toSearchEntry(JsonNode hit, ExtensionCatalogQuery query) {
         String projectType = text(hit, "project_type");
-        Set<ServerPlatform> platforms = extractPlatforms(hit.path("categories"));
-        ServerExtensionType extensionType = inferExtensionType(projectType, platforms, query.extensionType(), query.platform());
+        Set<ServerPlatform> projectPlatforms = extractPlatforms(hit.path("categories"));
+        ServerExtensionType extensionType = inferExtensionType(projectType, projectPlatforms, query.extensionType(), query.platform());
         if (query.extensionType() != ServerExtensionType.UNKNOWN && extensionType != query.extensionType()) {
             return null;
         }
-        Set<String> versions = setOfStrings(hit.path("versions"));
+        if (!matchesProjectPlatform(query, projectPlatforms)) {
+            return null;
+        }
+        if (!matchesProjectMinecraftVersion(query, setOfStrings(hit.path("versions")))) {
+            return null;
+        }
         String projectId = firstNonBlank(text(hit, "project_id"), text(hit, "slug"));
-        String versionId = text(hit, "latest_version");
         String projectUrl = text(hit, "slug") == null ? null : "https://modrinth.com/" + toProjectType(extensionType) + "/" + text(hit, "slug");
         return new ExtensionCatalogEntry(
                 getProviderId(),
                 projectId,
-                versionId,
+                null,
                 text(hit, "title"),
                 text(hit, "author"),
-                text(hit, "latest_version"),
+                null,
                 text(hit, "description"),
                 getSourceType(),
                 extensionType,
-                platforms,
-                versions,
+                Set.of(),
+                Set.of(),
                 text(hit, "icon_url"),
                 projectUrl,
                 null,
@@ -324,7 +330,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
 
     private ExtensionCatalogEntry toProjectEntry(JsonNode projectNode, List<ExtensionCatalogVersion> versions) {
         ExtensionCatalogVersion latest = versions.isEmpty() ? null : versions.getFirst();
-        Set<ServerPlatform> platforms = latest == null ? extractPlatforms(projectNode.path("categories")) : latest.supportedPlatforms();
+        Set<ServerPlatform> platforms = latest == null ? Set.of() : latest.supportedPlatforms();
         ServerExtensionType extensionType = inferExtensionType(text(projectNode, "project_type"), platforms, ServerExtensionType.UNKNOWN, ServerPlatform.UNKNOWN);
         return new ExtensionCatalogEntry(
                 getProviderId(),
@@ -337,7 +343,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
                 getSourceType(),
                 extensionType,
                 platforms,
-                latest == null ? setOfStrings(projectNode.path("game_versions")) : latest.supportedMinecraftVersions(),
+                latest == null ? Set.of() : latest.supportedMinecraftVersions(),
                 text(projectNode, "icon_url"),
                 text(projectNode, "slug") == null ? null : "https://modrinth.com/" + toProjectType(extensionType) + "/" + text(projectNode, "slug"),
                 latest == null ? null : latest.downloadUrl(),
@@ -614,12 +620,35 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
         return false;
     }
 
+    private boolean matchesProjectPlatform(ExtensionCatalogQuery query, Set<ServerPlatform> platforms) {
+        if (query == null || query.platform() == null || query.platform() == ServerPlatform.UNKNOWN) {
+            return true;
+        }
+        if (platforms == null || platforms.isEmpty()) {
+            return true;
+        }
+        ServerPlatform requested = canonicalizePlatform(query.platform());
+        for (ServerPlatform platform : platforms) {
+            if (canonicalizePlatform(platform) == requested) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean matchesMinecraftVersion(ExtensionCatalogQuery query, ExtensionCatalogEntry entry) {
         if (query.minecraftVersion() == null || query.minecraftVersion().isBlank()) {
             return true;
         }
         return entry.compatibleMinecraftVersions().isEmpty()
                 || entry.compatibleMinecraftVersions().contains(query.minecraftVersion().trim());
+    }
+
+    private boolean matchesProjectMinecraftVersion(ExtensionCatalogQuery query, Set<String> versions) {
+        if (query == null || query.minecraftVersion() == null || query.minecraftVersion().isBlank()) {
+            return true;
+        }
+        return versions == null || versions.isEmpty() || versions.contains(query.minecraftVersion().trim());
     }
 
     private ServerExtensionType inferExtensionType(ExtensionCatalogQuery query) {

@@ -317,9 +317,15 @@ public final class ExtensionCatalogService {
         if (plan == null) {
             return false;
         }
+        ServerPlatform serverPlatform = server == null || server.getPlatform() == null
+                ? ServerPlatform.UNKNOWN
+                : server.getPlatform();
         ServerEcosystemType ecosystem = server == null || server.getEcosystemType() == null
                 ? ServerEcosystemType.UNKNOWN
                 : server.getEcosystemType();
+        if (ecosystem == ServerEcosystemType.UNKNOWN && serverPlatform != ServerPlatform.UNKNOWN) {
+            ecosystem = serverPlatform.getDefaultEcosystemType();
+        }
         ServerExtensionType requestedType = switch (ecosystem) {
             case MODS -> ServerExtensionType.MOD;
             case PLUGINS -> ServerExtensionType.PLUGIN;
@@ -332,9 +338,6 @@ public final class ExtensionCatalogService {
         if (planType == ServerExtensionType.UNKNOWN || planType != requestedType) {
             return false;
         }
-        ServerPlatform serverPlatform = server == null || server.getPlatform() == null
-                ? ServerPlatform.UNKNOWN
-                : server.getPlatform();
         return serverPlatform == ServerPlatform.UNKNOWN
                 || plan.platform() == null
                 || plan.platform() == ServerPlatform.UNKNOWN

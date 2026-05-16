@@ -58,9 +58,11 @@ class ModrinthExtensionCatalogProviderTest {
 
         assertThat(results).singleElement().satisfies(entry -> {
             assertThat(entry.projectId()).isEqualTo("A1");
+            assertThat(entry.versionId()).isNull();
+            assertThat(entry.version()).isNull();
             assertThat(entry.sourceType()).isEqualTo(ExtensionSourceType.MODRINTH);
-            assertThat(entry.compatiblePlatforms()).contains(ServerPlatform.FABRIC);
-            assertThat(entry.compatibleMinecraftVersions()).contains("1.21.1");
+            assertThat(entry.compatiblePlatforms()).isEmpty();
+            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
         });
     }
 
@@ -106,6 +108,117 @@ class ModrinthExtensionCatalogProviderTest {
 
         assertThat(results).extracting(ExtensionCatalogEntry::projectId).containsExactly("A1", "A2");
         assertThat(results).extracting(ExtensionCatalogEntry::downloads).containsExactly(9000L, 100L);
+        assertThat(results).allSatisfy(entry -> {
+            assertThat(entry.versionId()).isNull();
+            assertThat(entry.version()).isNull();
+            assertThat(entry.compatiblePlatforms()).isEmpty();
+            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
+        });
+    }
+
+    @Test
+    void shouldNotAdvertiseProjectWideMetadataAsCompatibilityForBroadSearches() throws IOException {
+        ModrinthExtensionCatalogProvider provider = new ModrinthExtensionCatalogProvider(new FakeHttpClient(Map.of(
+                modrinthSearchUrl("create", 10, 0, "downloads", "[[\"project_type:mod\"]]"),
+                """
+                {
+                  "hits": [
+                    {
+                      "project_id": "create",
+                      "slug": "create",
+                      "project_type": "mod",
+                      "title": "Create",
+                      "author": "simibubi",
+                      "description": "Build contraptions",
+                      "categories": ["fabric", "forge", "neoforge"],
+                      "versions": ["1.20.1", "1.21.1"],
+                      "latest_version": "latest-project-version",
+                      "downloads": 1000
+                    }
+                  ]
+                }
+                """
+        )));
+
+        List<ExtensionCatalogEntry> results = provider.search(
+                new ExtensionCatalogQuery("create", ServerPlatform.UNKNOWN, ServerExtensionType.MOD, "", 10)
+        );
+
+        assertThat(results).singleElement().satisfies(entry -> {
+            assertThat(entry.projectId()).isEqualTo("create");
+            assertThat(entry.versionId()).isNull();
+            assertThat(entry.version()).isNull();
+            assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.MOD);
+            assertThat(entry.compatiblePlatforms()).isEmpty();
+            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
+        });
+    }
+
+    @Test
+    void shouldNotAdvertiseProjectWideMetadataAsCompatibilityForFilteredSearches() throws IOException {
+        ModrinthExtensionCatalogProvider provider = new ModrinthExtensionCatalogProvider(new FakeHttpClient(Map.of(
+                modrinthSearchUrl("tacz", 10, 0, "downloads", "[[\"project_type:mod\"],[\"categories:forge\"],[\"versions:1.21.1\"]]"),
+                """
+                {
+                  "hits": [
+                    {
+                      "project_id": "SzzJttH8",
+                      "slug": "timeless-and-classics-zero",
+                      "project_type": "mod",
+                      "title": "[TaCZ] Timeless and Classics Zero",
+                      "author": "TACZ",
+                      "description": "Project has Forge and 1.21.1 somewhere, but not in the same build.",
+                      "categories": ["forge"],
+                      "versions": ["1.20.1", "1.21.1"],
+                      "latest_version": "latest-project-version",
+                      "downloads": 1000
+                    }
+                  ]
+                }
+                """
+        )));
+
+        List<ExtensionCatalogEntry> results = provider.search(
+                new ExtensionCatalogQuery("tacz", ServerPlatform.FORGE, ServerExtensionType.MOD, "1.21.1", 10)
+        );
+
+        assertThat(results).singleElement().satisfies(entry -> {
+            assertThat(entry.projectId()).isEqualTo("SzzJttH8");
+            assertThat(entry.versionId()).isNull();
+            assertThat(entry.version()).isNull();
+            assertThat(entry.compatiblePlatforms()).isEmpty();
+            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
+        });
+    }
+
+    @Test
+    void shouldKeepDetailsConservativeWhenNoVersionBuildMatchesServerFilters() throws IOException {
+        ModrinthExtensionCatalogProvider provider = new ModrinthExtensionCatalogProvider(new FakeHttpClient(Map.of(
+                "https://api.modrinth.com/v2/project/timeless-and-classics-zero",
+                """
+                {
+                  "id": "SzzJttH8",
+                  "slug": "timeless-and-classics-zero",
+                  "project_type": "mod",
+                  "title": "[TaCZ] Timeless and Classics Zero",
+                  "description": "Gun mod",
+                  "body": "Long description",
+                  "categories": ["forge"],
+                  "game_versions": ["1.20.1", "1.21.1"]
+                }
+                """,
+                "https://api.modrinth.com/v2/project/timeless-and-classics-zero/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.21.1%22%5D&include_changelog=false",
+                "[]"
+        )));
+
+        ExtensionCatalogDetails details = provider.getDetails(
+                "timeless-and-classics-zero",
+                new ExtensionCatalogQuery("tacz", ServerPlatform.FORGE, ServerExtensionType.MOD, "1.21.1", 20)
+        ).orElseThrow();
+
+        assertThat(details.versions()).isEmpty();
+        assertThat(details.entry().compatiblePlatforms()).isEmpty();
+        assertThat(details.entry().compatibleMinecraftVersions()).isEmpty();
     }
 
 
@@ -200,7 +313,8 @@ class ModrinthExtensionCatalogProviderTest {
         assertThat(results).anySatisfy(entry -> {
             assertThat(entry.projectId()).isEqualTo("P1");
             assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.PLUGIN);
-            assertThat(entry.compatiblePlatforms()).contains(ServerPlatform.PAPER);
+            assertThat(entry.compatiblePlatforms()).isEmpty();
+            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
             assertThat(entry.serverSide()).isEqualTo("required");
         });
         assertThat(results).anySatisfy(entry -> {
@@ -213,7 +327,8 @@ class ModrinthExtensionCatalogProviderTest {
             assertThat(entry.projectId()).isEqualTo("GEYSER");
             assertThat(entry.displayName()).isEqualTo("Geyser");
             assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.PLUGIN);
-            assertThat(entry.compatiblePlatforms()).contains(ServerPlatform.PAPER, ServerPlatform.FABRIC);
+            assertThat(entry.compatiblePlatforms()).isEmpty();
+            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
             assertThat(entry.projectUrl()).contains("/plugin/geyser");
         });
     }
@@ -358,7 +473,59 @@ class ModrinthExtensionCatalogProviderTest {
     }
 
     @Test
-    void shouldRespectSelectedVersionIdAndFallbackWhenResolvingDownloadPlan() throws IOException {
+    void shouldResolveDownloadForModernNumericMinecraftVersion() throws IOException {
+        ModrinthExtensionCatalogProvider provider = new ModrinthExtensionCatalogProvider(new FakeHttpClient(Map.of(
+                "https://api.modrinth.com/v2/project/nova-framework",
+                """
+                {
+                  "id": "yCVqpwUy",
+                  "slug": "nova-framework",
+                  "project_type": "mod",
+                  "title": "Nova",
+                  "author": "xenondevs",
+                  "description": "server-side modding framework for paper",
+                  "categories": ["paper", "purpur"],
+                  "game_versions": ["26.1.1", "26.1.2"],
+                  "client_side": "unsupported",
+                  "server_side": "required"
+                }
+                """,
+                "https://api.modrinth.com/v2/project/nova-framework/version?loaders=%5B%22paper%22%5D&game_versions=%5B%2226.1.1%22%5D&include_changelog=false",
+                """
+                [
+                  {
+                    "id": "nova-2611",
+                    "name": "Nova v0.23.0-alpha.1",
+                    "version_number": "0.23.0-alpha.1",
+                    "version_type": "alpha",
+                    "loaders": ["paper", "purpur"],
+                    "game_versions": ["26.1.1"],
+                    "date_published": "2026-04-01T12:00:00Z",
+                    "files": [
+                      {
+                        "primary": true,
+                        "filename": "Nova-0.23.0-alpha.1+MC-26.1.1.jar",
+                        "url": "https://cdn.modrinth.com/data/yCVqpwUy/versions/nova-2611/Nova-0.23.0-alpha.1%2BMC-26.1.1.jar"
+                      }
+                    ]
+                  }
+                ]
+                """
+        )));
+        Server server = new Server();
+        server.setPlatform(ServerPlatform.PAPER);
+        server.setVersion("26.1.1");
+
+        ExtensionDownloadPlan plan = provider.resolveDownload("nova-framework", null, server).orElseThrow();
+
+        assertThat(plan.versionId()).isEqualTo("nova-2611");
+        assertThat(plan.platform()).isEqualTo(ServerPlatform.PAPER);
+        assertThat(plan.minecraftVersionConstraint()).isEqualTo("26.1.1");
+        assertThat(plan.downloadUrl()).contains("MC-26.1.1");
+    }
+
+    @Test
+    void shouldRespectSelectedVersionIdWhenResolvingDownloadPlan() throws IOException {
         ModrinthExtensionCatalogProvider provider = new ModrinthExtensionCatalogProvider(new FakeHttpClient(Map.of(
                 "https://api.modrinth.com/v2/project/geyser",
                 """
@@ -409,11 +576,12 @@ class ModrinthExtensionCatalogProviderTest {
         assertThat(selected.versionId()).isEqualTo("selected");
         assertThat(selected.versionNumber()).isEqualTo("1.9.0");
         assertThat(selected.downloadUrl()).endsWith("geyser-selected.jar");
-        ExtensionDownloadPlan fallback = provider.resolveDownload("geyser", "missing", server).orElseThrow();
+        ExtensionDownloadPlan fallback = provider.resolveDownload("geyser", null, server).orElseThrow();
 
         assertThat(fallback.versionId()).isEqualTo("latest");
         assertThat(fallback.versionNumber()).isEqualTo("2.0.0");
         assertThat(fallback.downloadUrl()).endsWith("geyser-latest.jar");
+        assertThat(provider.resolveDownload("geyser", "missing", server)).isEmpty();
     }
 
     @Test
