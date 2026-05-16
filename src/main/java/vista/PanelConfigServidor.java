@@ -19,6 +19,7 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
+import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -82,9 +83,12 @@ public class PanelConfigServidor extends JPanel {
     private int persistedXms;
     private int persistedXmx;
     private final JButton saveButton;
+    private final PropertyChangeListener configuracionServidorListener;
+    private boolean configuracionServidorListenerRegistrado;
 
     PanelConfigServidor(GestorServidores gestorServidores){
         this.gestorServidores = gestorServidores;
+        this.configuracionServidorListener = evt -> SwingUtilities.invokeLater(() -> aplicarConfiguracionServidorExterna(evt.getNewValue()));
         this.setLayout(new BorderLayout());
         this.setOpaque(false);
 
@@ -133,6 +137,24 @@ public class PanelConfigServidor extends JPanel {
         saveButton.addActionListener(e -> save(false));
 
         SwingUtilities.invokeLater(this::reload);
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if(!configuracionServidorListenerRegistrado){
+            gestorServidores.addPropertyChangeListener("configuracionServidor", configuracionServidorListener);
+            configuracionServidorListenerRegistrado = true;
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        if(configuracionServidorListenerRegistrado){
+            gestorServidores.removePropertyChangeListener("configuracionServidor", configuracionServidorListener);
+            configuracionServidorListenerRegistrado = false;
+        }
+        super.removeNotify();
     }
 
     void reload(){
@@ -360,6 +382,47 @@ public class PanelConfigServidor extends JPanel {
         return true;
     }
 
+    private void aplicarConfiguracionServidorExterna(Object eventValue){
+        if(!(eventValue instanceof Server changedServer)){
+            return;
+        }
+        Server selectedServer = gestorServidores.getServidorSeleccionado();
+        if(selectedServer == null || changedServer.getId() == null || !changedServer.getId().equals(selectedServer.getId())){
+            return;
+        }
+        if(!hasUnsavedChanges()){
+            reload();
+            return;
+        }
+
+        Integer puerto = obtenerPuertoActualServidor(changedServer);
+        if(puerto == null){
+            return;
+        }
+        String nuevoPuerto = String.valueOf(puerto);
+        JComponent editor = editors.get("server-port");
+        if(editor == null){
+            return;
+        }
+
+        String puertoPersistidoAnterior = persistedValues.get("server-port");
+        boolean puertoEditadoPorUsuario = puertoPersistidoAnterior != null
+                && !puertoPersistidoAnterior.equals(readComponentValue(editor));
+        persistedValues.put("server-port", nuevoPuerto);
+        if(!puertoEditadoPorUsuario){
+            setComponentValue(editor, nuevoPuerto);
+        }
+        updateSaveButtonState();
+    }
+
+    private Integer obtenerPuertoActualServidor(Server server){
+        if(server == null || server.getServerConfig() == null){
+            return null;
+        }
+        int puerto = server.getServerConfig().getPuerto();
+        return puerto > 0 && puerto <= 65535 ? puerto : null;
+    }
+
     private Map<String, String> captureCurrentValues(){
         Map<String, String> values = new LinkedHashMap<>();
         for(Map.Entry<String, JComponent> entry : editors.entrySet()){
@@ -386,6 +449,21 @@ public class PanelConfigServidor extends JPanel {
             value = "";
         }
         return value == null ? "" : value;
+    }
+
+    private void setComponentValue(JComponent comp, String value){
+        String safeValue = value == null ? "" : value;
+        if(comp instanceof JCheckBox cb){
+            cb.setSelected(Boolean.parseBoolean(safeValue));
+        } else if(comp instanceof JComboBox<?> combo){
+            combo.setSelectedItem(safeValue);
+        } else if(comp instanceof JSpinner spinner){
+            spinner.setValue(parseIntegerValue(safeValue));
+        } else if(comp instanceof JTextArea ta){
+            ta.setText(safeValue);
+        } else if(comp instanceof JTextField tf){
+            tf.setText(safeValue);
+        }
     }
 
     private void markCurrentStateAsPersisted(){

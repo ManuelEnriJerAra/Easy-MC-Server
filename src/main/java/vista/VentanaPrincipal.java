@@ -150,7 +150,34 @@ public class VentanaPrincipal extends JFrame {
         // PANEL DE LISTADO DE SERVIDORES
         listaServidoresPanel = getPanelServidores(gestorServidores);
         servidoresPanel.add(listaServidoresPanel, BorderLayout.CENTER);
-        refrescarListaServidoresButton.addActionListener(e -> listaServidoresPanel.refrescarListado());
+        refrescarListaServidoresButton.addActionListener(e -> {
+            Server servidorAntes = gestorServidores.getServidorSeleccionado();
+            gestorServidores.refrescarServidoresGuardados();
+            gestorServidores.mostrarAvisoArranqueSiProcede(VentanaPrincipal.this);
+            listaServidoresPanel.refrescarListado();
+            boolean seleccionEliminada = servidorAntes != null
+                    && gestorServidores.getServerById(servidorAntes.getId()) == null;
+            if(seleccionEliminada){
+                List<Server> servidoresRestantes = gestorServidores.getListaServidores();
+                if(servidoresRestantes != null && !servidoresRestantes.isEmpty()){
+                    SwingUtilities.invokeLater(listaServidoresPanel::seleccionarPrimero);
+                } else {
+                    gestorServidores.setServidorSeleccionado(null);
+                    if(serverMostrado != null && consoleListenerActual != null){
+                        serverMostrado.removeConsoleListener(consoleListenerActual);
+                    }
+                    serverMostrado = null;
+                    consoleListenerActual = null;
+                    borrarServerButton.setEnabled(false);
+                    abrirCarpetaServerButton.setEnabled(false);
+                    if(panelDerechoCards != null){
+                        panelDerechoCards.removeAll();
+                        panelDerechoCards.revalidate();
+                        panelDerechoCards.repaint();
+                    }
+                }
+            }
+        });
 
         // PANEL DE BOTONES DE SERVIDORES
         botonesServidoresPanel = new JPanel(new GridLayout(1,4));

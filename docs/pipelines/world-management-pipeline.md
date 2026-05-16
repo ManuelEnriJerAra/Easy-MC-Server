@@ -34,16 +34,17 @@ Typical sequence:
 
 ## Recent Connections Pipeline
 
-`actualizarConexionesRecientes()` renders the "Ultimas conexiones" card.
+`actualizarConexionesRecientes()` renders the "Últimas conexiones" card.
 
 Data source order:
 
 1. Parse recent join lines from `Server.getRawLogLines()`.
 2. If no log joins are found, fallback to `WorldPlayerDataService.findRecentPlayers(...)`.
 3. In Debug mode, merge in-memory fake connections ahead of real entries.
-4. Render rows with `crearFilaConexion(...)`.
+4. Deduplicate repeated users by username, keeping the newest occurrence first.
+5. Render rows with `crearFilaConexion(...)`.
 
-Keep the display bounded to the existing recent-connection limit.
+There is no product-level hard cap on recent connections now. The practical size depends on the available log lines or `playerdata` files, so the card should stay scrollable rather than truncating the history.
 
 Recent-connection rows use `PlayerIdentityView.SizePreset.COMPACT` without vertical gaps between users, with the timestamp centered in the trailing area. Location/coordinate data may remain in the internal `RecentConnection` value, but this compact card does not render it.
 

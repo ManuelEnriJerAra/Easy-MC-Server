@@ -1565,6 +1565,76 @@ class GestorServidoresTest {
     }
 
     @Test
+    void reordenarServidores_debePersistirOrdenManualDeFavoritos() throws Exception {
+        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        GestorServidores gestor = new GestorServidores(jsonPath.toFile());
+        Server alpha = crearServidorPersistible("Alpha", tempDir.resolve("alpha"));
+        Server beta = crearServidorPersistible("Beta", tempDir.resolve("beta"));
+        Server gamma = crearServidorPersistible("Gamma", tempDir.resolve("gamma"));
+        gestor.guardarServidor(alpha);
+        gestor.guardarServidor(beta);
+        gestor.guardarServidor(gamma);
+
+        gestor.establecerFavorito(alpha, true);
+        gestor.establecerFavorito(beta, true);
+        gestor.reordenarServidores(List.of(beta.getId(), alpha.getId(), gamma.getId()));
+
+        GestorServidores recargado = new GestorServidores(jsonPath.toFile());
+
+        assertThat(recargado.getListaServidores())
+                .extracting(Server::getId)
+                .containsExactly(beta.getId(), alpha.getId(), gamma.getId());
+        assertThat(recargado.getServerById(beta.getId()).getOrdenFavorito())
+                .isLessThan(recargado.getServerById(alpha.getId()).getOrdenFavorito());
+    }
+
+    @Test
+    void reordenarServidores_debeMantenerOrdenBaseDeNoFavoritosConFavoritosOrdenados() throws Exception {
+        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        GestorServidores gestor = new GestorServidores(jsonPath.toFile());
+        Server alpha = crearServidorPersistible("Alpha", tempDir.resolve("alpha"));
+        Server beta = crearServidorPersistible("Beta", tempDir.resolve("beta"));
+        Server gamma = crearServidorPersistible("Gamma", tempDir.resolve("gamma"));
+        Server delta = crearServidorPersistible("Delta", tempDir.resolve("delta"));
+        gestor.guardarServidor(alpha);
+        gestor.guardarServidor(beta);
+        gestor.guardarServidor(gamma);
+        gestor.guardarServidor(delta);
+
+        gestor.establecerFavorito(alpha, true);
+        gestor.establecerFavorito(beta, true);
+        gestor.reordenarServidores(List.of(beta.getId(), alpha.getId(), delta.getId(), gamma.getId()));
+
+        GestorServidores recargado = new GestorServidores(jsonPath.toFile());
+
+        assertThat(recargado.getListaServidores())
+                .extracting(Server::getId)
+                .containsExactly(beta.getId(), alpha.getId(), delta.getId(), gamma.getId());
+    }
+
+    @Test
+    void refrescarServidoresGuardados_debeEliminarCarpetasBorradasYLimpiarSeleccion() throws Exception {
+        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        GestorServidores gestor = new GestorServidores(jsonPath.toFile());
+        Path staleDir = tempDir.resolve("stale");
+        Server stale = crearServidorPersistible("Stale", staleDir);
+        Server valid = crearServidorPersistible("Valid", tempDir.resolve("valid"));
+        gestor.guardarServidor(stale);
+        gestor.guardarServidor(valid);
+        gestor.setServidorSeleccionado(stale);
+
+        deleteDirectoryIfExists(staleDir);
+        gestor.refrescarServidoresGuardados();
+
+        assertThat(gestor.getListaServidores()).extracting(Server::getId).containsExactly(valid.getId());
+        assertThat(gestor.getServidorSeleccionado()).isNull();
+        assertThat(gestor.getAvisoServidoresNoCargados()).contains("No se han podido cargar 1 servidores");
+
+        GestorServidores recargado = new GestorServidores(jsonPath.toFile());
+        assertThat(recargado.getListaServidores()).extracting(Server::getId).containsExactly(valid.getId());
+    }
+
+    @Test
     void constructor_debeEliminarServidoresPersistidosNoCargables() throws Exception {
         Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
         Path validDir = tempDir.resolve("valid-server");
@@ -1884,6 +1954,16 @@ class GestorServidoresTest {
                 Files.deleteIfExists(path);
             }
         }
+    }
+
+    private static Server crearServidorPersistible(String displayName, Path serverDir) throws IOException {
+        TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"1.20.1\"}");
+        Server server = new Server();
+        server.setDisplayName(displayName);
+        server.setServerDir(serverDir.toString());
+        server.setVersion("1.20.1");
+        server.setPlatform(ServerPlatform.VANILLA);
+        return server;
     }
 
     private static final class FakeProcess extends Process {

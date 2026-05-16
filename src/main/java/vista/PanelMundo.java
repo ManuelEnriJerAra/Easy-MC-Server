@@ -37,7 +37,6 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.event.HierarchyEvent;
 import java.awt.event.AWTEventListener;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -46,17 +45,12 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
-import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.DecimalFormat;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -81,15 +75,8 @@ import java.util.stream.Stream;
 
 public class PanelMundo extends JPanel {
     private static final String[] REGION_FILE_COMPRESSION_OPTIONS = {"deflate", "lz4", "none"};
-    private static final int CONNECTION_HEAD_SIZE = 24;
-    private static final int MAX_DEBUG_RECENT_CONNECTIONS = 4;
     private static final int PREVIEW_PLAYER_HEAD_SIZE = 24;
-    private static final Pattern JOIN = Pattern.compile("([^\\s]+) joined the game");
-    private static final Pattern HORA_LOG = Pattern.compile("^\\[(\\d{2}:\\d{2}:\\d{2})]\\s*");
     private static final Pattern REGION_FILE_PATTERN = Pattern.compile("^r\\.(-?\\d+)\\.(-?\\d+)\\.mca$", Pattern.CASE_INSENSITIVE);
-    private static final DateTimeFormatter FORMATO_HORA_LOG = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    private static final DateTimeFormatter FORMATO_CONEXION = DateTimeFormatter.ofPattern("dd/MM/yyyy - HH:mm:ss");
     private static final Map<Path, RegionVisibilityCacheEntry> REGION_VISIBILITY_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, ImageIcon> PLAYER_HEAD_CACHE = new ConcurrentHashMap<>();
     private static final Set<String> PLAYER_HEADS_LOADING = ConcurrentHashMap.newKeySet();
@@ -157,16 +144,10 @@ public class PanelMundo extends JPanel {
     private final JLabel pesoMundoValueLabel = new JLabel("-");
     private final JLabel pesoStatsSavesValueLabel = new JLabel("-");
     private final JLabel pesoTotalValueLabel = new JLabel("-");
-    private final JPanel conexionesPanel = new JPanel();
-    private final JButton btnDebugAddConnection = new FlatButton();
-    private final JButton btnDebugRemoveConnection = new FlatButton();
-    private final List<RecentConnection> conexionesDebug = new ArrayList<>();
-    private final PropertyChangeListener debugModeListener;
+    private final WorldRecentConnectionsPanel recentConnectionsPanel;
 
     private World mundoActivoActual;
-    private JPanel conexionesHeaderActionsPanel;
     private boolean actualizandoComboMundos = false;
-    private int fakeConnectionSequence;
     private PreviewRenderPreferences previewPreferences = PreviewRenderPreferences.defaults();
     private static final int EMPTY_SPIRAL_RINGS_TO_STOP = 2;
     private static final int PREVIEW_RENDER_MARGIN_BLOCKS = MCARenderer.CHUNK_BLOCK_SIDE;
@@ -192,6 +173,10 @@ public class PanelMundo extends JPanel {
     PanelMundo(GestorServidores gestorServidores, Runnable onWorldChanged) {
         this.gestorServidores = gestorServidores;
         this.onWorldChanged = onWorldChanged;
+        this.recentConnectionsPanel = new WorldRecentConnectionsPanel(
+                gestorServidores::getServidorSeleccionado,
+                this::getMundoSeleccionadoOActivo
+        );
         setLayout(new BorderLayout());
         setOpaque(false);
         INSTANCIAS_ACTIVAS.add(this);
@@ -261,16 +246,7 @@ public class PanelMundo extends JPanel {
         stylePreviewStatusLabel(previewRenderStatusLabel);
         instalarInteraccionSeed();
         configurarControlesAjustesMundo();
-        configurarBotonDebug(btnDebugAddConnection, "Anadir conexion falsa", "easymcicons/plus.svg", this::addFakeConnection);
-        configurarBotonDebug(btnDebugRemoveConnection, "Eliminar conexion falsa", "easymcicons/minus.svg", this::removeFakeConnection);
-        debugModeListener = evt -> {
-            if (!DebugMode.PROPERTY_ENABLED.equals(evt.getPropertyName())) return;
-            SwingUtilities.invokeLater(this::actualizarModoDebugConexiones);
-        };
-        DebugMode.addPropertyChangeListener(debugModeListener);
 
-        conexionesPanel.setOpaque(false);
-        conexionesPanel.setLayout(new BoxLayout(conexionesPanel, BoxLayout.Y_AXIS));
         metadataReadPanel.setOpaque(false);
         metadataReadPanel.setLayout(new BoxLayout(metadataReadPanel, BoxLayout.Y_AXIS));
 
@@ -308,13 +284,6 @@ public class PanelMundo extends JPanel {
 
         refrescarDatos();
         sincronizarEstadoRenderCompartido();
-
-        addHierarchyListener(e -> {
-            if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
-            if (!isDisplayable()) {
-                DebugMode.removePropertyChangeListener(debugModeListener);
-            }
-        });
     }
 
     private JPanel crearTarjetaPrincipal() {
@@ -474,36 +443,7 @@ public class PanelMundo extends JPanel {
     }
 
     private JPanel crearTarjetaConexiones() {
-        CardPanel card = new CardPanel("Últimas conexiones");
-
-        conexionesHeaderActionsPanel = card.getHeaderActionsPanel();
-        actualizarAccionesDebugConexiones();
-
-        card.getContentPanel().add(conexionesPanel, BorderLayout.CENTER);
-        return card;
-    }
-
-    private void configurarBotonDebug(JButton boton, String tooltip, String iconPath, Runnable onClick) {
-        AppTheme.configureDebugIconButton(boton, tooltip, iconPath, onClick);
-    }
-
-    private void actualizarAccionesDebugConexiones() {
-        if (conexionesHeaderActionsPanel == null) return;
-        conexionesHeaderActionsPanel.removeAll();
-        if (DebugMode.isEnabled()) {
-            conexionesHeaderActionsPanel.add(btnDebugAddConnection);
-            conexionesHeaderActionsPanel.add(btnDebugRemoveConnection);
-        }
-        conexionesHeaderActionsPanel.revalidate();
-        conexionesHeaderActionsPanel.repaint();
-    }
-
-    private void actualizarModoDebugConexiones() {
-        if (!DebugMode.isEnabled() && !conexionesDebug.isEmpty()) {
-            conexionesDebug.clear();
-            actualizarConexionesRecientes();
-        }
-        actualizarAccionesDebugConexiones();
+        return recentConnectionsPanel.crearTarjeta();
     }
 
     private JPanel crearTarjetaAjusteBooleano(String labelText, JCheckBox checkBox) {
@@ -663,7 +603,7 @@ public class PanelMundo extends JPanel {
             pesoTotalValueLabel.setText("-");
             mostrarTextoPreview("Error cargando mundos.");
             setControlesActivos(false);
-            renderConexiones(List.of());
+            recentConnectionsPanel.actualizar();
         } finally {
             actualizandoComboMundos = false;
         }
@@ -758,7 +698,7 @@ public class PanelMundo extends JPanel {
         pesoStatsSavesValueLabel.setText("-");
         pesoTotalValueLabel.setText("-");
         mostrarTextoPreview("Selecciona un servidor para gestionar sus mundos.");
-        renderConexiones(List.of());
+        recentConnectionsPanel.actualizar();
         setControlesActivos(false);
         actualizarTextoBotonPreview();
         actualizarIndicadorRenderEnCurso();
@@ -774,7 +714,7 @@ public class PanelMundo extends JPanel {
         actualizarIndicadorRenderEnCurso();
         sincronizarEstadoRenderCompartido();
         actualizarDatosAlmacenamiento();
-        actualizarConexionesRecientes();
+        recentConnectionsPanel.actualizar();
     }
 
     private void actualizarLabelsDatosServidor() {
@@ -1222,152 +1162,12 @@ public class PanelMundo extends JPanel {
         pesoTotalValueLabel.setText(formatearTamano(storageStats.totalBytes()));
     }
 
-    private void actualizarConexionesRecientes() {
-        Server server = gestorServidores.getServidorSeleccionado();
-        if (server == null) {
-            renderConexiones(aplicarConexionesDebug(List.of()));
-            return;
-        }
-        renderConexiones(aplicarConexionesDebug(obtenerUltimasConexiones(server, getMundoSeleccionadoOActivo())));
-    }
-
-    private List<RecentConnection> aplicarConexionesDebug(List<RecentConnection> conexiones) {
-        if (!DebugMode.isEnabled() || conexionesDebug.isEmpty()) {
-            return conexiones;
-        }
-
-        return mergeDebugRecentConnections(conexionesDebug, conexiones, MAX_DEBUG_RECENT_CONNECTIONS);
-    }
-
-    static List<RecentConnection> mergeDebugRecentConnections(
-            List<RecentConnection> debugConnections,
-            List<RecentConnection> realConnections,
-            int maxConnections
-    ) {
-        if (maxConnections <= 0) {
-            return List.of();
-        }
-        ArrayList<RecentConnection> combined = new ArrayList<>();
-        if (debugConnections != null) {
-            combined.addAll(debugConnections);
-        }
-        if (realConnections != null) {
-            combined.addAll(realConnections);
-        }
-        return combined.stream()
-                .limit(maxConnections)
-                .toList();
-    }
-
-    private void addFakeConnection() {
-        if (conexionesDebug.size() >= MAX_DEBUG_RECENT_CONNECTIONS) return;
-
-        fakeConnectionSequence++;
-        String username = String.format(Locale.ROOT, "DebugPlayer%03d", fakeConnectionSequence);
-        String timestamp = FORMATO_CONEXION.format(java.time.LocalDateTime.now());
-        String location = "X: " + (fakeConnectionSequence * 37) + " Z: " + (fakeConnectionSequence * -19);
-        conexionesDebug.add(0, new RecentConnection(username, timestamp, location, System.currentTimeMillis()));
-        actualizarConexionesRecientes();
-    }
-
-    private void removeFakeConnection() {
-        if (conexionesDebug.isEmpty()) return;
-
-        conexionesDebug.remove(0);
-        actualizarConexionesRecientes();
-    }
-
-    private List<RecentConnection> obtenerUltimasConexiones(Server server, World mundo) {
-        List<String> rawLogLines = server.getRawLogLines();
-        java.util.ArrayList<RecentConnection> conexiones = new java.util.ArrayList<>();
-        if (rawLogLines != null && !rawLogLines.isEmpty()) {
-            LocalDate fechaBase = LocalDate.now();
-
-            for (int i = rawLogLines.size() - 1; i >= 0 && conexiones.size() < 4; i--) {
-                String raw = rawLogLines.get(i);
-                if (raw == null || raw.isBlank()) continue;
-
-                Matcher joinMatcher = JOIN.matcher(raw);
-                if (!joinMatcher.find()) continue;
-
-                String jugador = joinMatcher.group(1);
-                String timestamp = fechaBase.format(FORMATO_FECHA) + " - --:--:--";
-                Matcher horaMatcher = HORA_LOG.matcher(raw);
-                if (horaMatcher.find()) {
-                    try {
-                        LocalTime hora = LocalTime.parse(horaMatcher.group(1), FORMATO_HORA_LOG);
-                        timestamp = FORMATO_CONEXION.format(fechaBase.atTime(hora));
-                    } catch (DateTimeParseException ignored) {
-                    }
-                }
-
-                conexiones.add(new RecentConnection(jugador, timestamp, null));
-            }
-        }
-
-        if (!conexiones.isEmpty()) {
-            return conexiones;
-        }
-
-        return obtenerUltimosJugadoresDesdePlayerdata(server, mundo);
-    }
-
-    private List<RecentConnection> obtenerUltimosJugadoresDesdePlayerdata(Server server, World mundo) {
-        return WorldPlayerDataService.findRecentPlayers(server, mundo, 4).stream()
-                .map(player -> new RecentConnection(
-                        player.username(),
-                        FORMATO_CONEXION.format(player.lastSeen().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime()),
-                        "X: " + player.point().x() + " Z: " + player.point().z(),
-                        player.lastSeen().toMillis()
-                ))
-                .toList();
-    }
-
     private List<PreviewPlayerData> obtenerJugadoresRecientesDesdePlayerdata(Server server, World mundo) {
         return WorldPlayerDataService.findRecentPlayers(server, mundo, 4);
     }
 
     private List<PreviewPlayerPoint> obtenerJugadoresRecientesParaOverlay(World mundo) {
         return WorldPlayerDataService.findRecentPlayerPoints(gestorServidores.getServidorSeleccionado(), mundo, 4);
-    }
-
-    private void renderConexiones(List<RecentConnection> conexiones) {
-        conexionesPanel.removeAll();
-
-        if (conexiones == null || conexiones.isEmpty()) {
-            JLabel vacio = new JLabel("No hay conexiones recientes.");
-            vacio.setForeground(AppTheme.getMutedForeground());
-            vacio.setAlignmentX(Component.LEFT_ALIGNMENT);
-            conexionesPanel.add(vacio);
-        } else {
-            for (RecentConnection conexion : conexiones) {
-                conexionesPanel.add(crearFilaConexion(conexion));
-            }
-        }
-
-        conexionesPanel.revalidate();
-        conexionesPanel.repaint();
-    }
-
-    private JPanel crearFilaConexion(RecentConnection conexion) {
-        JPanel fila = new JPanel(new BorderLayout(10, 0));
-        fila.setOpaque(false);
-        fila.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        PlayerIdentityView identidad = new PlayerIdentityView(conexion.username(), PlayerIdentityView.SizePreset.COMPACT);
-        identidad.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel fecha = new JLabel(conexion.timestamp());
-        fecha.setForeground(AppTheme.getMutedForeground());
-        fecha.setVerticalAlignment(SwingConstants.CENTER);
-
-        int rowHeight = Math.max(identidad.getPreferredSize().height, fecha.getPreferredSize().height);
-        fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, rowHeight));
-        fila.setMinimumSize(new Dimension(0, rowHeight));
-
-        fila.add(identidad, BorderLayout.CENTER);
-        fila.add(fecha, BorderLayout.EAST);
-        return fila;
     }
 
     private World getMundoSeleccionadoOActivo() {
@@ -4065,12 +3865,6 @@ public class PanelMundo extends JPanel {
             } finally {
                 g2.dispose();
             }
-        }
-    }
-
-    record RecentConnection(String username, String timestamp, String location, long sortEpochMillis) {
-        private RecentConnection(String username, String timestamp, String location) {
-            this(username, timestamp, location, 0L);
         }
     }
 

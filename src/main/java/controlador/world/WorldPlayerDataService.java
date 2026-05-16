@@ -43,15 +43,17 @@ public final class WorldPlayerDataService {
 
         Map<UUID, String> namesByUuid = loadPlayerNames(server);
         try (Stream<Path> stream = Files.list(playerdataDir)) {
-            return stream
+            Stream<PreviewPlayerData> recentPlayers = stream
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName() != null)
                     .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".dat"))
                     .map(path -> readRecentPlayer(path, namesByUuid))
                     .filter(Objects::nonNull)
-                    .sorted(Comparator.comparing(PreviewPlayerData::lastSeen, Comparator.reverseOrder()))
-                    .limit(Math.max(1, limit))
-                    .toList();
+                    .sorted(Comparator.comparing(PreviewPlayerData::lastSeen, Comparator.reverseOrder()));
+            if (limit > 0) {
+                recentPlayers = recentPlayers.limit(limit);
+            }
+            return recentPlayers.toList();
         } catch (IOException ex) {
             return List.of();
         }

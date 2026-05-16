@@ -53,6 +53,8 @@ When a server changes:
 2. Visible panels refresh from the selected server.
 3. Runtime-sensitive panels update state based on process status and filesystem state.
 
+When the current selection disappears during a manual server-list refresh, the UI should automatically select the first remaining managed server if one exists. Only clear the right-side content when the managed list becomes empty.
+
 Do not let individual panels keep stale selected-server assumptions. Prefer fetching through `GestorServidores.getServidorSeleccionado()` or responding to the existing selection refresh path.
 
 ## Debug Mode

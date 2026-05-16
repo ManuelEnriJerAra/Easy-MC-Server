@@ -1138,6 +1138,14 @@ public class GestorServidores {
         avisoServidoresNoCargados = sb.toString();
     }
 
+    public void refrescarServidoresGuardados() {
+        validarYLimpiarServidoresPersistidos();
+        if (servidorSeleccionado != null && getServerById(servidorSeleccionado.getId()) == null) {
+            servidorSeleccionado = null;
+            notificarEstadoServidor(null);
+        }
+    }
+
     // Si hay servidores que no han podido ser cargados se notifica, si no, pasamos directamente al programa
     public void mostrarAvisoArranqueSiProcede(Component parent) {
         if (avisoServidoresNoCargados == null || avisoServidoresNoCargados.isBlank()) return;
@@ -2619,12 +2627,30 @@ public class GestorServidores {
         if (serverIds == null || serverIds.isEmpty()) return;
         normalizarMetadatosOrden(false);
 
+        Set<String> idsFavoritosAplicados = new HashSet<>();
+        int ordenFavorito = 0;
+        for (String id : serverIds) {
+            Server server = getServerById(id);
+            if (server == null || !Boolean.TRUE.equals(server.getFavorito())) continue;
+            if (!idsFavoritosAplicados.add(id)) continue;
+            server.setOrdenFavorito(ordenFavorito++);
+        }
+
+        List<Server> favoritosRestantes = new ArrayList<>(listaServidores);
+        favoritosRestantes.sort(Comparator.comparingInt(server -> valorOrdenVisual(server.getOrdenFavorito())));
+        for (Server server : favoritosRestantes) {
+            if (server == null || !Boolean.TRUE.equals(server.getFavorito())) continue;
+            if (!idsFavoritosAplicados.add(server.getId())) continue;
+            server.setOrdenFavorito(ordenFavorito++);
+        }
+
         Set<String> idsAplicados = new HashSet<>();
         int orden = 0;
         for (String id : serverIds) {
             Server server = getServerById(id);
             if (server == null) continue;
             if (!idsAplicados.add(id)) continue;
+            if (Boolean.TRUE.equals(server.getFavorito())) continue;
             server.setOrdenLista(orden++);
         }
 
@@ -2633,6 +2659,7 @@ public class GestorServidores {
         for (Server server : resto) {
             if (server == null) continue;
             if (!idsAplicados.add(server.getId())) continue;
+            if (Boolean.TRUE.equals(server.getFavorito())) continue;
             server.setOrdenLista(orden++);
         }
 
@@ -2763,6 +2790,7 @@ public class GestorServidores {
             // escribimos el puerto nuevo en las propiedades del servidor
             Utilidades.escribirPuertoEnProperties(dir, puerto);
             guardarServidor(server);
+            notificarConfiguracionServidor(server);
         } catch (RuntimeException e) {
             server.appendConsoleLinea("[ERROR] No se ha podido escribir el puerto en server.properties: " + e.getMessage());
         }
