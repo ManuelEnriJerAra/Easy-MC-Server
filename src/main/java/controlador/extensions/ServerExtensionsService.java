@@ -33,7 +33,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -99,10 +101,10 @@ public final class ServerExtensionsService {
 
         Map<String, ServerExtension> existingByRelativePath = new HashMap<>();
         Map<String, ServerExtension> existingByFileName = new HashMap<>();
-        indexStoredExtensions(existingByRelativePath, existingByFileName, installedExtensionsCacheService.load(server));
         if (server.getExtensions() != null) {
             indexStoredExtensions(existingByRelativePath, existingByFileName, server.getExtensions());
         }
+        indexStoredExtensions(existingByRelativePath, existingByFileName, installedExtensionsCacheService.load(server));
 
         Path serverDir = resolveServerDir(server);
         ServerPlatformProfile profile = resolveProfile(server);
@@ -449,11 +451,34 @@ public final class ServerExtensionsService {
             );
         }
 
+        ServerPlatformProfile profile = resolveProfile(server);
+        ServerPlatform serverPlatform = resolvePlatform(server, profile);
+        ServerEcosystemType serverEcosystem = resolveEcosystemType(server, profile);
+        return validateCompatibility(server, extension, serverPlatform, serverEcosystem);
+    }
+
+    private ExtensionCompatibilityReport validateCompatibility(Server server,
+                                                               ServerExtension extension,
+                                                               ServerPlatform serverPlatform,
+                                                               ServerEcosystemType serverEcosystem) {
+        if (server == null) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.INCOMPATIBLE,
+                    "No se ha indicado el servidor de destino.",
+                    List.of("No existe contexto del servidor para validar la extensiÃ³n.")
+            );
+        }
+        if (extension == null) {
+            return new ExtensionCompatibilityReport(
+                    ExtensionCompatibilityStatus.INCOMPATIBLE,
+                    "No se ha podido leer la extensiÃ³n.",
+                    List.of("No se han detectado metadatos suficientes para validar la extensiÃ³n.")
+            );
+        }
+
         List<String> incompatibilities = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
-        ServerPlatform serverPlatform = resolvePlatform(server, resolveProfile(server));
-        ServerEcosystemType serverEcosystem = resolveEcosystemType(server, resolveProfile(server));
         ServerExtensionType extensionType = extension.getExtensionType() == null
                 ? ServerExtensionType.UNKNOWN
                 : extension.getExtensionType();
@@ -515,7 +540,25 @@ public final class ServerExtensionsService {
     }
 
     public InstalledExtensionStatus assessInstalledExtension(Server server, ServerExtension extension) {
-        ExtensionCompatibilityReport compatibility = validateCompatibility(server, extension);
+        return assessInstalledExtension(server, extension, createStatusContext(server, server == null ? List.of() : server.getExtensions()));
+    }
+
+    public Map<ServerExtension, InstalledExtensionStatus> assessInstalledExtensions(Server server, List<ServerExtension> extensions) {
+        List<ServerExtension> resolvedExtensions = extensions == null ? List.of() : extensions;
+        ExtensionStatusContext context = createStatusContext(server, resolvedExtensions);
+        Map<ServerExtension, InstalledExtensionStatus> statuses = new IdentityHashMap<>();
+        for (ServerExtension extension : resolvedExtensions) {
+            if (extension != null) {
+                statuses.put(extension, assessInstalledExtension(server, extension, context));
+            }
+        }
+        return statuses;
+    }
+
+    private InstalledExtensionStatus assessInstalledExtension(Server server,
+                                                              ServerExtension extension,
+                                                              ExtensionStatusContext context) {
+        ExtensionCompatibilityReport compatibility = validateCompatibility(server, extension, context.serverPlatform(), context.serverEcosystem());
         ExtensionInstallState installState = extension == null || extension.getInstallState() == null
                 ? ExtensionInstallState.UNKNOWN
                 : extension.getInstallState();
@@ -526,8 +569,7 @@ public final class ServerExtensionsService {
 
         List<String> problems = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
-        Path serverDir = resolveServerDir(server);
-        Path extensionPath = resolveExtensionPath(serverDir, server, extension);
+        Path extensionPath = resolveExtensionPath(context.serverDir(), server, extension);
         boolean filePresent = extensionPath != null && Files.isRegularFile(extensionPath);
         if (!filePresent) {
             problems.add("El archivo instalado no existe o no se puede leer.");
@@ -538,7 +580,7 @@ public final class ServerExtensionsService {
             warnings.add("No se conoce el estado de instalación local.");
         }
 
-        List<String> missingDependencies = findMissingDependencies(server, extension);
+        List<String> missingDependencies = findMissingDependencies(extension, context.installedDependencyKeys());
         return new InstalledExtensionStatus(
                 compatibility,
                 installState,
@@ -548,6 +590,18 @@ public final class ServerExtensionsService {
                 missingDependencies,
                 warnings,
                 problems
+        );
+    }
+
+    private ExtensionStatusContext createStatusContext(Server server, List<ServerExtension> extensions) {
+        ServerPlatformProfile profile = resolveProfile(server);
+        ServerPlatform platform = resolvePlatform(server, profile);
+        ServerEcosystemType ecosystem = resolveEcosystemType(server, profile);
+        return new ExtensionStatusContext(
+                resolveServerDir(server),
+                platform,
+                ecosystem,
+                buildInstalledDependencyKeys(extensions)
         );
     }
 
@@ -574,7 +628,7 @@ public final class ServerExtensionsService {
         return true;
     }
 
-    private List<String> findMissingDependencies(Server server, ServerExtension extension) {
+    private List<String> findMissingDependencies(ServerExtension extension, Set<String> installedDependencyKeys) {
         ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
         if (metadata == null || metadata.getDependencies() == null || metadata.getDependencies().isEmpty()) {
             return List.of();
@@ -584,32 +638,55 @@ public final class ServerExtensionsService {
             if (dependency == null || Boolean.FALSE.equals(dependency.getRequired())) {
                 continue;
             }
-            if (!isDependencyInstalled(server, dependency)) {
+            if (!isDependencyInstalled(installedDependencyKeys, dependency)) {
                 missing.add(firstNonBlank(dependency.getDisplayName(), dependency.getProjectId(), "Dependencia sin nombre"));
             }
         }
         return missing;
     }
 
-    private boolean isDependencyInstalled(Server server, ExtensionRemoteDependency dependency) {
-        if (server == null || server.getExtensions() == null || dependency == null) {
-            return false;
+    private Set<String> buildInstalledDependencyKeys(List<ServerExtension> extensions) {
+        if (extensions == null || extensions.isEmpty()) {
+            return Set.of();
         }
-        for (ServerExtension installed : server.getExtensions()) {
+        Set<String> keys = new HashSet<>();
+        for (ServerExtension installed : extensions) {
             if (installed == null) {
                 continue;
             }
             ExtensionSource source = installed.getSource();
-            if (source != null
-                    && isSameText(source.getProvider(), dependency.getProviderId())
-                    && isSameText(source.getProjectId(), dependency.getProjectId())) {
-                return true;
+            String provider = normalizeDependencyKey(source == null ? null : source.getProvider());
+            String projectId = normalizeDependencyKey(source == null ? null : source.getProjectId());
+            if (provider != null && projectId != null) {
+                keys.add("remote:" + provider + "::" + projectId);
             }
-            if (isSameText(installed.getDisplayName(), dependency.getDisplayName())) {
-                return true;
+            String displayName = normalizeDependencyKey(installed.getDisplayName());
+            if (displayName != null) {
+                keys.add("name:" + displayName);
             }
         }
-        return false;
+        return keys;
+    }
+
+    private boolean isDependencyInstalled(Set<String> installedDependencyKeys, ExtensionRemoteDependency dependency) {
+        if (installedDependencyKeys == null || installedDependencyKeys.isEmpty() || dependency == null) {
+            return false;
+        }
+        String provider = normalizeDependencyKey(dependency.getProviderId());
+        String projectId = normalizeDependencyKey(dependency.getProjectId());
+        if (provider != null && projectId != null && installedDependencyKeys.contains("remote:" + provider + "::" + projectId)) {
+            return true;
+        }
+        String displayName = normalizeDependencyKey(dependency.getDisplayName());
+        return displayName != null && installedDependencyKeys.contains("name:" + displayName);
+    }
+
+    private String normalizeDependencyKey(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.isBlank() ? null : normalized;
     }
 
     private boolean isSameText(String left, String right) {
@@ -2374,6 +2451,13 @@ public final class ServerExtensionsService {
         if (serverDir == null || !Files.isDirectory(serverDir)) {
             return null;
         }
+        ServerPlatform configuredPlatform = server.getPlatform() == null ? ServerPlatform.UNKNOWN : server.getPlatform();
+        ServerEcosystemType configuredEcosystem = server.getEcosystemType() == null
+                ? ServerEcosystemType.UNKNOWN
+                : server.getEcosystemType();
+        if (configuredPlatform != ServerPlatform.UNKNOWN && configuredEcosystem != ServerEcosystemType.UNKNOWN) {
+            return null;
+        }
         return ServerPlatformAdapters.detect(serverDir);
     }
 
@@ -2892,6 +2976,14 @@ public final class ServerExtensionsService {
             long lastModifiedEpochMillis,
             ExtensionDescriptor descriptor,
             String sha256
+    ) {
+    }
+
+    private record ExtensionStatusContext(
+            Path serverDir,
+            ServerPlatform serverPlatform,
+            ServerEcosystemType serverEcosystem,
+            Set<String> installedDependencyKeys
     ) {
     }
 

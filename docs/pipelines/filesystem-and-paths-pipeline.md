@@ -9,6 +9,7 @@ Use this guide before editing file operations, imports/exports, backups, paths, 
 - Preserve user files when converting, importing, or upgrading.
 - Keep app-managed metadata separate from Minecraft-owned files where possible.
 - Use `controlador.AppPaths` for app-managed user data roots: config, cache, locks, and generated stats.
+- Use `controlador.FileSystemSafety` for shared safety primitives such as relative path validation, containment checks, no-follow regular-file checks, and recursive copy/delete helpers.
 - Surface IO failures with actionable Spanish messages in UI flows.
 
 ## Server Directories

@@ -746,7 +746,7 @@ class GestorServidoresTest {
     }
 
     @Test
-    void sincronizarExtensionesInstaladas_debeDetectarPluginsLocalesYPersistirMetadata() throws Exception {
+    void sincronizarExtensionesInstaladas_debeDetectarPluginsLocalesYPersistirMetadataCuandoSeSolicita() throws Exception {
         Path jsonPath = tempDir.resolve("ServerList.json");
         Path paperDir = tempDir.resolve("paper-with-plugins");
         TestWorldFixtures.createValidServerJar(
@@ -780,6 +780,11 @@ class GestorServidoresTest {
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());
         Server loaded = gestor.getListaServidores().getFirst();
 
+        assertThat(loaded.getExtensions()).isNotNull().isEmpty();
+
+        List<ServerExtension> synced = gestor.sincronizarExtensionesInstaladas(loaded);
+
+        assertThat(synced).hasSize(1);
         assertThat(loaded.getExtensions()).hasSize(1);
         ServerExtension detected = loaded.getExtensions().getFirst();
         assertThat(detected.getDisplayName()).isEqualTo("WelcomePlugin");

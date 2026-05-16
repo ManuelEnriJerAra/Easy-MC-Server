@@ -1619,8 +1619,10 @@ final class PanelExtensiones extends JPanel {
         protected ReloadResult doInBackground() throws Exception {
             List<ServerExtension> extensions = gestorServidores.sincronizarExtensionesInstaladas(server);
             Map<String, InstalledExtensionStatus> statuses = new HashMap<>();
-            for (ServerExtension extension : extensions) {
-                statuses.put(statusCacheKey(extension), gestorServidores.evaluarEstadoExtensionInstalada(server, extension));
+            Map<ServerExtension, InstalledExtensionStatus> batchStatuses =
+                    gestorServidores.evaluarEstadosExtensionesInstaladas(server, extensions);
+            for (Map.Entry<ServerExtension, InstalledExtensionStatus> entry : batchStatuses.entrySet()) {
+                statuses.put(statusCacheKey(entry.getKey()), entry.getValue());
             }
             return new ReloadResult(extensions, statuses);
         }

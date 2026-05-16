@@ -1,5 +1,6 @@
 package controlador.extensions;
 
+import controlador.FileSystemSafety;
 import controlador.platform.FileDownloader;
 import modelo.Server;
 import modelo.extensions.ExtensionLocalMetadata;
@@ -769,7 +770,7 @@ public class ModrinthModpackService {
                 }
                 continue;
             }
-            Path target = normalizedServerDir.resolve(relative).normalize();
+            Path target = FileSystemSafety.resolveContainedRelativePath(normalizedServerDir, relative);
             if (!target.startsWith(normalizedServerDir)) {
                 throw new IOException("El modpack intenta escribir fuera de la carpeta del servidor: " + relative);
             }
@@ -814,16 +815,16 @@ public class ModrinthModpackService {
         List<Path> roots = new ArrayList<>(List.of(serverDir.resolve("config"), serverDir.resolve("defaultconfigs")));
         int written = 0;
         for (Path root : roots) {
-            if (Files.isRegularFile(root)) {
+            if (FileSystemSafety.isRegularFileNoFollow(root)) {
                 written += writeOverrideFile(zip, serverDir, root, skipped);
                 continue;
             }
-            if (!Files.isDirectory(root)) {
+            if (!FileSystemSafety.isDirectoryNoFollow(root)) {
                 continue;
             }
             try (var stream = Files.walk(root)) {
                 for (Path file : stream
-                        .filter(Files::isRegularFile)
+                        .filter(FileSystemSafety::isRegularFileNoFollow)
                         .sorted(Comparator.comparing(path -> path.toString().toLowerCase(Locale.ROOT)))
                         .toList()) {
                     written += writeOverrideFile(zip, serverDir, file, skipped);
@@ -834,6 +835,10 @@ public class ModrinthModpackService {
     }
 
     private int writeOverrideFile(ZipOutputStream zip, Path serverDir, Path file, List<String> skipped) throws IOException {
+        if (!FileSystemSafety.isRegularFileNoFollow(file)) {
+            skipped.add(file + ": override omitido porque no es un archivo regular seguro.");
+            return 0;
+        }
         String relative = serverDir.relativize(file).toString().replace('\\', '/');
         if (!isAllowedOverridePath(relative)) {
             skipped.add(relative + ": override omitido por ruta no permitida.");
@@ -1047,41 +1052,11 @@ public class ModrinthModpackService {
             return false;
         }
         String normalized = path.replace('\\', '/').toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("config/") || normalized.startsWith("defaultconfigs/")) {
-            return true;
-        }
-        return normalized.startsWith("mods/")
-                && normalized.endsWith(".jar")
-                && normalized.indexOf('/', "mods/".length()) < 0;
+        return normalized.startsWith("config/") || normalized.startsWith("defaultconfigs/");
     }
 
     private boolean isSafeRelativePath(String path) {
-        if (path == null || path.isBlank()) {
-            return false;
-        }
-        String normalized = path.trim().replace('\\', '/');
-        if (normalized.startsWith("/") || normalized.startsWith("\\") || normalized.contains(":")) {
-            return false;
-        }
-        for (String part : normalized.split("/")) {
-            if ("..".equals(part) || part.isBlank()) {
-                return false;
-            }
-        }
-        try {
-            Path candidate = Path.of(normalized).normalize();
-            if (candidate.isAbsolute()) {
-                return false;
-            }
-            for (Path part : candidate) {
-                if ("..".equals(part.toString())) {
-                    return false;
-                }
-            }
-            return !candidate.toString().isBlank();
-        } catch (RuntimeException ex) {
-            return false;
-        }
+        return FileSystemSafety.isSafeRelativePath(path);
     }
 
     private String firstAllowedDownload(List<String> downloads) {

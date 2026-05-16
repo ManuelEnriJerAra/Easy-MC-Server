@@ -7,6 +7,7 @@ import modelo.extensions.ExtensionSourceType;
 import modelo.extensions.ServerExtension;
 import modelo.extensions.ServerLoader;
 import modelo.extensions.ServerPlatform;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
@@ -373,6 +374,103 @@ class ModrinthModpackServiceTest {
     }
 
     @Test
+    void exportSkipsSymlinkedOverrideFiles() throws IOException {
+        Path serverDir = tempDir.resolve("server-symlink-overrides");
+        Path modsDir = Files.createDirectories(serverDir.resolve("mods"));
+        Path configDir = Files.createDirectories(serverDir.resolve("config"));
+        Path jar = modsDir.resolve("example.jar");
+        Path outside = tempDir.resolve("outside-secret.txt");
+        Path linkedOverride = configDir.resolve("linked-secret.txt");
+        writeFabricJar(jar);
+        Files.writeString(configDir.resolve("real.json"), "{}", StandardCharsets.UTF_8);
+        Files.writeString(outside, "secret", StandardCharsets.UTF_8);
+        Assumptions.assumeTrue(createSymbolicLinkIfSupported(linkedOverride, outside), "No se pueden crear enlaces simbolicos en este entorno.");
+        String sha1 = hash(Files.readAllBytes(jar), "SHA-1");
+        String sha512 = hash(Files.readAllBytes(jar), "SHA-512");
+
+        Server server = new Server();
+        server.setDisplayName("Servidor con symlink");
+        server.setServerDir(serverDir.toString());
+        server.setPlatform(ServerPlatform.FABRIC);
+        server.setLoader(ServerLoader.FABRIC);
+        server.setVersion("1.21.1");
+        server.setExtensions(List.of(installedModrinthExtension("Example", "mods/example.jar", "project-id", "version-id")));
+
+        ModrinthModpackService service = new ModrinthModpackService(new FakeHttpClient(Map.of(
+                "https://api.modrinth.com/v2/version/version-id",
+                """
+                {
+                  "files": [
+                    {
+                      "primary": true,
+                      "filename": "example.jar",
+                      "url": "https://cdn.modrinth.com/data/project-id/versions/version-id/example.jar",
+                      "size": 42,
+                      "hashes": {
+                        "sha1": "%s",
+                        "sha512": "%s"
+                      }
+                    }
+                  ]
+                }
+                """.formatted(sha1, sha512)
+        )));
+        Path target = tempDir.resolve("symlink-overrides.mrpack");
+
+        ModrinthModpackService.ExportResult result = service.exportServerPack(server, target, ModrinthModpackService.ExportMode.SERVER);
+
+        assertThat(result.overrideFiles()).isEqualTo(1);
+        try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(target.toFile(), StandardCharsets.UTF_8)) {
+            assertThat(zipFile.getEntry("server-overrides/config/real.json")).isNotNull();
+            assertThat(zipFile.getEntry("server-overrides/config/linked-secret.txt")).isNull();
+        }
+    }
+
+    @Test
+    void extractOverridesSkipsModJarOverridesAndKeepsConfigOverrides() throws IOException {
+        Path pack = tempDir.resolve("mod-jar-overrides.mrpack");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(pack), StandardCharsets.UTF_8)) {
+            zip.putNextEntry(new ZipEntry("modrinth.index.json"));
+            zip.write("""
+                    {
+                      "formatVersion": 1,
+                      "game": "minecraft",
+                      "name": "Override import",
+                      "files": [
+                        {
+                          "path": "mods/indexed.jar",
+                          "hashes": { "sha1": "a" },
+                          "downloads": ["https://cdn.modrinth.com/data/proj/versions/ver/indexed.jar"]
+                        }
+                      ],
+                      "dependencies": { "minecraft": "1.21.1" }
+                    }
+                    """.getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("server-overrides/mods/unmanaged.jar"));
+            zip.write("unverified jar".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("server-overrides/config/example.json"));
+            zip.write("{}".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        Path serverDir = Files.createDirectories(tempDir.resolve("server-import-overrides"));
+        Server server = new Server();
+        server.setServerDir(serverDir.toString());
+        List<String> warnings = new java.util.ArrayList<>();
+        ModrinthModpackService service = new ModrinthModpackService(new FakeHttpClient(Map.of()));
+
+        int extracted = service.extractOverrides(pack, server, ModrinthModpackService.ImportOptions.server(), warnings);
+
+        assertThat(extracted).isEqualTo(1);
+        assertThat(serverDir.resolve("config").resolve("example.json")).isRegularFile();
+        assertThat(serverDir.resolve("mods").resolve("unmanaged.jar")).doesNotExist();
+        assertThat(warnings).anySatisfy(warning -> assertThat(warning)
+                .contains("Override omitido")
+                .contains("mods/unmanaged.jar"));
+    }
+
+    @Test
     void exportResolvesManualModByModrinthFileHash() throws IOException {
         Path serverDir = tempDir.resolve("server-manual-resolved");
         Path modsDir = Files.createDirectories(serverDir.resolve("mods"));
@@ -537,6 +635,15 @@ class ModrinthModpackServiceTest {
                     }
                     """.getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
+        }
+    }
+
+    private static boolean createSymbolicLinkIfSupported(Path link, Path target) {
+        try {
+            Files.createSymbolicLink(link, target);
+            return true;
+        } catch (UnsupportedOperationException | IOException | SecurityException ex) {
+            return false;
         }
     }
 

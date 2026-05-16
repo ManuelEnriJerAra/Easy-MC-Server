@@ -150,8 +150,7 @@ public class GestorServidores {
         boolean cambiosOrden = normalizarMetadatosOrden(true);
         validarYLimpiarServidoresPersistidos();
         boolean cambiosMundos = sincronizarMundosServidoresCargados();
-        boolean cambiosExtensiones = sincronizarExtensionesServidoresCargados();
-        if (cambiosOrden || cambiosMundos || cambiosExtensiones) {
+        if (cambiosOrden || cambiosMundos) {
             guardarServidores();
         }
     }
@@ -530,9 +529,11 @@ public class GestorServidores {
         if (server == null) {
             return List.of();
         }
-        sincronizarExtensionesServidor(server);
-        serverExtensionsService.persistInstalledExtensionCache(server);
-        guardarServidor(server);
+        boolean cambios = sincronizarExtensionesServidor(server);
+        if (cambios) {
+            serverExtensionsService.persistInstalledExtensionCache(server);
+            guardarServidor(server);
+        }
         return server.getExtensions() == null ? List.of() : List.copyOf(server.getExtensions());
     }
 
@@ -556,6 +557,10 @@ public class GestorServidores {
 
     public InstalledExtensionStatus evaluarEstadoExtensionInstalada(Server server, ServerExtension extension) {
         return serverExtensionsService.assessInstalledExtension(server, extension);
+    }
+
+    public Map<ServerExtension, InstalledExtensionStatus> evaluarEstadosExtensionesInstaladas(Server server, List<ServerExtension> extensions) {
+        return serverExtensionsService.assessInstalledExtensions(server, extensions);
     }
 
     public void guardarMetadatosExtensionInstalada(Server server, ServerExtension extension) {

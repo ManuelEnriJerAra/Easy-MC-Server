@@ -52,7 +52,7 @@ public final class InstalledExtensionsCacheService {
             }
             CacheSnapshot snapshot = OBJECT_MAPPER.readValue(cacheFile.toFile(), CacheSnapshot.class);
             List<ServerExtension> normalized = normalizeExtensions(snapshot == null ? null : snapshot.extensions());
-            memoryCache.put(cacheFile, new MemoryCacheEntry(lastModified, toJson(normalized), copyExtensions(normalized)));
+            memoryCache.put(cacheFile, new MemoryCacheEntry(lastModified, toContentSignature(normalized), copyExtensions(normalized)));
             return copyExtensions(normalized);
         } catch (Exception ex) {
             LOGGER.log(Level.WARNING, "No se ha podido leer la cache local de extensiones: " + cacheFile, ex);
@@ -67,17 +67,18 @@ public final class InstalledExtensionsCacheService {
         }
         Files.createDirectories(cacheFile.getParent());
         List<ServerExtension> normalized = normalizeExtensions(extensions);
-        String serialized = toJson(normalized);
+        String contentSignature = toContentSignature(normalized);
         MemoryCacheEntry memoryEntry = memoryCache.get(cacheFile);
-        if (memoryEntry != null && Objects.equals(memoryEntry.serialized(), serialized)) {
+        if (memoryEntry != null && Objects.equals(memoryEntry.contentSignature(), contentSignature)) {
             return;
         }
         if (memoryEntry == null && Files.isRegularFile(cacheFile)) {
             try {
-                String current = Files.readString(cacheFile);
-                if (Objects.equals(current, serialized)) {
+                CacheSnapshot current = OBJECT_MAPPER.readValue(cacheFile.toFile(), CacheSnapshot.class);
+                String currentSignature = toContentSignature(normalizeExtensions(current == null ? null : current.extensions()));
+                if (Objects.equals(currentSignature, contentSignature)) {
                     long lastModified = Files.getLastModifiedTime(cacheFile).toMillis();
-                    memoryCache.put(cacheFile, new MemoryCacheEntry(lastModified, serialized, copyExtensions(normalized)));
+                    memoryCache.put(cacheFile, new MemoryCacheEntry(lastModified, contentSignature, copyExtensions(normalized)));
                     return;
                 }
             } catch (IOException ex) {
@@ -86,10 +87,10 @@ public final class InstalledExtensionsCacheService {
         }
 
         Path tempFile = cacheFile.resolveSibling(cacheFile.getFileName() + ".tmp");
-        Files.writeString(tempFile, serialized);
+        Files.writeString(tempFile, toJson(normalized));
         Files.move(tempFile, cacheFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         long lastModified = safeLastModified(cacheFile);
-        memoryCache.put(cacheFile, new MemoryCacheEntry(lastModified, serialized, copyExtensions(normalized)));
+        memoryCache.put(cacheFile, new MemoryCacheEntry(lastModified, contentSignature, copyExtensions(normalized)));
     }
 
     private Path resolveCacheFile(Server server) {
@@ -287,6 +288,10 @@ public final class InstalledExtensionsCacheService {
         );
     }
 
+    private String toContentSignature(List<ServerExtension> normalized) throws IOException {
+        return OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(normalized == null ? List.of() : normalized);
+    }
+
     private List<ServerExtension> copyExtensions(List<ServerExtension> extensions) {
         if (extensions == null || extensions.isEmpty()) {
             return List.of();
@@ -367,6 +372,6 @@ public final class InstalledExtensionsCacheService {
     private record CacheSnapshot(int schemaVersion, long updatedAtEpochMillis, List<ServerExtension> extensions) {
     }
 
-    private record MemoryCacheEntry(long lastModifiedEpochMillis, String serialized, List<ServerExtension> extensions) {
+    private record MemoryCacheEntry(long lastModifiedEpochMillis, String contentSignature, List<ServerExtension> extensions) {
     }
 }
