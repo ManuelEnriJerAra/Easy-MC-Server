@@ -83,7 +83,7 @@ public class VentanaPrincipal extends JFrame {
     private PanelConfigServidor panelConfigServidor;
     private boolean divisorPrincipalInicializado;
 
-    enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, EXTENSIONES, INFO }
+    enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, AUTOMATION, EXTENSIONES, INFO }
     private record TemaInfo(String name, String className){}
 
     private PaginaDerecha paginaDerechaActual = PaginaDerecha.HOME;
@@ -747,6 +747,7 @@ public class VentanaPrincipal extends JFrame {
             case MUNDO -> contenidoDerechoActual.mundoPanel();
             case CONFIG -> contenidoDerechoActual.configPanel();
             case STATS -> contenidoDerechoActual.statsPanel();
+            case AUTOMATION -> contenidoDerechoActual.automationPanel();
             case EXTENSIONES -> contenidoDerechoActual.extensionesPanel();
             case INFO -> contenidoDerechoActual.homePanel();
         };

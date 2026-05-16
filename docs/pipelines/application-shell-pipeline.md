@@ -42,6 +42,7 @@ Right-side content is composed from `vista` panels:
 - `PanelExtensiones`: mods/plugins listing, install/remove, catalog integration.
 - `PanelPrevisualizacion`: preview/edit of server presentation data.
 - `PanelEstadisticas`: stats view.
+- `PanelAutomatizacion`: automation tab for scheduled lifecycle actions and commands, including rule creation, editing, enable/disable, and deletion.
 
 ## Selection Flow
 

@@ -22,6 +22,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -35,6 +36,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Setter;
 import lombok.Getter;
+import modelo.automation.ServerAutomationRule;
 import modelo.extensions.ServerCapability;
 import modelo.extensions.ServerEcosystemType;
 import modelo.extensions.ServerExtension;
@@ -86,6 +88,7 @@ public class Server {
     private Boolean previewUseWholeMap;
     private Integer previewRenderLimitPixels;
     private String previewRenderCenterId;
+    private List<ServerAutomationRule> automationRules;
 
     // ===== DATOS DE EJECUCIÓN =====
     // lo que sea transient no se va a guardar en el JSON
@@ -129,6 +132,7 @@ public class Server {
         this.previewUseWholeMap = false;
         this.previewRenderLimitPixels = 256;
         this.previewRenderCenterId = "spawn";
+        this.automationRules = new ArrayList<>();
     }
 
     public String getTipo() {
@@ -264,6 +268,9 @@ public class Server {
         if (normalizarExtensiones()) {
             cambios = true;
         }
+        if (normalizarAutomatizaciones()) {
+            cambios = true;
+        }
 
         return cambios;
     }
@@ -300,6 +307,41 @@ public class Server {
             cambios = true;
         }
 
+        return cambios;
+    }
+
+    private boolean normalizarAutomatizaciones() {
+        if (automationRules == null) {
+            automationRules = new ArrayList<>();
+            return true;
+        }
+        boolean cambios = false;
+        Set<String> usedIds = new HashSet<>();
+        List<ServerAutomationRule> normalizedRules = new ArrayList<>();
+        for (ServerAutomationRule rule : automationRules) {
+            if (rule == null) {
+                cambios = true;
+                continue;
+            }
+            String id = rule.getId();
+            if (id == null || id.isBlank() || usedIds.contains(id)) {
+                id = UUID.randomUUID().toString();
+                rule.setId(id);
+                cambios = true;
+            }
+            usedIds.add(id);
+            if (rule.getEnabled() == null) {
+                rule.setEnabled(false);
+                cambios = true;
+            }
+            normalizedRules.add(rule);
+        }
+        if (normalizedRules.size() != automationRules.size()) {
+            cambios = true;
+        }
+        if (cambios) {
+            automationRules = normalizedRules;
+        }
         return cambios;
     }
 

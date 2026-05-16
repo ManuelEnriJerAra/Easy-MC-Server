@@ -54,6 +54,8 @@ Commands are written to the running process input stream.
 
 Stop should prefer graceful server command behavior before killing the process. UI buttons should reflect whether the process exists and is alive.
 
+`controlador.automation.ServerAutomationService` reuses the same `GestorServidores` lifecycle methods for scheduled starts, stops, restarts, and commands. Keep future automation behavior routed through the manager so manual controls and scheduled actions do not drift.
+
 ## Import Pipeline
 
 Importing an existing server should:

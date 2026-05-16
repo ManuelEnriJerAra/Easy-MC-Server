@@ -10,6 +10,7 @@
 
 package controlador;
 
+import controlador.automation.ServerAutomationService;
 import controlador.extensions.ExtensionCompatibilityReport;
 import controlador.extensions.ExtensionCatalogDetails;
 import controlador.extensions.ExtensionCatalogEntry;
@@ -27,6 +28,7 @@ import controlador.extensions.ModrinthModpackService;
 import controlador.extensions.ServerExtensionsService;
 import modelo.Server;
 import modelo.ServerConfig;
+import modelo.automation.ServerAutomationRule;
 import controlador.platform.ServerInstallationRequest;
 import controlador.platform.ServerCreationOption;
 import controlador.platform.FileDownloader;
@@ -122,6 +124,7 @@ public class GestorServidores {
     private final CurseForgeModpackService curseForgeModpackService = new CurseForgeModpackService();
     private final ModrinthModpackService modrinthModpackService;
     private final FileDownloader extensionDownloader = new ExtensionArtifactDownloader();
+    private ServerAutomationService automationService;
 
     private String avisoServidoresNoCargados;
 
@@ -1126,6 +1129,9 @@ public class GestorServidores {
 
     public void refrescarServidoresGuardados() {
         validarYLimpiarServidoresPersistidos();
+        if (automationService != null) {
+            automationService.refreshSchedules();
+        }
         if (servidorSeleccionado != null && getServerById(servidorSeleccionado.getId()) == null) {
             servidorSeleccionado = null;
             notificarEstadoServidor(null);
@@ -1191,6 +1197,9 @@ public class GestorServidores {
     // este método notifica a los oyentes de que ha ocurrido un cambio en el estado del servidor
     public void notificarEstadoServidor(Server server){
         try {
+            if (automationService != null) {
+                automationService.onServerStateChanged(server);
+            }
             pcs.firePropertyChange("estadoServidor", null, server);
         } catch (RuntimeException ex) {
             AppErrorReporter.report("Error notificando el estado del servidor.", ex);
@@ -1199,6 +1208,122 @@ public class GestorServidores {
 
     public void notificarConfiguracionServidor(Server server){
         pcs.firePropertyChange("configuracionServidor", null, server);
+    }
+
+    public synchronized ServerAutomationService getAutomationService() {
+        if (automationService == null) {
+            automationService = new ServerAutomationService(this);
+        }
+        return automationService;
+    }
+
+    public void iniciarAutomatizaciones() {
+        getAutomationService().start();
+    }
+
+    public synchronized void detenerAutomatizaciones() {
+        if (automationService == null) {
+            return;
+        }
+        automationService.close();
+        automationService = null;
+    }
+
+    public List<ServerAutomationRule> getReglasAutomatizacion(Server server) {
+        if (server == null || server.getAutomationRules() == null) {
+            return List.of();
+        }
+        List<ServerAutomationRule> rules = server.getAutomationRules().stream()
+                .filter(Objects::nonNull)
+                .toList();
+        return List.copyOf(rules);
+    }
+
+    public void reemplazarReglasAutomatizacion(Server server, List<ServerAutomationRule> rules) {
+        if (server == null) {
+            return;
+        }
+        List<ServerAutomationRule> normalizadas = new ArrayList<>();
+        Set<String> usedIds = new HashSet<>();
+        if (rules != null) {
+            for (ServerAutomationRule rule : rules) {
+                if (rule != null) {
+                    normalizadas.add(normalizarReglaAutomatizacion(rule, usedIds));
+                }
+            }
+        }
+        server.setAutomationRules(normalizadas);
+        guardarServidor(server);
+        notificarAutomatizacionesServidor(server);
+    }
+
+    public void guardarReglaAutomatizacion(Server server, ServerAutomationRule rule) {
+        if (server == null || rule == null) {
+            return;
+        }
+        Set<String> usedIds = new HashSet<>();
+        if (server.getAutomationRules() != null) {
+            for (ServerAutomationRule existing : server.getAutomationRules()) {
+                if (existing != null && !Objects.equals(existing.getId(), rule.getId())) {
+                    usedIds.add(existing.getId());
+                }
+            }
+        }
+        ServerAutomationRule normalizada = normalizarReglaAutomatizacion(rule, usedIds);
+        List<ServerAutomationRule> rules = new ArrayList<>(server.getAutomationRules() == null ? List.of() : server.getAutomationRules());
+        int existingIndex = -1;
+        for (int i = 0; i < rules.size(); i++) {
+            ServerAutomationRule existing = rules.get(i);
+            if (existing != null && Objects.equals(existing.getId(), normalizada.getId())) {
+                existingIndex = i;
+                break;
+            }
+        }
+        if (existingIndex >= 0) {
+            rules.set(existingIndex, normalizada);
+        } else {
+            rules.add(normalizada);
+        }
+        server.setAutomationRules(rules);
+        guardarServidor(server);
+        notificarAutomatizacionesServidor(server);
+    }
+
+    public boolean eliminarReglaAutomatizacion(Server server, String ruleId) {
+        if (server == null || ruleId == null || server.getAutomationRules() == null) {
+            return false;
+        }
+        List<ServerAutomationRule> rules = new ArrayList<>(server.getAutomationRules());
+        boolean removed = rules.removeIf(rule -> rule != null && Objects.equals(rule.getId(), ruleId));
+        if (!removed) {
+            return false;
+        }
+        server.setAutomationRules(rules);
+        guardarServidor(server);
+        notificarAutomatizacionesServidor(server);
+        return true;
+    }
+
+    private ServerAutomationRule normalizarReglaAutomatizacion(ServerAutomationRule rule, Set<String> usedIds) {
+        String id = rule.getId();
+        if (id == null || id.isBlank() || (usedIds != null && usedIds.contains(id))) {
+            id = UUID.randomUUID().toString();
+            rule.setId(id);
+        }
+        if (usedIds != null) {
+            usedIds.add(id);
+        }
+        if (rule.getEnabled() == null) {
+            rule.setEnabled(false);
+        }
+        return rule;
+    }
+
+    private void notificarAutomatizacionesServidor(Server server) {
+        if (automationService != null) {
+            automationService.onServerRulesChanged(server);
+        }
+        pcs.firePropertyChange("automatizacionesServidor", null, server);
     }
 
     // ===== FUNCIONES Y MÉTODOS =====
@@ -2579,6 +2704,9 @@ public class GestorServidores {
         }
         // Una vez eliminado de la lista de servidores guardamos el JSON
         guardarServidores();
+        if (automationService != null) {
+            automationService.refreshSchedules();
+        }
         notificarCambio();
         return true;
     }
@@ -2783,6 +2911,20 @@ public class GestorServidores {
 
     public void safePararServidor(Server server){
         mandarComando(server, "stop");
+    }
+
+    public void reiniciarServidor(Server server) throws IOException {
+        if (server == null) {
+            return;
+        }
+        Process proceso = server.getServerProcess();
+        if (proceso != null && proceso.isAlive()) {
+            server.setRestartPending(true);
+            safePararServidor(server);
+            notificarEstadoServidor(server);
+            return;
+        }
+        iniciarServidor(server);
     }
 
     public Server getServerById(String id){

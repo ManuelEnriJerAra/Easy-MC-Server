@@ -69,6 +69,11 @@ public class Main {
             aplicarPreferenciasUI();
 
             GestorServidores gestorServidores = new GestorServidores();
+            gestorServidores.iniciarAutomatizaciones();
+            Runtime.getRuntime().addShutdownHook(new Thread(
+                    gestorServidores::detenerAutomatizaciones,
+                    "easy-mc-server-automation-stop"
+            ));
             if(gestorServidores.getListaServidores().isEmpty()){
                 noServerFrame = new NoServerFrame(gestorServidores);
                 noServerFrame.setVisible(true);

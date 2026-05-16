@@ -34,6 +34,12 @@ Important types:
 
 These are used by both controller services and UI. Treat changes as cross-cutting.
 
+## Automation Models
+
+Package: `src/main/java/modelo/automation`.
+
+Automation rules are persisted on `Server` and executed by `controlador.automation.ServerAutomationService`. Preserve null-safe defaults and avoid serializing scheduler/runtime state into the model.
+
 ## Controller Records
 
 Many controller package records are API contracts between services and UI, such as:
