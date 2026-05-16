@@ -1,4 +1,4 @@
-﻿# README User SEO Refresh
+# README User SEO Refresh
 
 ## Status
 
@@ -6,28 +6,26 @@ Implemented
 
 ## Feature
 
-The public README now presents Dora as an end-user Minecraft server manager instead of opening primarily as developer documentation.
+The public README now presents Dora as a polished GitHub landing page for a graphical Minecraft server manager, with search-relevant wording, screenshot tables, release installation guidance, user workflows, current feature coverage, reliable section anchors, GPL license details, and a dedicated developer section.
 
 ## Motivation
 
-The previous README was accurate but developer-oriented. A repository landing page should quickly explain what the app does for players and server administrators, especially when SEO and first impressions matter.
+The completed feature note previously described a broad SEO-focused README rewrite, but the actual README still looked like a short developer overview. The repository landing page needed to explain what Dora does, show the app quickly, help users install and start it, and keep developer details available without making them the first thing normal users see.
 
 ## Solution
 
-Rewrote `README.md` in Spanish with a user-focused introduction, a clear feature summary, first steps, and a walkthrough of the main application areas. Added many screenshot placeholders for the captures that will be added later, while reusing existing screenshots where available. Added Maven `name` and `description` metadata so the project has a concise public description in source metadata too.
+Rewrote `README.md` in English with a complete GitHub README structure: centered hero, badges, product summary, quick links, motivation table, feature table, screenshot gallery tables, release-focused installation guide, quick start, collapsible workflow details, developer source-build commands, repository layout, documentation links, troubleshooting, contribution notes, roadmap references, and GPL-3.0 license status. The feature and workflow sections now include post-merge capabilities such as automation rules, system tray behavior, visual platform selection, conversion backup choice, and snapshot-capable platform creation. The screenshot section uses the available current captures for the home view, creation wizard, automation, worlds, statistics, extension catalog, and themes.
 
 ## Files Changed
 
 - `README.md`
-- `pom.xml`
 - `docs/features/readme-user-seo-refresh.md`
 - `docs/features/process/readme-user-seo-refresh.md`
 
 ## Verification
 
-- `git diff --check -- README.md pom.xml`
-- `Select-String -Path docs\features\readme-user-seo-refresh.md,docs\features\process\readme-user-seo-refresh.md -Pattern "\s$"`
-- `mvn -q -DskipTests validate`
+- `git diff --check -- README.md docs/features/readme-user-seo-refresh.md docs/features/process/readme-user-seo-refresh.md`
+- `Select-String -Path README.md,docs\features\readme-user-seo-refresh.md,docs\features\process\readme-user-seo-refresh.md -Pattern "\s$"`
 
 ## Detailed Process
 
@@ -35,7 +33,7 @@ Rewrote `README.md` in Spanish with a user-focused introduction, a clear feature
 
 ## Follow-Up Notes
 
-Add the referenced screenshots under `docs/screenshots/readme/` before publishing the README broadly, otherwise those future image slots will render as missing images on GitHub.
+Future README updates can add more screenshots once the image files exist. Avoid adding placeholder image links that would render as broken images on GitHub.
 
 ## Related Docs
 

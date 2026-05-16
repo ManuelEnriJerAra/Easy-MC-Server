@@ -170,6 +170,7 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         if (projectNode == null || projectNode.isMissingNode()) {
             return Optional.empty();
         }
+        String resolvedProjectId = firstNonBlank(text(projectNode, "id"), projectId);
 
         List<ExtensionCatalogVersion> versions = fetchVersions(projectNode, query);
         boolean exactVersionRequested = versionId != null && !versionId.isBlank();
@@ -194,7 +195,7 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         );
         return Optional.of(new ExtensionDownloadPlan(
                 getProviderId(),
-                projectId,
+                resolvedProjectId,
                 target.versionId(),
                 text(projectNode, "name"),
                 nestedText(projectNode, "namespace", "owner"),
@@ -275,8 +276,86 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
     }
 
     private JsonNode readProject(String projectId) throws IOException {
-        URI uri = URI.create(API_BASE_URL + "/projects/" + encode(projectId));
+        if (shouldSearchProjectBeforeDirect(projectId)) {
+            ProjectSearchResult searchResult = searchProjectByIdentifier(projectId);
+            if (searchResult.projectNode() != null) {
+                return searchResult.projectNode();
+            }
+            if (searchResult.completed()) {
+                return null;
+            }
+        }
+
+        IOException directFailure = null;
+        try {
+            return readProjectDirect(projectId);
+        } catch (IOException ex) {
+            directFailure = ex;
+        }
+
+        ProjectSearchResult searchResult = searchProjectByIdentifier(projectId);
+        if (searchResult.projectNode() != null) {
+            return searchResult.projectNode();
+        }
+        if (isNotFound(directFailure)) {
+            return null;
+        }
+        throw directFailure;
+    }
+
+    private boolean shouldSearchProjectBeforeDirect(String projectId) {
+        if (projectId == null || projectId.isBlank() || projectId.contains("/")) {
+            return false;
+        }
+        String normalized = normalizeIdentifier(projectId);
+        return normalized != null && !normalized.matches("\\d+");
+    }
+
+    private boolean isNotFound(IOException ex) {
+        return ex != null && ex.getMessage() != null && ex.getMessage().contains("HTTP 404");
+    }
+
+    private JsonNode readProjectDirect(String projectId) throws IOException {
+        URI uri = URI.create(API_BASE_URL + "/projects/" + encodeProjectPath(projectId));
         return OBJECT_MAPPER.readTree(httpClient.get(uri, null));
+    }
+
+    private ProjectSearchResult searchProjectByIdentifier(String projectId) {
+        if (projectId == null || projectId.isBlank()) {
+            return new ProjectSearchResult(null, false);
+        }
+        try {
+            URI uri = URI.create(API_BASE_URL + "/projects?query=" + encode(projectId.trim())
+                    + "&platform=" + PLATFORM_KEY
+                    + "&limit=10&offset=0&sort=-downloads");
+            JsonNode root = OBJECT_MAPPER.readTree(httpClient.get(uri, null));
+            JsonNode results = root == null ? null : root.path("result");
+            if (results == null || !results.isArray()) {
+                return new ProjectSearchResult(null, true);
+            }
+            for (JsonNode projectNode : results) {
+                if (matchesProjectIdentifier(projectId, projectNode)) {
+                    return new ProjectSearchResult(projectNode, true);
+                }
+            }
+            return new ProjectSearchResult(null, true);
+        } catch (IOException | RuntimeException ex) {
+            return new ProjectSearchResult(null, false);
+        }
+    }
+
+    private boolean matchesProjectIdentifier(String projectId, JsonNode projectNode) {
+        String expected = normalizeIdentifier(projectId);
+        if (expected == null || projectNode == null || projectNode.isMissingNode() || projectNode.isNull()) {
+            return false;
+        }
+        String owner = nestedText(projectNode, "namespace", "owner");
+        String slug = nestedText(projectNode, "namespace", "slug");
+        String namespacePath = owner == null || slug == null ? null : owner + "/" + slug;
+        return expected.equals(normalizeIdentifier(text(projectNode, "id")))
+                || expected.equals(normalizeIdentifier(text(projectNode, "name")))
+                || expected.equals(normalizeIdentifier(slug))
+                || expected.equals(normalizeIdentifier(namespacePath));
     }
 
     private String readMainPageContent(String projectId) {
@@ -1021,8 +1100,28 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         return value.trim().toLowerCase(Locale.ROOT);
     }
 
+    private String normalizeIdentifier(String value) {
+        String normalized = normalize(value);
+        if (normalized == null) {
+            return null;
+        }
+        normalized = normalized.replaceAll("[^a-z0-9]+", "");
+        return normalized.isBlank() ? null : normalized;
+    }
+
     private String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private String encodeProjectPath(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String[] parts = value.trim().split("/");
+        if (parts.length == 2 && !parts[0].isBlank() && !parts[1].isBlank()) {
+            return encodePath(parts[0]) + "/" + encodePath(parts[1]);
+        }
+        return encode(value);
     }
 
     private String encodePath(String value) {
@@ -1033,5 +1132,8 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
     }
 
     private record ExternalDownload(String fileName, String downloadUrl) {
+    }
+
+    private record ProjectSearchResult(JsonNode projectNode, boolean completed) {
     }
 }

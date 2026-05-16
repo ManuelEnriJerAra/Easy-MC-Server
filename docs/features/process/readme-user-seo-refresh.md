@@ -10,26 +10,45 @@ Implemented
 
 ## Scope
 
-Refresh the repository README and project metadata so the public project presentation speaks to end users instead of leading with developer-focused implementation details. The change covers copy, structure, screenshot placeholders, and a short reusable project description. It does not add screenshots themselves or change application behavior.
+Refresh the repository README so the public project presentation speaks to end users and improves discoverability for Minecraft server management searches. This covers README copy, structure, screenshot readiness, release-focused installation guidance, common workflows, a separate developer source-build section, and accurate documentation of the completed work. It does not change application behavior or add new screenshots.
 
 ## Step Tracker
 
 | Status | Step | Summary |
 | --- | --- | --- |
-| DONE | 1. Inspect existing public docs | Reviewed `README.md`, Maven metadata, existing screenshot assets, and feature documentation standards. |
-| DONE | 2. Rewrite README for users | Reworked the README around what users can do with Dora, added an app walkthrough, and kept build details after the user-facing sections. |
-| DONE | 3. Add screenshot slots | Added image references for the main areas the user plans to capture, reusing existing screenshots where available. |
-| DONE | 4. Update metadata description | Added Maven `name` and `description` fields with a short SEO-oriented Spanish description. |
-| DONE | 5. Verify documentation changes | Checked the targeted diff and whitespace for the edited documentation and metadata files. |
+| DONE | 1. Inspect existing public docs | Reviewed `README.md`, screenshot assets, Maven metadata, and the previous feature/process notes. |
+| DONE | 2. Identify the mismatch | Confirmed the feature note described an SEO README rewrite that was not actually present in `README.md`. |
+| DONE | 3. Review README conventions | Checked current GitHub README guidance for discoverability, screenshots, installation, usage, and linked detailed docs. |
+| DONE | 4. Rewrite README for users | Added English user-facing copy, search-relevant Minecraft server terms, a product overview, feature tour, quick start, and common workflows. |
+| DONE | 5. Add installation guidance | Added user-facing release-jar guidance while keeping Maven/source-build commands in the developer section. |
+| DONE | 6. Separate developer content | Grouped tech stack, build, run, test, repository layout, and docs links under "For Developers" and related sections. |
+| DONE | 7. Add support sections | Added troubleshooting, contribution notes, roadmap references, and license status. |
+| DONE | 8. Keep image links accurate | Reused only existing screenshots from `docs/screenshots/` so GitHub does not render missing image placeholders. |
+| DONE | 9. Update feature documentation | Replaced the stale feature and process notes with the work that was actually completed. |
+| DONE | 10. Refresh after master merge | Updated the README feature tour and workflows for automation, system tray behavior, visual platform selection, conversion backup choice, and snapshot-capable creation. |
+| DONE | 11. Add new screenshots | Added the current creation wizard, automation, world, statistics, catalog, themes, and refreshed home captures to the README screenshot gallery. |
+| DONE | 12. Polish GitHub presentation | Reworked the README with a centered hero, badges, quick links, tables, collapsible workflow sections, explicit anchors, and GPL-3.0 license details. |
+| DONE | 13. Verify documentation changes | Checked targeted diffs and trailing whitespace for the edited Markdown files. |
 
 ## Implementation Notes
 
-The README now starts with a Spanish end-user description using search-relevant terms such as servidor Minecraft, gestor gráfico, consola en tiempo real, mundos, jugadores, configuración, mods, plugins, and modpacks. Developer build instructions remain available, but they are no longer the first user-facing content after the feature list.
+The README now leads with Dora as a graphical Minecraft server manager and includes search-relevant terms such as Minecraft servers, graphical app, live console, worlds, players, settings, mods, plugins, modpacks, Vanilla, Forge, NeoForge, Fabric, Quilt, Paper, and Purpur.
 
-Screenshot references use `docs/screenshots/readme/*.png` for future captures and keep the existing `docs/screenshots/0.6.home.png` and `docs/screenshots/0.6.catalog.png` where current assets already exist.
+The user walkthrough explains the main flow: create or import a server, choose a platform, select it, start or stop it, use the console, and manage configuration, players, worlds, and extensions.
+
+After the master merge, the README also documents automation rules, system tray background behavior, conversion backup choice, visual platform selection, and snapshot-capable creation options where platform metadata supports them.
+
+Developer content is grouped under "For Developers" so build instructions, source-running notes, project documentation, and tech stack details do not interrupt the normal user overview.
+
+The installation section is honest about the current repository state: it explains how normal users run a release jar if one is available. Maven and source-build commands live in "For Developers" so normal users do not have to read build tooling instructions.
+
+Support content covers Java version checks, import-folder guidance, contribution expectations, roadmap locations, and current license status.
+
+Existing visible screenshots now cover `docs/screenshots/0.6.home.png`, `docs/screenshots/server-creation-wizard.png`, `docs/screenshots/automation.png`, `docs/screenshots/world-panel.png`, `docs/screenshots/stats-panel.png`, `docs/screenshots/0.6.catalog.png`, and `docs/screenshots/themes.png`.
+
+The final README uses GitHub Markdown and light HTML for the centered hero, reliable anchors beside emoji headings, screenshot tables, feature tables, and collapsible workflow sections. The license section now links to the GPL-3.0 `LICENSE` file that is present in the repository.
 
 ## Verification Notes
 
-- `git diff --check -- README.md pom.xml`
-- `Select-String -Path docs\features\readme-user-seo-refresh.md,docs\features\process\readme-user-seo-refresh.md -Pattern "\s$"`
-- `mvn -q -DskipTests validate`
+- `git diff --check -- README.md docs/features/readme-user-seo-refresh.md docs/features/process/readme-user-seo-refresh.md`
+- `Select-String -Path README.md,docs\features\readme-user-seo-refresh.md,docs\features\process\readme-user-seo-refresh.md -Pattern "\s$"`

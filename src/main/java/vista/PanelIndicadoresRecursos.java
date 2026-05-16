@@ -8,6 +8,8 @@ import java.awt.*;
 
 public class PanelIndicadoresRecursos extends JPanel {
     private static final int INDICATOR_ARC = 10;
+    private static final int INDICATOR_GAP = 8;
+    static final int READABLE_SINGLE_ROW_WIDTH = 320;
     private final GestorServidores gestorServidores;
     private final MetricIndicatorCard cpuCard = new MetricIndicatorCard("CPU");
     private final MetricIndicatorCard ramCard = new MetricIndicatorCard("RAM");
@@ -17,7 +19,7 @@ public class PanelIndicadoresRecursos extends JPanel {
     public PanelIndicadoresRecursos(GestorServidores gestorServidores) {
         this.gestorServidores = gestorServidores;
         setOpaque(false);
-        setLayout(new GridLayout(1, 3, 8, 0));
+        setLayout(new GridLayout(1, 3, INDICATOR_GAP, 0));
         add(cpuCard);
         add(ramCard);
         add(diskCard);
@@ -43,18 +45,22 @@ public class PanelIndicadoresRecursos extends JPanel {
     private void refreshMetrics() {
         Server server = gestorServidores != null ? gestorServidores.getServidorSeleccionado() : null;
         ServerResourceSnapshot snapshot = PanelEstadisticas.getLiveResourceSnapshot(server);
-        cpuCard.updateValue(snapshot.cpuPercentRounded(), "CPU " + snapshot.cpuPercentRounded() + "%", snapshot.running());
-        ramCard.updateValue(snapshot.ramPercentRounded(), "RAM " + snapshot.ramPercentRounded() + "%", snapshot.running());
-        diskCard.updateValue(snapshot.diskPercentRounded(), "DISCO " + snapshot.diskPercentRounded() + "%", snapshot.running());
+        cpuCard.updateValue(snapshot.cpuPercentRounded(), snapshot.running());
+        ramCard.updateValue(snapshot.ramPercentRounded(), snapshot.running());
+        diskCard.updateValue(snapshot.diskPercentRounded(), snapshot.running());
     }
 
     private static final class MetricIndicatorCard extends JPanel {
         private static final Insets CARD_INSETS = new Insets(8, 8, 8, 8);
+        private static final int LABEL_GAP = 8;
+        private static final int MINIMUM_CARD_WIDTH = 94;
         private final JLabel metricLabel = new JLabel("-");
         private final JLabel percentLabel = new JLabel("-");
         private final FillBar progressBar = new FillBar();
+        private final String title;
 
         private MetricIndicatorCard(String title) {
+            this.title = title == null ? "" : title;
             setOpaque(true);
             setBackground(AppTheme.getPanelBackground());
             setLayout(new BorderLayout(0, 6));
@@ -63,9 +69,10 @@ public class PanelIndicadoresRecursos extends JPanel {
             JPanel labelRow = new JPanel(new BorderLayout(8, 0));
             labelRow.setOpaque(false);
 
-            metricLabel.setText(title);
+            metricLabel.setText(this.title);
             metricLabel.setForeground(AppTheme.getMutedForeground());
             metricLabel.setFont(metricLabel.getFont().deriveFont(Font.BOLD, 10f));
+            metricLabel.setHorizontalAlignment(SwingConstants.LEFT);
 
             percentLabel.setForeground(AppTheme.getForeground());
             percentLabel.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -78,11 +85,13 @@ public class PanelIndicadoresRecursos extends JPanel {
 
             add(labelRow, BorderLayout.CENTER);
             add(progressBar, BorderLayout.SOUTH);
+            updateMetricSizing();
         }
 
-        private void updateValue(int percent, String text, boolean running) {
+        private void updateValue(int percent, boolean running) {
             int safePercent = Math.max(0, Math.min(100, percent));
             percentLabel.setText(safePercent + "%");
+            updateMetricSizing();
             progressBar.setValue(safePercent);
             Color accent = running ? ResourcePalette.colorForPercent(percent) : AppTheme.getMainAccent();
             progressBar.setColors(
@@ -90,6 +99,37 @@ public class PanelIndicadoresRecursos extends JPanel {
                     accent
             );
             repaint();
+        }
+
+        private void updateMetricSizing() {
+            Dimension metricSize = fullTextSize(metricLabel, title);
+            metricLabel.setMinimumSize(metricSize);
+            metricLabel.setPreferredSize(metricSize);
+
+            Dimension percentSize = fullTextSize(percentLabel, "100%");
+            percentLabel.setMinimumSize(percentSize);
+            percentLabel.setPreferredSize(percentSize);
+
+            int contentWidth = metricSize.width + LABEL_GAP + percentSize.width;
+            int width = Math.max(MINIMUM_CARD_WIDTH, contentWidth + CARD_INSETS.left + CARD_INSETS.right);
+            Dimension progressSize = progressBar == null ? new Dimension(0, 8) : progressBar.getPreferredSize();
+            int height = CARD_INSETS.top + CARD_INSETS.bottom
+                    + Math.max(metricSize.height, percentSize.height)
+                    + 6
+                    + Math.max(8, progressSize == null ? 8 : progressSize.height);
+            Dimension cardSize = new Dimension(width, height);
+            setMinimumSize(cardSize);
+            setPreferredSize(cardSize);
+        }
+
+        private Dimension fullTextSize(JLabel label, String text) {
+            Font font = label.getFont();
+            FontMetrics metrics = label.getFontMetrics(font);
+            Insets insets = label.getInsets();
+            int horizontalInsets = insets == null ? 0 : insets.left + insets.right;
+            int verticalInsets = insets == null ? 0 : insets.top + insets.bottom;
+            return new Dimension(metrics.stringWidth(text == null ? "" : text) + horizontalInsets,
+                    metrics.getHeight() + verticalInsets);
         }
 
         @Override
@@ -108,6 +148,9 @@ public class PanelIndicadoresRecursos extends JPanel {
                         AppTheme.tint(AppTheme.getPanelBackground(), AppTheme.getForeground(), 0.10f),
                         AppTheme.getMainAccent()
                 );
+            }
+            if (metricLabel != null && percentLabel != null) {
+                updateMetricSizing();
             }
         }
     }

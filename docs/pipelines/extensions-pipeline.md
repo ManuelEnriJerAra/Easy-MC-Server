@@ -107,6 +107,8 @@ Marketplace row actions should tolerate normal hand movement between mouse press
 
 Dependency warnings must not block marketplace downloads. If a required dependency cannot be resolved automatically, has failed earlier in the queue, or is installed after the dependent plugin, keep the selected plugin downloadable/installable and show a warning so the user can fix dependency order manually if the server rejects it later.
 
+Hangar dependency metadata may provide a display-style project identifier instead of the canonical numeric id or namespace slug, for example `NBT+API` while the project is `tr7zw/NBTAPI`. When resolving Hangar dependency downloads, non-numeric simple identifiers should try a small provider-scoped project search before direct lookup; other direct lookup failures should fall back to the same search. Only accept exact normalized matches by id, name, slug, or owner/slug before fetching versions. If search completes without an exact match, treat the dependency as unresolved instead of logging a provider download failure.
+
 Persisted installed-extension metadata may come from older cache entries or local jar detection, so nullable boxed fields such as download counts must be compared with explicit null handling before writing catalog details back into the installed cache.
 
 Marketplace dialog option records, queue/dependency helper models, and related view-state types may live beside the dialog in package-scoped helper files when extracted for size control. Keep the dialog focused on orchestration and rendering, and keep extracted types behavior-neutral unless a broader redesign is intentional.

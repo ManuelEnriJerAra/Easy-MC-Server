@@ -53,8 +53,8 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 public class VentanaPrincipal extends JFrame {
     private static final String BASE_TITLE = "Dora";
     private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
-    private static final int SERVER_LIST_INITIAL_WIDTH = 320;
-    private static final int SERVER_LIST_MIN_WIDTH = 220;
+    private static final int SERVER_LIST_INITIAL_WIDTH = PanelIndicadoresRecursos.READABLE_SINGLE_ROW_WIDTH;
+    private static final int SERVER_LIST_MIN_WIDTH = 240;
     private static final int TRAY_SERVER_NAME_COLUMN_WIDTH = 28;
     private static final String PROP_MANAGED_ROUNDED_BORDER = "dora.managedRoundedBorder";
     private static final String PROP_ROUNDED_BORDER_ENABLED = "dora.roundedBorderEnabled";
@@ -406,7 +406,7 @@ public class VentanaPrincipal extends JFrame {
         wrapperIzquierdo.setBackground(bgApp);
         wrapperIzquierdo.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 0));
         wrapperIzquierdo.setPreferredSize(new Dimension(SERVER_LIST_INITIAL_WIDTH, 0));
-        wrapperIzquierdo.setMinimumSize(new Dimension(0, 0));
+        wrapperIzquierdo.setMinimumSize(new Dimension(SERVER_LIST_MIN_WIDTH, 0));
 
         wrapperDerecho = new JPanel(new BorderLayout());
         wrapperDerecho.add(panelDerecho, BorderLayout.CENTER);

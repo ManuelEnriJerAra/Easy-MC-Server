@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -318,6 +319,91 @@ class HangarExtensionCatalogProviderTest {
     }
 
     @Test
+    void shouldResolveDependencyProjectNameThroughHangarSearchFallback() throws IOException {
+        FakeHttpClient httpClient = new FakeHttpClient(Map.of(
+                "https://hangar.papermc.io/api/v1/projects?query=NBT%2BAPI&platform=PAPER&limit=10&offset=0&sort=-downloads",
+                """
+                {
+                  "result": [
+                    {
+                      "id": 859,
+                      "name": "NBTAPI",
+                      "description": "Add custom NBT tags without NMS",
+                      "namespace": { "owner": "tr7zw", "slug": "NBTAPI" },
+                      "supportedPlatforms": { "PAPER": ["1.20.4"] }
+                    }
+                  ]
+                }
+                """,
+                "https://hangar.papermc.io/api/v1/projects/tr7zw/NBTAPI/versions?platform=PAPER&platformVersion=1.20.4&limit=20&offset=0",
+                """
+                {
+                  "result": [
+                    {
+                      "id": 9001,
+                      "name": "2.13.2",
+                      "createdAt": "2024-04-30T13:42:56.242708Z",
+                      "downloads": {
+                        "PAPER": {
+                          "fileInfo": { "name": "NBTAPI-2.13.2.jar" },
+                          "downloadUrl": "https://hangarcdn.example/NBTAPI-2.13.2.jar"
+                        }
+                      },
+                      "platformDependencies": { "PAPER": ["1.20.4"] }
+                    }
+                  ]
+                }
+                """
+        ));
+        HangarExtensionCatalogProvider provider = new HangarExtensionCatalogProvider(httpClient);
+        Server server = new Server();
+        server.setPlatform(ServerPlatform.PAPER);
+        server.setVersion("1.20.4");
+
+        ExtensionDownloadPlan plan = provider.resolveDownload("NBT+API", null, server).orElseThrow();
+
+        assertThat(plan.projectId()).isEqualTo("859");
+        assertThat(plan.displayName()).isEqualTo("NBTAPI");
+        assertThat(plan.fileName()).isEqualTo("NBTAPI-2.13.2.jar");
+        assertThat(plan.downloadUrl()).isEqualTo("https://hangarcdn.example/NBTAPI-2.13.2.jar");
+        assertThat(httpClient.requestedUris()).doesNotContain("https://hangar.papermc.io/api/v1/projects/NBT%2BAPI");
+    }
+
+    @Test
+    void shouldTreatUnmatchedHangarDependencyNameAsUnresolvedWithoutDirect404() throws IOException {
+        FakeHttpClient httpClient = new FakeHttpClient(Map.of(
+                "https://hangar.papermc.io/api/v1/projects?query=PacketEvents&platform=PAPER&limit=10&offset=0&sort=-downloads",
+                """
+                {
+                  "result": [
+                    {
+                      "id": 1882,
+                      "name": "EntityLib",
+                      "description": "A PacketEvents addon",
+                      "namespace": { "owner": "Tofaa2", "slug": "EntityLib" },
+                      "supportedPlatforms": { "PAPER": ["1.20.4"] }
+                    },
+                    {
+                      "id": 5201,
+                      "name": "InteractiveChatPacketEvents",
+                      "description": "Optional module integrating InteractiveChat with PacketEvents.",
+                      "namespace": { "owner": "LOOHP", "slug": "InteractiveChatPacketEvents" },
+                      "supportedPlatforms": { "PAPER": ["1.20.4"] }
+                    }
+                  ]
+                }
+                """
+        ));
+        HangarExtensionCatalogProvider provider = new HangarExtensionCatalogProvider(httpClient);
+        Server server = new Server();
+        server.setPlatform(ServerPlatform.PAPER);
+        server.setVersion("1.20.4");
+
+        assertThat(provider.resolveDownload("PacketEvents", null, server)).isEmpty();
+        assertThat(httpClient.requestedUris()).doesNotContain("https://hangar.papermc.io/api/v1/projects/PacketEvents");
+    }
+
+    @Test
     void shouldNotResolveExternalWebsiteAsDownloadWhenNoJarCanBeFound() throws IOException {
         HangarExtensionCatalogProvider provider = new HangarExtensionCatalogProvider(new FakeHttpClient(Map.of(
                 "https://hangar.papermc.io/api/v1/projects/99",
@@ -546,6 +632,7 @@ class HangarExtensionCatalogProviderTest {
 
     private static final class FakeHttpClient extends ExtensionHttpClient {
         private final Map<String, String> responses;
+        private final List<String> requestedUris = new ArrayList<>();
 
         private FakeHttpClient(Map<String, String> responses) {
             this.responses = responses;
@@ -553,11 +640,16 @@ class HangarExtensionCatalogProviderTest {
 
         @Override
         String get(URI uri, Map<String, String> headers) throws IOException {
+            requestedUris.add(uri.toString());
             String body = responses.get(uri.toString());
             if (body == null) {
                 throw new IOException("URI no stubbeada en test: " + uri);
             }
             return body;
+        }
+
+        private List<String> requestedUris() {
+            return List.copyOf(requestedUris);
         }
     }
 
