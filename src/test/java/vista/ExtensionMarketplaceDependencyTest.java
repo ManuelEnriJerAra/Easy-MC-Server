@@ -3,6 +3,8 @@ package vista;
 import controlador.extensions.ExtensionDependency;
 import controlador.extensions.ExtensionDependencyMatcher;
 import controlador.extensions.ExtensionDownloadPlan;
+import controlador.extensions.ExtensionCatalogEntry;
+import controlador.extensions.ExtensionCatalogDetails;
 import controlador.extensions.ExtensionInstallResolution;
 import controlador.extensions.ExtensionInstallResolutionState;
 import controlador.GestorServidores;
@@ -186,6 +188,57 @@ class ExtensionMarketplaceDependencyTest {
         assertThat(invokeBoolean(resolved.getFirst(), "optionalBranch")).isFalse();
     }
 
+    @Test
+    void queuePreparationItemMarksClickAsResolvingImmediately() throws Exception {
+        ExtensionMarketplaceDialog dialog = dialogForDependencyResolution(new FakeGestorServidores(Map.of()));
+        ExtensionCatalogEntry entry = entry("plugin-a", "Plugin A");
+
+        DownloadQueueItem item = createQueuePreparationItem(dialog, entry, null);
+
+        assertThat(item.state).isEqualTo(QueueState.RESOLVING);
+        assertThat(item.displayName).isEqualTo("Plugin A");
+        assertThat(item.message).contains("Resolviendo");
+    }
+
+    @Test
+    void queueAdmissionAllowsTheResolvingItemThatRepresentsTheUserClick() throws Exception {
+        ExtensionDownloadPlan plan = plan("plugin-a", "Plugin A", List.of());
+        FakeGestorServidores gestor = new FakeGestorServidores(Map.of("plugin-a", plan));
+        ExtensionMarketplaceDialog dialog = dialogForDependencyResolution(gestor);
+        ExtensionCatalogEntry entry = entry("plugin-a", "Plugin A");
+        DownloadQueueItem item = createQueuePreparationItem(dialog, entry, plan);
+        DefaultListModel<DownloadQueueItem> queueModel = new DefaultListModel<>();
+        queueModel.addElement(item);
+        setField(dialog, "queueModel", queueModel);
+
+        QueueAdmission admission = evaluateQueueAdmission(dialog, entry, plan, item);
+
+        assertThat(admission.allowed()).isTrue();
+        assertThat(admission.existingItem()).isSameAs(item);
+    }
+
+    @Test
+    void persistCatalogDetailsAcceptsNullInstalledDownloadCount() throws Exception {
+        FakeGestorServidores gestor = new FakeGestorServidores(Map.of());
+        ExtensionMarketplaceDialog dialog = dialogForDependencyResolution(gestor);
+        ServerExtension installed = new ServerExtension();
+        installed.setDisplayName("Plugin A");
+        installed.setLocalMetadata(new ExtensionLocalMetadata());
+        setField(dialog, "selectedInstallResolution", new ExtensionInstallResolution(
+                ExtensionInstallResolutionState.INSTALLED_WITH_INCOMPLETE_METADATA,
+                installed,
+                "plugin-a.jar",
+                "1.0.0",
+                null,
+                "installed"
+        ));
+
+        persistCatalogDetails(dialog, entry("plugin-a", "Plugin A", 12L), null);
+
+        assertThat(installed.getLocalMetadata().getDownloadCount()).isEqualTo(12L);
+        assertThat(gestor.persistedExtensions).containsExactly(installed);
+    }
+
     private static ExtensionMarketplaceDialog dialogForDependencyResolution(FakeGestorServidores gestor) throws Exception {
         ExtensionMarketplaceDialog dialog = allocateDialog();
         Server server = new Server();
@@ -202,6 +255,45 @@ class ExtensionMarketplaceDependencyTest {
         Method method = ExtensionMarketplaceDialog.class.getDeclaredMethod("resolveDependenciesForPlan", ExtensionDownloadPlan.class);
         method.setAccessible(true);
         return method.invoke(dialog, plan);
+    }
+
+    private static DownloadQueueItem createQueuePreparationItem(ExtensionMarketplaceDialog dialog,
+                                                               ExtensionCatalogEntry entry,
+                                                               ExtensionDownloadPlan plan) throws Exception {
+        Method method = ExtensionMarketplaceDialog.class.getDeclaredMethod(
+                "createQueuePreparationItem",
+                ExtensionCatalogEntry.class,
+                ExtensionDownloadPlan.class,
+                boolean.class
+        );
+        method.setAccessible(true);
+        return (DownloadQueueItem) method.invoke(dialog, entry, plan, false);
+    }
+
+    private static QueueAdmission evaluateQueueAdmission(ExtensionMarketplaceDialog dialog,
+                                                         ExtensionCatalogEntry entry,
+                                                         ExtensionDownloadPlan plan,
+                                                         DownloadQueueItem itemToIgnore) throws Exception {
+        Method method = ExtensionMarketplaceDialog.class.getDeclaredMethod(
+                "evaluateQueueAdmission",
+                ExtensionCatalogEntry.class,
+                ExtensionDownloadPlan.class,
+                DownloadQueueItem.class
+        );
+        method.setAccessible(true);
+        return (QueueAdmission) method.invoke(dialog, entry, plan, itemToIgnore);
+    }
+
+    private static void persistCatalogDetails(ExtensionMarketplaceDialog dialog,
+                                              ExtensionCatalogEntry entry,
+                                              ExtensionCatalogDetails details) throws Exception {
+        Method method = ExtensionMarketplaceDialog.class.getDeclaredMethod(
+                "persistCatalogDetailsOnInstalledExtension",
+                ExtensionCatalogEntry.class,
+                ExtensionCatalogDetails.class
+        );
+        method.setAccessible(true);
+        method.invoke(dialog, entry, details);
     }
 
     @SuppressWarnings("unchecked")
@@ -260,9 +352,34 @@ class ExtensionMarketplaceDependencyTest {
         );
     }
 
+    private static ExtensionCatalogEntry entry(String projectId, String displayName) {
+        return entry(projectId, displayName, 0L);
+    }
+
+    private static ExtensionCatalogEntry entry(String projectId, String displayName, long downloads) {
+        return new ExtensionCatalogEntry(
+                "hangar",
+                projectId,
+                "version-" + projectId,
+                displayName,
+                "author",
+                "1.0.0",
+                "description",
+                ExtensionSourceType.HANGAR,
+                ServerExtensionType.PLUGIN,
+                Set.of(ServerPlatform.PAPER),
+                Set.of("1.21.1"),
+                null,
+                "https://example.com/" + projectId,
+                "https://example.com/" + projectId + ".jar",
+                downloads
+        );
+    }
+
     private static final class FakeGestorServidores extends GestorServidores {
         private final Map<String, ExtensionDownloadPlan> plans;
         private final List<String> requestedProjects = new ArrayList<>();
+        private final List<ServerExtension> persistedExtensions = new ArrayList<>();
 
         private FakeGestorServidores(Map<String, ExtensionDownloadPlan> plans) {
             this.plans = plans;
@@ -287,6 +404,11 @@ class ExtensionMarketplaceDependencyTest {
                     null,
                     "available"
             );
+        }
+
+        @Override
+        public void guardarMetadatosExtensionInstalada(Server server, ServerExtension extension) {
+            persistedExtensions.add(extension);
         }
     }
 }

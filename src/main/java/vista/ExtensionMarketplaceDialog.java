@@ -1193,7 +1193,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         for (int i = 0; i < queueModel.size(); i++) {
             DownloadQueueItem item = queueModel.get(i);
-            if ((item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING)
+            if ((item.state == QueueState.RESOLVING || item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING)
                     && item.matchesProject(entry.providerId(), entry.projectId())) {
                 return true;
             }
@@ -1207,7 +1207,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         for (int i = queueModel.size() - 1; i >= 0; i--) {
             DownloadQueueItem item = queueModel.get(i);
-            if ((item.state == QueueState.PENDING || item.state == QueueState.FAILED)
+            if ((item.state == QueueState.RESOLVING || item.state == QueueState.PENDING || item.state == QueueState.FAILED)
                     && item.matchesProject(entry.providerId(), entry.projectId())) {
                 queueModel.remove(i);
             }
@@ -1282,8 +1282,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
             refreshSelectionActionState();
             return;
         }
-        queueButton.setEnabled(false);
-        new EnqueuePlanWorker(entry, entry.versionId(), afterQueued).execute();
+        DownloadQueueItem preparationItem = beginQueuePreparation(entry, null, false);
+        new EnqueuePlanWorker(entry, entry.versionId(), afterQueued, preparationItem).execute();
     }
 
     private void enqueueEntryWithPlanAsync(ExtensionCatalogEntry entry,
@@ -1293,18 +1293,25 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (entry == null || plan == null || !plan.ready()) {
             return;
         }
-        queueButton.setEnabled(false);
-        new DependencyResolutionWorker(entry, plan, immediate, afterQueued).execute();
+        DownloadQueueItem preparationItem = beginQueuePreparation(entry, plan, immediate);
+        new DependencyResolutionWorker(entry, plan, immediate, afterQueued, preparationItem).execute();
     }
 
     private void enqueueEntryWithResolvedDependencies(ExtensionCatalogEntry entry,
                                                       ExtensionDownloadPlan plan,
                                                       DependencyResolutionResult dependencies,
                                                       boolean immediate,
-                                                      Runnable afterQueued) {
-        QueueAdmission admission = evaluateQueueAdmission(entry, plan);
+                                                      Runnable afterQueued,
+                                                      DownloadQueueItem preparationItem) {
+        if (preparationItem != null && !queueContains(preparationItem)) {
+            return;
+        }
+        QueueAdmission admission = evaluateQueueAdmission(entry, plan, preparationItem);
         if (!admission.allowed()) {
-            showUserError(admission.message());
+            failQueuePreparation(preparationItem, admission.message());
+            if (preparationItem == null) {
+                showUserError(admission.message());
+            }
             return;
         }
         DependencyResolutionResult resolution = dependencies == null
@@ -1312,13 +1319,16 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 : dependencies;
         if (!resolution.unresolvedRequired().isEmpty()) {
             showUnresolvedRequiredDependencies(entry, resolution);
+            failQueuePreparation(preparationItem, "Faltan dependencias obligatorias.");
             return;
         }
         DependencyPromptChoice dependencyChoice = confirmAddMissingDependencies(entry, resolution);
         if (dependencyChoice == DependencyPromptChoice.CANCEL) {
+            removePreparationItem(preparationItem);
             return;
         }
-        int insertIndex = immediate ? 0 : queueModel.size();
+        int preparationIndex = preparationItem == null ? -1 : queueModel.indexOf(preparationItem);
+        int insertIndex = immediate ? 0 : preparationIndex >= 0 ? preparationIndex : queueModel.size();
         boolean includeOptional = dependencyChoice == DependencyPromptChoice.ADD_ALL;
         Set<String> requiredDependencyKeys = new LinkedHashSet<>(resolution.rootRequiredDependencyKeys());
         for (ResolvedDependency dependency : resolution.resolvedDependencies()) {
@@ -1351,15 +1361,22 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 queueModel.addElement(dependencyItem);
             }
         }
-        if (admission.existingItem() != null) {
-            admission.existingItem().state = QueueState.PENDING;
-            admission.existingItem().message = immediate ? "Instalación inmediata" : "Pendiente de descarga";
-            admission.existingItem().requiredDependencyKeys = List.copyOf(requiredDependencyKeys);
+        DownloadQueueItem existingOrPreparation = admission.existingItem() != null
+                ? admission.existingItem()
+                : preparationItem;
+        if (existingOrPreparation != null) {
+            existingOrPreparation.downloadPlan = plan;
+            existingOrPreparation.state = QueueState.PENDING;
+            existingOrPreparation.message = immediate ? "Instalación inmediata" : "Pendiente de descarga";
+            existingOrPreparation.requiredDependencyKeys = List.copyOf(requiredDependencyKeys);
             if (immediate) {
-                moveQueueItemToFront(admission.existingItem());
+                moveQueueItemToIndex(existingOrPreparation, insertIndex);
             }
             repaintQueueLists();
             setQueueFeedback("La descarga ya estaba registrada.", entry.displayName() + " queda lista para instalarse desde la cola.");
+            if (admission.existingItem() != preparationItem) {
+                removePreparationItem(preparationItem);
+            }
         } else {
             DownloadQueueItem requested = createQueueItem(entry, plan, immediate ? "Instalación inmediata" : "Pendiente de descarga");
             requested.requiredDependencyKeys = List.copyOf(requiredDependencyKeys);
@@ -1399,6 +1416,88 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return missing;
     }
 
+    private DownloadQueueItem beginQueuePreparation(ExtensionCatalogEntry entry,
+                                                    ExtensionDownloadPlan plan,
+                                                    boolean immediate) {
+        if (entry == null) {
+            return null;
+        }
+        DownloadQueueItem existing = findActiveQueueItem(entry.providerId(), entry.projectId());
+        if (existing != null) {
+            if (existing.state == QueueState.RESOLVING && plan != null && plan.ready()) {
+                existing.downloadPlan = plan;
+            }
+            return existing;
+        }
+        DownloadQueueItem item = createQueuePreparationItem(entry, plan, immediate);
+        if (immediate) {
+            queueModel.add(0, item);
+        } else {
+            queueModel.addElement(item);
+        }
+        setQueueFeedback("Preparando descarga...", entry.displayName() + " se esta resolviendo junto a sus dependencias.");
+        refreshQueueControls();
+        refreshQueuedResultDecorations();
+        refreshSelectionActionState();
+        return item;
+    }
+
+    private DownloadQueueItem createQueuePreparationItem(ExtensionCatalogEntry entry,
+                                                         ExtensionDownloadPlan plan,
+                                                         boolean immediate) {
+        return new DownloadQueueItem(
+                entry.providerId(),
+                entry.projectId(),
+                plan == null ? entry.versionId() : plan.versionId(),
+                plan,
+                defaultString(plan == null ? null : plan.iconUrl(), entry.iconUrl()),
+                defaultString(plan == null ? null : plan.displayName(), entry.displayName()),
+                defaultString(plan == null ? null : plan.versionNumber(), defaultString(entry.version(), "version")),
+                QueueState.RESOLVING,
+                immediate ? "Resolviendo para instalacion inmediata..." : "Resolviendo dependencias...",
+                null,
+                List.of()
+        );
+    }
+
+    private DownloadQueueItem findActiveQueueItem(String providerId, String projectId) {
+        for (int i = 0; i < queueModel.size(); i++) {
+            DownloadQueueItem item = queueModel.get(i);
+            if (item.matchesProject(providerId, projectId)
+                    && (item.state == QueueState.RESOLVING
+                    || item.state == QueueState.PENDING
+                    || item.state == QueueState.DOWNLOADING)) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    private boolean queueContains(DownloadQueueItem item) {
+        return item != null && queueModel.indexOf(item) >= 0;
+    }
+
+    private void removePreparationItem(DownloadQueueItem item) {
+        if (item != null && item.state == QueueState.RESOLVING) {
+            queueModel.removeElement(item);
+            refreshQueueControls();
+            refreshQueuedResultDecorations();
+            refreshSelectionActionState();
+        }
+    }
+
+    private void failQueuePreparation(DownloadQueueItem item, String message) {
+        if (item == null || !queueContains(item)) {
+            return;
+        }
+        item.state = QueueState.FAILED;
+        item.message = defaultString(message, "No se pudo preparar la descarga.");
+        setQueueFeedback("No se pudo preparar.", item.message);
+        refreshQueueControls();
+        refreshQueuedResultDecorations();
+        refreshSelectionActionState();
+    }
+
     private boolean isDependencyInstalled(ExtensionDependency dependency) {
         if (server == null || server.getExtensions() == null || dependency == null) {
             return false;
@@ -1417,7 +1516,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         for (int i = 0; i < queueModel.size(); i++) {
             DownloadQueueItem item = queueModel.get(i);
-            if ((item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.COMPLETED)
+            if ((item.state == QueueState.RESOLVING || item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.COMPLETED)
                     && dependencyMatchesCandidate(dependency, item.providerId, item.projectId, item.displayName, item.displayName)) {
                 return true;
             }
@@ -1721,7 +1820,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         for (int i = 0; i < queueModel.size(); i++) {
             DownloadQueueItem item = queueModel.get(i);
-            if ((item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.FAILED)
+            if ((item.state == QueueState.RESOLVING || item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.FAILED)
                     && dependencyMatchesCandidate(dependency, item.providerId, item.projectId, item.displayName, item.displayName)) {
                 return item;
             }
@@ -1836,7 +1935,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         List<DownloadQueueItem> retained = new ArrayList<>();
         for (int i = 0; i < queueModel.size(); i++) {
             DownloadQueueItem item = queueModel.get(i);
-            if (item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.FAILED) {
+            if (item.state == QueueState.RESOLVING || item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.FAILED) {
                 retained.add(item);
             } else {
                 removed++;
@@ -1900,20 +1999,23 @@ final class ExtensionMarketplaceDialog extends JDialog {
         long completed = 0L;
         long failed = 0L;
         long pending = 0L;
+        long resolving = 0L;
         for (int i = 0; i < queueModel.size(); i++) {
             DownloadQueueItem item = queueModel.get(i);
             if (item.state == QueueState.COMPLETED) {
                 completed++;
             } else if (item.state == QueueState.FAILED) {
                 failed++;
+            } else if (item.state == QueueState.RESOLVING) {
+                resolving++;
             } else if (item.state == QueueState.PENDING) {
                 pending++;
             }
         }
         queueState = new QueueViewState(ViewState.READY,
-                "Pendientes: " + pending + "  |  Completadas: " + completed + "  |  Fallidas: " + failed);
-        queueSummaryLabel.setText(defaultString(queueFeedbackHeadline, buildQueueHeadline(pending, completed, failed)));
-        queueStatusLabel.setText(defaultString(queueFeedbackMessage, buildQueueSecondaryMessage(pending, completed, failed)));
+                "Preparando: " + resolving + "  |  Pendientes: " + pending + "  |  Completadas: " + completed + "  |  Fallidas: " + failed);
+        queueSummaryLabel.setText(defaultString(queueFeedbackHeadline, buildQueueHeadline(resolving, pending, completed, failed)));
+        queueStatusLabel.setText(defaultString(queueFeedbackMessage, buildQueueSecondaryMessage(resolving, pending, completed, failed)));
     }
 
     private void rebuildQueueDisplayModels() {
@@ -1921,7 +2023,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         List<DownloadQueueItem> resolved = new ArrayList<>();
         for (int i = 0; i < queueModel.size(); i++) {
             DownloadQueueItem item = queueModel.get(i);
-            if (item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.FAILED) {
+            if (item.state == QueueState.RESOLVING || item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING || item.state == QueueState.FAILED) {
                 pending.add(item);
             } else {
                 resolved.add(item);
@@ -1971,6 +2073,15 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return false;
     }
 
+    private boolean hasResolvingQueueItems() {
+        for (int i = 0; i < queueModel.getSize(); i++) {
+            if (queueModel.get(i).state == QueueState.RESOLVING) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void setQueueFeedback(String headline, String message) {
         queueFeedbackHeadline = headline;
         queueFeedbackMessage = message;
@@ -1995,7 +2106,10 @@ final class ExtensionMarketplaceDialog extends JDialog {
         });
     }
 
-    private String buildQueueHeadline(long pending, long completed, long failed) {
+    private String buildQueueHeadline(long resolving, long pending, long completed, long failed) {
+        if (resolving > 0L) {
+            return resolving == 1L ? "Preparando 1 descarga" : "Preparando " + resolving + " descargas";
+        }
         if (failed > 0L && pending == 0L) {
             return failed == 1L ? "Hay 1 instalación con incidencia" : "Hay " + failed + " instalaciones con incidencia";
         }
@@ -2066,7 +2180,10 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return false;
     }
 
-    private String buildQueueSecondaryMessage(long pending, long completed, long failed) {
+    private String buildQueueSecondaryMessage(long resolving, long pending, long completed, long failed) {
+        if (resolving > 0L) {
+            return "Puedes seguir usando el marketplace mientras se resuelven dependencias y complementos.";
+        }
         if (failed > 0L && pending > 0L) {
             return "Se mantiene la cola activa. Revisa las instalaciones fallidas cuando termine el resto.";
         }
@@ -2134,7 +2251,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private void updateCatalogLoadingIndicator() {
         int pendingIcons = ExtensionIconLoader.pendingLoadCount();
         boolean imageLoading = pendingIcons > 0;
-        boolean queueLoading = queueState.state() == ViewState.LOADING;
+        boolean queueLoading = queueState.state() == ViewState.LOADING || hasResolvingQueueItems();
         boolean loading = searchState.state() == ViewState.LOADING || imageLoading || queueLoading;
         catalogLoadingIconLabel.setVisible(loading);
         catalogLoadingIconLabel.setIcon(catalogLoadingIcon);
@@ -2161,7 +2278,8 @@ final class ExtensionMarketplaceDialog extends JDialog {
         repaintQueueLists();
         if (ExtensionIconLoader.pendingLoadCount() <= 0
                 && searchState.state() != ViewState.LOADING
-                && queueState.state() != ViewState.LOADING) {
+                && queueState.state() != ViewState.LOADING
+                && !hasResolvingQueueItems()) {
             iconState = new IconViewState(ViewState.READY, "Iconos cargados");
             updateCatalogLoadingIndicator();
             updateCatalogStatusLabel();
@@ -2238,6 +2356,12 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private QueueAdmission evaluateQueueAdmission(ExtensionCatalogEntry entry, ExtensionDownloadPlan downloadPlan) {
+        return evaluateQueueAdmission(entry, downloadPlan, null);
+    }
+
+    private QueueAdmission evaluateQueueAdmission(ExtensionCatalogEntry entry,
+                                                  ExtensionDownloadPlan downloadPlan,
+                                                  DownloadQueueItem itemToIgnore) {
         if (entry == null) {
             return new QueueAdmission(false, null, "Selecciona una extensión.");
         }
@@ -2254,6 +2378,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
         DownloadQueueItem exactFailed = null;
         for (int i = 0; i < queueModel.getSize(); i++) {
             DownloadQueueItem item = queueModel.get(i);
+            if (item == itemToIgnore) {
+                continue;
+            }
             if (!item.matchesProject(entry.providerId(), entry.projectId())) {
                 continue;
             }
@@ -2261,14 +2388,14 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 exactFailed = item;
                 continue;
             }
-            if (item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING) {
+            if (item.state == QueueState.RESOLVING || item.state == QueueState.PENDING || item.state == QueueState.DOWNLOADING) {
                 String message = item.matchesExactVersion(entry.providerId(), entry.projectId(), downloadPlan.versionId())
                         ? "Esta version ya esta en cola."
                         : "Ya hay otra versión de esta extensión en cola.";
                 return new QueueAdmission(false, item, message);
             }
         }
-        return new QueueAdmission(true, exactFailed, null);
+        return new QueueAdmission(true, exactFailed == null ? itemToIgnore : exactFailed, null);
     }
 
     private DownloadQueueItem createQueueItem(ExtensionCatalogEntry entry,
@@ -2373,7 +2500,9 @@ final class ExtensionMarketplaceDialog extends JDialog {
         changed |= updateMetadataText(metadata, "licenseName", details == null ? null : details.licenseName());
         changed |= updateMetadataText(metadata, "clientSide", detailEntry.clientSide());
         changed |= updateMetadataText(metadata, "serverSide", detailEntry.serverSide());
-        if (detailEntry.downloads() > 0L && metadata.getDownloadCount() != detailEntry.downloads()) {
+        Long currentDownloadCount = metadata.getDownloadCount();
+        if (detailEntry.downloads() > 0L
+                && (currentDownloadCount == null || currentDownloadCount.longValue() != detailEntry.downloads())) {
             metadata.setDownloadCount(detailEntry.downloads());
             changed = true;
         }
@@ -2614,6 +2743,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 continue;
             }
             return switch (item.state) {
+                case RESOLVING -> "Preparando";
                 case PENDING -> "En cola";
                 case DOWNLOADING -> "Instalando";
                 case FAILED -> "Error en cola";
@@ -2808,6 +2938,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 continue;
             }
             snapshot.put(key, switch (item.state) {
+                case RESOLVING -> "Preparando";
                 case PENDING -> "En cola";
                 case DOWNLOADING -> "Instalando";
                 case FAILED -> "Error en cola";
@@ -4472,7 +4603,10 @@ final class ExtensionMarketplaceDialog extends JDialog {
             state.setFont(state.getFont().deriveFont(Font.BOLD, 10.5f));
             state.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
             state.setPreferredSize(new Dimension(34, 34));
-            if (currentState == QueueState.PENDING) {
+            if (currentState == QueueState.RESOLVING) {
+                state.setText(null);
+                state.setIcon(queueDownloadingIcon);
+            } else if (currentState == QueueState.PENDING) {
                 state.setText(null);
                 state.setIcon(SvgIconFactory.create("doraicons/hourglass.svg", 18, 18, () -> stateForeground));
             } else if (currentState == QueueState.DOWNLOADING) {
@@ -4494,6 +4628,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
         private String symbolFor(QueueState state) {
             return switch (state) {
+                case RESOLVING -> "RS";
                 case PENDING -> "EN";
                 case DOWNLOADING -> "DL";
                 case COMPLETED -> "OK";
@@ -4503,6 +4638,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
         private String queueStateLabel(QueueState state) {
             return switch (state) {
+                case RESOLVING -> "Preparando";
                 case PENDING -> "En cola";
                 case DOWNLOADING -> "Instalando";
                 case COMPLETED -> "Completada";
@@ -4512,6 +4648,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
         private Color colorFor(QueueState state) {
             return switch (state) {
+                case RESOLVING -> AppTheme.tint(AppTheme.getMainAccent(), Color.WHITE, 0.10f);
                 case PENDING -> AppTheme.getMainAccent();
                 case DOWNLOADING -> AppTheme.tint(AppTheme.getMainAccent(), Color.WHITE, 0.18f);
                 case COMPLETED -> AppTheme.getSuccessColor();
@@ -4523,7 +4660,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             return switch (state) {
                 case FAILED -> readableWarningColor();
                 case COMPLETED -> AppTheme.getSuccessColor();
-                case DOWNLOADING, PENDING -> AppTheme.getMainAccent();
+                case RESOLVING, DOWNLOADING, PENDING -> AppTheme.getMainAccent();
             };
         }
 
@@ -5090,11 +5227,16 @@ final class ExtensionMarketplaceDialog extends JDialog {
         private final ExtensionCatalogEntry entry;
         private final String versionId;
         private final Runnable afterQueued;
+        private final DownloadQueueItem preparationItem;
 
-        private EnqueuePlanWorker(ExtensionCatalogEntry entry, String versionId, Runnable afterQueued) {
+        private EnqueuePlanWorker(ExtensionCatalogEntry entry,
+                                  String versionId,
+                                  Runnable afterQueued,
+                                  DownloadQueueItem preparationItem) {
             this.entry = entry;
             this.versionId = versionId;
             this.afterQueued = afterQueued;
+            this.preparationItem = preparationItem;
         }
 
         @Override
@@ -5105,8 +5247,12 @@ final class ExtensionMarketplaceDialog extends JDialog {
         @Override
         protected void done() {
             try {
+                if (preparationItem != null && !queueContains(preparationItem)) {
+                    return;
+                }
                 ExtensionDownloadPlan plan = get();
                 if (plan == null || !plan.ready()) {
+                    failQueuePreparation(preparationItem, "No se ha podido preparar una descarga compatible.");
                     showUserError("No se ha podido preparar una descarga compatible.");
                     return;
                 }
@@ -5114,9 +5260,13 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     selectedDownloadPlan = plan;
                     selectedInstallResolution = evaluateInstallResolution(plan);
                 }
-                enqueueEntryWithPlanAsync(entry, plan, false, afterQueued);
+                if (preparationItem != null) {
+                    preparationItem.downloadPlan = plan;
+                }
+                new DependencyResolutionWorker(entry, plan, false, afterQueued, preparationItem).execute();
             } catch (Exception ex) {
                 LOGGER.log(Level.WARNING, "No se ha podido preparar la extension para la cola.", ex);
+                failQueuePreparation(preparationItem, friendlyPreviewError(ex));
                 showUserError(friendlyPreviewError(ex));
             } finally {
                 refreshSelectionActionState();
@@ -5129,15 +5279,18 @@ final class ExtensionMarketplaceDialog extends JDialog {
         private final ExtensionDownloadPlan plan;
         private final boolean immediate;
         private final Runnable afterQueued;
+        private final DownloadQueueItem preparationItem;
 
         private DependencyResolutionWorker(ExtensionCatalogEntry entry,
                                            ExtensionDownloadPlan plan,
                                            boolean immediate,
-                                           Runnable afterQueued) {
+                                           Runnable afterQueued,
+                                           DownloadQueueItem preparationItem) {
             this.entry = entry;
             this.plan = plan;
             this.immediate = immediate;
             this.afterQueued = afterQueued;
+            this.preparationItem = preparationItem;
         }
 
         @Override
@@ -5148,9 +5301,10 @@ final class ExtensionMarketplaceDialog extends JDialog {
         @Override
         protected void done() {
             try {
-                enqueueEntryWithResolvedDependencies(entry, plan, get(), immediate, afterQueued);
+                enqueueEntryWithResolvedDependencies(entry, plan, get(), immediate, afterQueued, preparationItem);
             } catch (Exception ex) {
                 LOGGER.log(Level.WARNING, "No se han podido resolver las dependencias de la extension.", ex);
+                failQueuePreparation(preparationItem, "No se han podido resolver las dependencias necesarias: " + rootMessage(ex));
                 showUserError("No se han podido resolver las dependencias necesarias: " + rootMessage(ex));
             } finally {
                 refreshSelectionActionState();

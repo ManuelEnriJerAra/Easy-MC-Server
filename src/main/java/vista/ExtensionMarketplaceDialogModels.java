@@ -129,6 +129,7 @@ record VersionOption(String versionId, String displayName, String meta, boolean 
 }
 
 enum QueueState {
+    RESOLVING,
     PENDING,
     DOWNLOADING,
     COMPLETED,

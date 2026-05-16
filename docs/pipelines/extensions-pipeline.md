@@ -101,6 +101,10 @@ Keep UI dependency decisions and service-level validation consistent. Service va
 
 Dependency identity matching is shared through `controlador.extensions.ExtensionDependencyMatcher`. Use it for marketplace queue checks and installed-tab diagnostics so provider/project IDs, normalized names, file names, local IDs, local dependency descriptions, and embedded dependency metadata stay aligned. After catalog installs, preserve catalog dependency identities when rescanning jars that also declare local descriptor dependency IDs.
 
+Adding an extension to the marketplace queue should acknowledge the click immediately. Long dependency and optional-complement resolution runs in the background while the queue shows a removable `RESOLVING` item; once resolution finishes, that same item becomes pending or failed so users do not need to click the add action again.
+
+Persisted installed-extension metadata may come from older cache entries or local jar detection, so nullable boxed fields such as download counts must be compared with explicit null handling before writing catalog details back into the installed cache.
+
 Marketplace dialog option records, queue/dependency helper models, and related view-state types may live beside the dialog in package-scoped helper files when extracted for size control. Keep the dialog focused on orchestration and rendering, and keep extracted types behavior-neutral unless a broader redesign is intentional.
 
 ## Modpack Import/Export
