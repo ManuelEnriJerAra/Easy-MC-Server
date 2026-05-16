@@ -81,8 +81,8 @@ final class ExtensionStatusPresentation {
     static String iconPath(ExtensionCompatibilityStatus status) {
         return switch (status == null ? ExtensionCompatibilityStatus.WARNING : status) {
             case COMPATIBLE -> null;
-            case WARNING -> "easymcicons/warning.svg";
-            case INCOMPATIBLE -> "easymcicons/cross2.svg";
+            case WARNING -> "doraicons/warning.svg";
+            case INCOMPATIBLE -> "doraicons/cross2.svg";
         };
     }
 }

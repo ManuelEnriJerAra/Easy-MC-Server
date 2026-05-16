@@ -1,4 +1,4 @@
-# Application Multiple Instances Fix
+﻿# Application Multiple Instances Fix
 
 ## Status
 
@@ -6,7 +6,7 @@ Fixed
 
 ## Original Issue
 
-Easy MC Server could be launched multiple times at once. Separate instances could read and write the same managed server list, server configuration, logs, process state, and UI-derived caches independently.
+Dora could be launched multiple times at once. Separate instances could read and write the same managed server list, server configuration, logs, process state, and UI-derived caches independently.
 
 ## Root Cause
 

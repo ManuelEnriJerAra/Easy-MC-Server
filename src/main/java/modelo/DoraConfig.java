@@ -5,7 +5,7 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class EasyMCConfig {
+public class DoraConfig {
     private String temaClassName;
     private Integer estadisticasRangoSegundos;
     private Boolean estadisticasPersistenciaActiva;
@@ -16,19 +16,19 @@ public class EasyMCConfig {
     private Boolean consolaVistaSimple;
     private String curseForgeApiKey;
 
-    public EasyMCConfig() {
+    public DoraConfig() {
     }
 
-    public EasyMCConfig(String temaClassName) {
+    public DoraConfig(String temaClassName) {
         this.temaClassName = temaClassName;
     }
 
-    public EasyMCConfig(String temaClassName, Integer estadisticasRangoSegundos) {
+    public DoraConfig(String temaClassName, Integer estadisticasRangoSegundos) {
         this.temaClassName = temaClassName;
         this.estadisticasRangoSegundos = estadisticasRangoSegundos;
     }
 
-    public EasyMCConfig(String temaClassName,
+    public DoraConfig(String temaClassName,
                         Integer estadisticasRangoSegundos,
                         Boolean estadisticasPersistenciaActiva,
                         Integer estadisticasVentanaRecienteSegundos,

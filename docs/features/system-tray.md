@@ -1,4 +1,4 @@
-# System Tray
+﻿# System Tray
 
 ## Status
 
@@ -6,7 +6,7 @@ Implemented
 
 ## Feature
 
-Easy MC Server can keep running from the system tray when the main server-management window is closed.
+Dora can keep running from the system tray when the main server-management window is closed.
 
 ## Motivation
 
@@ -16,7 +16,7 @@ Managed Minecraft servers can be long-running processes. Closing the main frame 
 
 - Added system tray installation to `VentanaPrincipal` when `SystemTray.isSupported()` is true.
 - Changed the main window close button so it hides the frame to the tray instead of running the full application exit path.
-- Added tray actions to restore the main window and explicitly quit Easy MC Server.
+- Added tray actions to restore the main window and explicitly quit Dora.
 - Added a refreshed tray menu showing active server count and live server display names with per-server RAM usage.
 - Active server rows ellipsize long names and align RAM values in a fixed text column so long server names do not stretch the tray menu.
 - Kept the existing active-server confirmation and shutdown flow for explicit quit and for the fallback path when tray support is unavailable.

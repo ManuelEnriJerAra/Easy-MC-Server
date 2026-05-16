@@ -1097,7 +1097,7 @@ public class PanelServidores extends FlatScrollPane {
     private void actualizarBotonFavorito(AbstractButton button, Server servidor, boolean hovered){
         if(button == null) return;
         boolean favorito = servidor != null && Boolean.TRUE.equals(servidor.getFavorito());
-        String iconPath = favorito ? "easymcicons/star.svg" : "easymcicons/star-unselected.svg";
+        String iconPath = favorito ? "doraicons/star.svg" : "doraicons/star-unselected.svg";
         button.setIcon(SvgIconFactory.create(iconPath, 24, 24, this::getFavoriteStarColor));
         button.setToolTipText(favorito ? "Quitar de favoritos" : "Marcar como favorito");
         button.setVisible(favorito || hovered);

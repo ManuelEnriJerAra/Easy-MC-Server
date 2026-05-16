@@ -1,4 +1,4 @@
-# Modpack Catalog Search
+﻿# Modpack Catalog Search
 
 ## Status
 
@@ -18,7 +18,7 @@ The modpack catalog should behave like users expect from a modpack browser: sear
 
 ## Motivation
 
-Searching individual mods is useful, but users often want to install a whole curated pack. A modpack catalog makes Easy MC Server a more complete modded-server manager and pairs naturally with the requested Modrinth `.mrpack` import/export support.
+Searching individual mods is useful, but users often want to install a whole curated pack. A modpack catalog makes Dora a more complete modded-server manager and pairs naturally with the requested Modrinth `.mrpack` import/export support.
 
 ## Desired Behavior
 

@@ -103,7 +103,7 @@ public final class VanillaServerPlatformAdapter extends AbstractServerPlatformAd
                 request,
                 ServerPlatform.VANILLA,
                 request.platformVersion(),
-                "Easy-MC Vanilla " + request.minecraftVersion(),
+                "Dora Vanilla " + request.minecraftVersion(),
                 List.of()
         );
     }

@@ -87,7 +87,7 @@ public final class PurpurServerPlatformAdapter extends AbstractServerPlatformAda
                 request,
                 ServerPlatform.PURPUR,
                 request.platformVersion(),
-                "Easy-MC Purpur " + request.minecraftVersion(),
+                "Dora Purpur " + request.minecraftVersion(),
                 getExtensionDirectories(request.targetDirectory())
         );
     }

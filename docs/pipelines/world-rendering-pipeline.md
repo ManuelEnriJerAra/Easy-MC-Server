@@ -1,4 +1,4 @@
-# World Rendering Pipeline
+﻿# World Rendering Pipeline
 
 Use this guide before editing MCA parsing, preview generation, render options, world storage analysis, or overlay/player markers.
 
@@ -84,7 +84,7 @@ It handles legacy and namespaced overworld region paths.
 `MCARenderer` has debug logging behind the system property:
 
 ```text
-easymc.mca.debug=true
+dora.mca.debug=true
 ```
 
 Use it for render diagnostics without changing UI behavior.

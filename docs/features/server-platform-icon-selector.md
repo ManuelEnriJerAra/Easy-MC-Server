@@ -1,4 +1,4 @@
-# Server Platform Icon Selector
+﻿# Server Platform Icon Selector
 
 ## Status
 
@@ -16,7 +16,7 @@ The platform choice is a first-class wizard decision. Showing each platform as a
 
 Added `vista.PlatformSelectorPanel`, which groups available `ServerPlatformAdapter` entries into Vanilla, Mods, and Plugins sections. Each option is a keyboard-focusable button-style tile with an SVG icon above the platform label, hover/focus feedback, hand cursor, and selected coloring from `AppTheme.getMainAccent()`.
 
-The selector tries future platform icon resources such as `easymcicons/fabric.svg` and falls back to `easymcicons/box.svg` when the platform-specific SVG is not available. Creation and conversion platform prompts now both read selection from this shared panel.
+The selector tries future platform icon resources such as `doraicons/fabric.svg` and falls back to `doraicons/box.svg` when the platform-specific SVG is not available. Creation and conversion platform prompts now both read selection from this shared panel.
 
 Server creation now builds its steps with `ProcessWizardDialog.Step`, using the shared wizard navigation and final rocket action. Conversion platform choices are filtered to platforms that support automated creation, so unavailable conversion targets are not shown to the user.
 

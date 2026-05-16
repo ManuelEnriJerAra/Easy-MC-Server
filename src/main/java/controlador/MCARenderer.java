@@ -76,8 +76,10 @@ public final class MCARenderer {
     private static final int DEFAULT_ARGB = 0xFF1E1E1E;
     // Flag de Querz para leer chunks en modo "raw" y acceder al NBT moderno sin forzar el esquema legacy "Level".
     private static final long RAW_DATA_FLAG = 65_536L;
-    // Logging de depuracion del renderer. Se puede desactivar con -Deasymc.mca.debug=false.
-    private static final boolean DEBUG_LOGGING = Boolean.parseBoolean(System.getProperty("easymc.mca.debug", "false"));
+    // Logging de depuracion del renderer. Se puede desactivar con -Ddora.mca.debug=false.
+    private static final boolean DEBUG_LOGGING = Boolean.parseBoolean(
+            System.getProperty("dora.mca.debug", "false")
+    );
     private static final int DEBUG_MAX_REASON_LINES = 12;
     private static final int DEBUG_MAX_CHUNK_LINES = 20;
     private static final int DEBUG_MAX_SAMPLE_LINES = 10;

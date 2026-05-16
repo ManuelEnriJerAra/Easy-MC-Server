@@ -61,7 +61,7 @@ class ServerExtensionsServiceTest {
                         modId="trackedexample"
                         version="1.0.0"
                         displayName="Tracked Example"
-                        authors="Easy MC"
+                        authors="Dora"
                         logoFile="assets/tracked/icon.png"
                         displayURL="https://example.test/tracked"
                         issueTrackerURL="https://example.test/tracked/issues"
@@ -89,7 +89,7 @@ class ServerExtensionsServiceTest {
         ExtensionLocalMetadata metadata = installed.getLocalMetadata();
 
         assertThat(metadata.getInstalledVersion()).isEqualTo("1.0.0");
-        assertThat(metadata.getAuthors()).contains("Easy MC");
+        assertThat(metadata.getAuthors()).contains("Dora");
         assertThat(metadata.getSupportedLoaders()).contains("Forge", "javafml");
         assertThat(metadata.getSupportedMinecraftVersions()).contains("[1.20.1,1.21)");
         assertThat(metadata.getLocalDependencyDescriptions()).anySatisfy(dependency ->
@@ -1154,39 +1154,6 @@ class ServerExtensionsServiceTest {
 
         assertThat(installed.getDisplayName()).isEqualTo("OpaqueDownloadPlugin");
         assertThat(serverDir(server).resolve("plugins").resolve("OpaqueDownloadPlugin.jar")).isRegularFile();
-    }
-
-    @Test
-    void shouldMigrateLegacyModCacheToCanonicalExtensionCache() throws Exception {
-        Server server = extensionServer("legacy-cache", ServerPlatform.FORGE);
-        Files.writeString(serverDir(server).resolve("easy-mc-mod-list.json"), """
-                {
-                  "schemaVersion": 1,
-                  "updatedAtEpochMillis": 1,
-                  "extensions": [
-                    {
-                      "id": "legacy-1",
-                      "displayName": "Legacy Mod",
-                      "version": "1.0.0",
-                      "fileName": "legacy.jar",
-                      "extensionType": "MOD",
-                      "platform": "FORGE",
-                      "localMetadata": {
-                        "relativePath": "mods/legacy.jar",
-                        "fileName": "legacy.jar"
-                      }
-                    }
-                  ]
-                }
-                """);
-
-        InstalledExtensionsCacheService cacheService = new InstalledExtensionsCacheService();
-        List<ServerExtension> loaded = cacheService.load(server);
-        cacheService.persist(server, loaded);
-
-        assertThat(loaded).singleElement().satisfies(extension ->
-                assertThat(extension.getDisplayName()).isEqualTo("Legacy Mod"));
-        assertThat(serverDir(server).resolve("easy-mc-extensions.json")).isRegularFile();
     }
 
     @Test

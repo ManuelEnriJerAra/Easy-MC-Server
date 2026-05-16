@@ -209,7 +209,7 @@ public final class ServerExtensionsService {
         ensureCatalogPlanCompatibleWithServer(server, downloadPlan);
         ensureCatalogExtensionNotAlreadyInstalled(server, downloadPlan);
 
-        Path tempJar = Files.createTempFile("easymc-extension-", ".jar");
+        Path tempJar = Files.createTempFile("dora-extension-", ".jar");
         try {
             downloader.download(downloadPlan.downloadUrl(), tempJar.toFile());
             validateDownloadedJar(tempJar, downloadPlan);
@@ -361,7 +361,7 @@ public final class ServerExtensionsService {
 
         List<Path> extensionDirectories = getManagedExtensionDirectories(server);
         if (extensionDirectories.isEmpty()) {
-            throw new IOException("La plataforma del servidor no admite extensiones gestionadas por Easy-MC-Server.");
+            throw new IOException("La plataforma del servidor no admite extensiones gestionadas por Dora.");
         }
 
         Path targetDirectory = extensionDirectories.getFirst();
@@ -465,14 +465,14 @@ public final class ServerExtensionsService {
             return new ExtensionCompatibilityReport(
                     ExtensionCompatibilityStatus.INCOMPATIBLE,
                     "No se ha indicado el servidor de destino.",
-                    List.of("No existe contexto del servidor para validar la extensiÃ³n.")
+                    List.of("No existe contexto del servidor para validar la extensión.")
             );
         }
         if (extension == null) {
             return new ExtensionCompatibilityReport(
                     ExtensionCompatibilityStatus.INCOMPATIBLE,
-                    "No se ha podido leer la extensiÃ³n.",
-                    List.of("No se han detectado metadatos suficientes para validar la extensiÃ³n.")
+                    "No se ha podido leer la extensión.",
+                    List.of("No se han detectado metadatos suficientes para validar la extensión.")
             );
         }
 

@@ -1,4 +1,4 @@
-# Modrinth Modpack Import And Export
+﻿# Modrinth Modpack Import And Export
 
 ## Status
 
@@ -6,7 +6,7 @@ Implemented
 
 ## Feature
 
-Easy MC Server can export mod servers as Modrinth `.mrpack` archives and import `.mrpack` archives into compatible mod servers.
+Dora can export mod servers as Modrinth `.mrpack` archives and import `.mrpack` archives into compatible mod servers.
 
 ## Motivation
 

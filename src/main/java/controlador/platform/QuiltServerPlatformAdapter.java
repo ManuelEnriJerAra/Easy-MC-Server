@@ -134,7 +134,7 @@ public final class QuiltServerPlatformAdapter extends AbstractServerPlatformAdap
                 request,
                 ServerPlatform.QUILT,
                 selection.loaderVersion(),
-                "Easy-MC Quilt " + request.minecraftVersion(),
+                "Dora Quilt " + request.minecraftVersion(),
                 List.of(request.targetDirectory().resolve("mods"), request.targetDirectory().resolve("config"))
         );
     }

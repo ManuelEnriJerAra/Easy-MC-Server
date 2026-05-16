@@ -171,19 +171,19 @@ final class PanelExtensiones extends JPanel {
         updateViewModeButton();
         listCard.getHeaderActionsPanel().add(viewModeButton);
 
-        AppTheme.configureRowIconActionButton(installButton, "Instalar " + extensionSingularLower() + " .jar", "easymcicons/file.svg", 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(installButton, "Instalar " + extensionSingularLower() + " .jar", "doraicons/file.svg", 22, AppTheme::getForeground, false);
         installButton.addActionListener(e -> instalarExtensionManual());
 
-        AppTheme.configureRowIconActionButton(browseCatalogButton, "Explorar catalogo de " + extensionPluralLower(), "easymcicons/shop.svg", 44, AppTheme::getMainAccent, true);
+        AppTheme.configureRowIconActionButton(browseCatalogButton, "Explorar catalogo de " + extensionPluralLower(), "doraicons/shop.svg", 44, AppTheme::getMainAccent, true);
         browseCatalogButton.addActionListener(e -> abrirMarketplaceExtensiones());
 
-        AppTheme.configureRowIconActionButton(importPackButton, "Importar pack", "easymcicons/download.svg", 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(importPackButton, "Importar pack", "doraicons/download.svg", 22, AppTheme::getForeground, false);
         importPackButton.addActionListener(e -> importarModpack());
 
-        AppTheme.configureRowIconActionButton(exportPackButton, "Exportar pack", "easymcicons/upload.svg", 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(exportPackButton, "Exportar pack", "doraicons/upload.svg", 22, AppTheme::getForeground, false);
         exportPackButton.addActionListener(e -> exportarModpack());
 
-        AppTheme.configureRowIconActionButton(openDirectoryButton, "Abrir carpeta de " + extensionPluralLower(), "easymcicons/folder.svg", 22, AppTheme::getForeground, false);
+        AppTheme.configureRowIconActionButton(openDirectoryButton, "Abrir carpeta de " + extensionPluralLower(), "doraicons/folder.svg", 22, AppTheme::getForeground, false);
         configureFolderHover(openDirectoryButton);
         openDirectoryButton.addActionListener(e -> abrirCarpetaExtensiones());
 
@@ -276,12 +276,12 @@ final class PanelExtensiones extends JPanel {
                 if (!button.isEnabled()) {
                     return;
                 }
-                button.setIcon(SvgIconFactory.create("easymcicons/folder-open.svg", 22, 22, AppTheme::getForeground));
+                button.setIcon(SvgIconFactory.create("doraicons/folder-open.svg", 22, 22, AppTheme::getForeground));
             }
 
             @Override
             public void mouseExited(java.awt.event.MouseEvent e) {
-                button.setIcon(SvgIconFactory.create("easymcicons/folder.svg", 22, 22, AppTheme::getForeground));
+                button.setIcon(SvgIconFactory.create("doraicons/folder.svg", 22, 22, AppTheme::getForeground));
             }
         });
     }
@@ -308,7 +308,7 @@ final class PanelExtensiones extends JPanel {
         emptyPanel.setOpaque(false);
         emptyPanel.add(placeholderLabel);
 
-        heroIconLabel.setIcon(SvgIconFactory.create("easymcicons/box-unselected.svg", 52, 52));
+        heroIconLabel.setIcon(SvgIconFactory.create("doraicons/box-unselected.svg", 52, 52));
         ExtensionDetailsLayout.configureStatusBadge(detailsStatusBadgeLabel);
         AppTheme.applyHeaderIconButtonStyle(detailsActionButton);
         detailsActionButton.setPreferredSize(new Dimension(56, 56));
@@ -406,7 +406,7 @@ final class PanelExtensiones extends JPanel {
         boolean compact = viewMode == ExtensionListViewMode.COMPACT;
         SvgIconFactory.apply(
                 viewModeButton,
-                compact ? "easymcicons/maximize.svg" : "easymcicons/minimize.svg",
+                compact ? "doraicons/maximize.svg" : "doraicons/minimize.svg",
                 18,
                 18,
                 AppTheme::getForeground
@@ -466,7 +466,7 @@ final class PanelExtensiones extends JPanel {
         heroIconLabel.setIcon(resolveExtensionIcon(extension, 52));
         detailsTitleLabel.setText(resolveExtensionName(extension));
         detailsVersionLabel.setText("Versión " + resolveVersion(extension) + "  |  " + resolveAuthor(extension));
-        detailsActionButton.setIcon(SvgIconFactory.create("easymcicons/trash-unselected.svg", 48, 48, AppTheme::getForeground));
+        detailsActionButton.setIcon(SvgIconFactory.create("doraicons/trash-unselected.svg", 48, 48, AppTheme::getForeground));
         detailsActionButton.setEnabled(!loadingExtensions && !mutatingExtensions);
         updateDetailsStatusBadge(extension, status);
         detailsSideLabel.setText("<html>" + escapeHtml(sideText(extension)) + "</html>");
@@ -1136,7 +1136,7 @@ final class PanelExtensiones extends JPanel {
         modpackContent.add(intro, BorderLayout.NORTH);
 
         if (!state.modrinthPack) {
-            JLabel note = new JLabel("<html>Formato CurseForge. Easy MC Server resolverá las descargas usando la API key configurada.</html>");
+            JLabel note = new JLabel("<html>Formato CurseForge. Dora resolverá las descargas usando la API key configurada.</html>");
             note.setForeground(AppTheme.getMutedForeground());
             modpackContent.add(note, BorderLayout.CENTER);
             panel.add(modpackContent);
@@ -2094,7 +2094,7 @@ final class PanelExtensiones extends JPanel {
             label.setMinimumSize(new Dimension(size, size));
             label.setToolTipText("Eliminar " + extensionSingularLower());
             int iconSize = Math.max(30, Math.min(size - 8, 42));
-            label.setIcon(SvgIconFactory.create("easymcicons/trash-unselected.svg", iconSize, iconSize, AppTheme::getForeground));
+            label.setIcon(SvgIconFactory.create("doraicons/trash-unselected.svg", iconSize, iconSize, AppTheme::getForeground));
             return label;
         }
 

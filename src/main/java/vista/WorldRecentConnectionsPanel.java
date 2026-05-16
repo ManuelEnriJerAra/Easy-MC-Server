@@ -57,8 +57,8 @@ final class WorldRecentConnectionsPanel {
         conexionesScrollPane.getVerticalScrollBar().setBlockIncrement(72);
         conexionesPanel.add(conexionesScrollPane, BorderLayout.CENTER);
 
-        AppTheme.configureDebugIconButton(btnDebugAddConnection, "Añadir conexión falsa", "easymcicons/plus.svg", this::addFakeConnection);
-        AppTheme.configureDebugIconButton(btnDebugRemoveConnection, "Eliminar conexión falsa", "easymcicons/minus.svg", this::removeFakeConnection);
+        AppTheme.configureDebugIconButton(btnDebugAddConnection, "Añadir conexión falsa", "doraicons/plus.svg", this::addFakeConnection);
+        AppTheme.configureDebugIconButton(btnDebugRemoveConnection, "Eliminar conexión falsa", "doraicons/minus.svg", this::removeFakeConnection);
         debugModeListener = DebugModeUiBinder.createUiListener(this::actualizarModoDebugConexiones);
     }
 

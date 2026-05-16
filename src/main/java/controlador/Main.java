@@ -10,7 +10,7 @@
 
 package controlador;
 
-import modelo.EasyMCConfig;
+import modelo.DoraConfig;
 import vista.NoServerFrame;
 import vista.AppTheme;
 import vista.VentanaPrincipal;
@@ -72,7 +72,7 @@ public class Main {
             gestorServidores.iniciarAutomatizaciones();
             Runtime.getRuntime().addShutdownHook(new Thread(
                     gestorServidores::detenerAutomatizaciones,
-                    "easy-mc-server-automation-stop"
+                    "dora-automation-stop"
             ));
             if(gestorServidores.getListaServidores().isEmpty()){
                 noServerFrame = new NoServerFrame(gestorServidores);
@@ -97,7 +97,7 @@ public class Main {
                 return false;
             }
             instanceLock.startHandoffServer(Main::enfocarVentanaAplicacion);
-            Runtime.getRuntime().addShutdownHook(new Thread(Main::liberarBloqueoInstancia, "easy-mc-server-lock-release"));
+            Runtime.getRuntime().addShutdownHook(new Thread(Main::liberarBloqueoInstancia, "dora-lock-release"));
             return true;
         } catch (IOException e) {
             System.err.println("No se pudo preparar el bloqueo de instancia: " + e.getMessage());
@@ -118,11 +118,11 @@ public class Main {
     }
 
     private static void mostrarAvisoInstanciaEnEjecucion() {
-        mostrarAvisoArranque("Easy MC Server ya está en ejecución.");
+        mostrarAvisoArranque("Dora ya está en ejecución.");
     }
 
     private static void mostrarAvisoBloqueoNoDisponible() {
-        mostrarAvisoArranque("No se pudo comprobar si Easy MC Server ya está en ejecución.");
+        mostrarAvisoArranque("No se pudo comprobar si Dora ya está en ejecución.");
     }
 
     private static void mostrarAvisoArranque(String mensaje) {
@@ -133,7 +133,7 @@ public class Main {
         JOptionPane.showMessageDialog(
                 null,
                 mensaje,
-                "Easy MC Server",
+                "Dora",
                 JOptionPane.INFORMATION_MESSAGE
         );
     }
@@ -169,7 +169,7 @@ public class Main {
     }
 
     private static void aplicarTemaInicial() {
-        EasyMCConfig config = GestorConfiguracion.cargarConfiguracion();
+        DoraConfig config = GestorConfiguracion.cargarConfiguracion();
         String temaClassName = config.getTemaClassName();
         if (temaClassName == null || temaClassName.isBlank()) {
             temaClassName = GestorConfiguracion.getTemaPorDefecto();

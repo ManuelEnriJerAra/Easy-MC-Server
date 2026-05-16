@@ -106,15 +106,10 @@ public class GestorServidores {
     private static final int PUERTO_MINECRAFT_DEFECTO = 25565;
     private static final int PUERTO_MAXIMO = 65535;
 
-    private static final String JSON_FILE = "easy-mc-server-list.json";
-    private static final String LEGACY_JSON_FILE = "ServerList.json";
+    private static final String JSON_FILE = "dora-server-list.json";
 
     private static File getJsonFile() {
-        Path jsonPath = AppPaths.configDirectory().resolve(JSON_FILE);
-        Path legacyBaseDir = AppPaths.legacyBaseDirectory();
-        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(JSON_FILE), jsonPath);
-        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(LEGACY_JSON_FILE), jsonPath);
-        return jsonPath.toFile();
+        return AppPaths.configDirectory().resolve(JSON_FILE).toFile();
     }
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -1681,7 +1676,7 @@ public class GestorServidores {
         } else if (sourceEcosystem == ServerEcosystemType.PLUGINS && targetEcosystem == ServerEcosystemType.PLUGINS) {
             warningText = "Vas a cambiar de plataforma de plugins. La mayoría de plugins Bukkit/Paper suelen ser compatibles, pero conviene revisar el resultado.";
         } else {
-            warningText = "Easy-MC-Server instalará la plataforma seleccionada y creará la carpeta de extensiones correspondiente.";
+            warningText = "Dora instalará la plataforma seleccionada y creará la carpeta de extensiones correspondiente.";
         }
         return new ConversionWarning(warningText, crossEcosystem);
     }
@@ -2049,7 +2044,7 @@ public class GestorServidores {
         resetButton.setMinimumSize(new Dimension(40, 40));
         resetButton.setMaximumSize(new Dimension(40, 40));
         SvgIconFactory.RotatingIcon resetIcon = SvgIconFactory.createRotating(
-                "easymcicons/reset.svg",
+                "doraicons/reset.svg",
                 26,
                 26,
                 AppTheme::getForeground
@@ -2481,7 +2476,7 @@ public class GestorServidores {
             if (in == null) {
                 return null;
             }
-            Path tempFile = Files.createTempFile("easymc-default-icon", ".png");
+            Path tempFile = Files.createTempFile("dora-default-icon", ".png");
             Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
             tempFile.toFile().deleteOnExit();
             return tempFile;
@@ -2777,7 +2772,7 @@ public class GestorServidores {
         try {
             GestorMundos.sincronizarMundosServidor(server);
         } catch (RuntimeException e) {
-            server.appendConsoleLinea("[WARN] No se ha podido preparar easy-mc-worlds: " + e.getMessage());
+            server.appendConsoleLinea("[WARN] No se ha podido preparar dora-worlds: " + e.getMessage());
         }
 
         ServerPlatformAdapter adapter = resolverAdaptador(server);
@@ -3156,7 +3151,7 @@ public class GestorServidores {
         resetFolderButton.setToolTipText("Restablecer nombre");
         resetFolderButton.setPreferredSize(new Dimension(40, 40));
         SvgIconFactory.RotatingIcon resetIcon = SvgIconFactory.createRotating(
-                "easymcicons/reset.svg",
+                "doraicons/reset.svg",
                 26,
                 26,
                 AppTheme::getForeground
@@ -4271,4 +4266,3 @@ public class GestorServidores {
         return "Servidor importado";
     }
 }
-

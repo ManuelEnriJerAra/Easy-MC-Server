@@ -29,8 +29,8 @@ class MCARendererRealWorldComparisonTest {
 
     @Test
     void generarMetricasYArtefactosParaMundoReal() throws Exception {
-        String rawWorldPath = System.getProperty("easymc.realWorldPath");
-        Assumptions.assumeTrue(rawWorldPath != null && !rawWorldPath.isBlank(), "Falta -Deasymc.realWorldPath");
+        String rawWorldPath = System.getProperty("dora.realWorldPath");
+        Assumptions.assumeTrue(rawWorldPath != null && !rawWorldPath.isBlank(), "Falta -Ddora.realWorldPath");
 
         Path worldPath = Path.of(rawWorldPath);
         Assumptions.assumeTrue(Files.isDirectory(worldPath), "La ruta del mundo real no existe");

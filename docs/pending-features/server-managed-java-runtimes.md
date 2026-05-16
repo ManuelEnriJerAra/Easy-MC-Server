@@ -1,4 +1,4 @@
-# Managed Java Runtimes For Servers
+﻿# Managed Java Runtimes For Servers
 
 ## Status
 
@@ -10,9 +10,9 @@ Pending
 
 ## Feature Request
 
-Automatically provision and use the correct Java runtime for each managed Minecraft server after the Easy MC Server desktop application itself has already been launched with Java 25.
+Automatically provision and use the correct Java runtime for each managed Minecraft server after the Dora desktop application itself has already been launched with Java 25.
 
-The user should not need to understand, install, configure, or switch Java versions manually for Minecraft servers. Easy MC Server may still require Java 25 to run the desktop app, but server creation, loader installation, server startup, conversion, and imported-server startup should use app-managed Java runtimes whenever possible.
+The user should not need to understand, install, configure, or switch Java versions manually for Minecraft servers. Dora may still require Java 25 to run the desktop app, but server creation, loader installation, server startup, conversion, and imported-server startup should use app-managed Java runtimes whenever possible.
 
 ## Motivation
 
@@ -20,19 +20,19 @@ Minecraft Java Edition servers and modded loaders do not all work best with the 
 
 The current startup paths mostly invoke `java` from the user's system `PATH`. That creates several user-facing problems:
 
-- A server can fail even though Easy MC Server itself launched correctly.
+- A server can fail even though Dora itself launched correctly.
 - Users may be forced to install multiple Java versions manually.
 - The app cannot reliably choose Java 8, 17, 21, or 25 per server.
 - Forge, NeoForge, Fabric, Quilt, Paper, Purpur, Vanilla, and imported servers can behave inconsistently depending on the user's machine.
 - Troubleshooting Java failures is noisy and feels unrelated to the user's goal of managing a Minecraft server.
 
-The desired product experience is: the user installs enough Java to launch Easy MC Server, then Easy MC Server quietly prepares the Java runtimes needed by the servers it manages.
+The desired product experience is: the user installs enough Java to launch Dora, then Dora quietly prepares the Java runtimes needed by the servers it manages.
 
 ## Desired Behavior
 
-Easy MC Server should keep the desktop app runtime and the server runtime conceptually separate.
+Dora should keep the desktop app runtime and the server runtime conceptually separate.
 
-The desktop app should continue to target Java 25. The managed Minecraft server process should use a Java executable selected by Easy MC Server for that specific server.
+The desktop app should continue to target Java 25. The managed Minecraft server process should use a Java executable selected by Dora for that specific server.
 
 When creating a server automatically:
 
@@ -89,7 +89,7 @@ When runtimes are stored locally:
 - `MojangAPI` already reads the Mojang version manifest and version JSON URLs for Vanilla server downloads.
 - Mojang launcher version JSON metadata contains `javaVersion.majorVersion` for modern versions. This should be the preferred source when available.
 - Eclipse Adoptium documents a stable API URL pattern for Eclipse Temurin binaries by Java major version, OS, architecture, image type, JVM implementation, heap size, and vendor. It also documents SHA-256 checksum verification for downloaded binaries.
-- Prefer archive downloads over MSI/pkg installers so Easy MC Server can install runtimes in its own app directory without requiring administrator permissions.
+- Prefer archive downloads over MSI/pkg installers so Dora can install runtimes in its own app directory without requiring administrator permissions.
 - Prefer JRE images when available because servers only need to run Java bytecode. Fall back to JDK images when a JRE is unavailable for a required major/platform combination.
 - Windows executables should resolve to `bin/java.exe`; macOS and Linux should resolve to `bin/java`.
 - macOS archives can contain nested `.jdk/Contents/Home` structures, so runtime executable detection should search known layouts rather than assuming the extracted root is already `JAVA_HOME`.
@@ -257,7 +257,7 @@ At minimum:
 
 Add optional config fields only after the core runtime manager exists.
 
-Global app config candidates in `EasyMCConfig`:
+Global app config candidates in `DoraConfig`:
 
 - Runtime provider, default `temurin`.
 - Whether managed runtime downloads are enabled.

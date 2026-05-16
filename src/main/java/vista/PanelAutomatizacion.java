@@ -68,16 +68,16 @@ final class PanelAutomatizacion extends JPanel {
     private static final TriggerOption[] LIFECYCLE_TRIGGER_OPTIONS = {
             new TriggerOption(AutomationTriggerType.DAILY_TIME, "Hora diaria"),
             new TriggerOption(AutomationTriggerType.INTERVAL, "Intervalo"),
-            new TriggerOption(AutomationTriggerType.APP_START, "Al iniciar Easy MC")
+            new TriggerOption(AutomationTriggerType.APP_START, "Al iniciar Dora")
     };
     private static final TriggerOption[] START_TRIGGER_OPTIONS = {
             new TriggerOption(AutomationTriggerType.DAILY_TIME, "Hora diaria"),
-            new TriggerOption(AutomationTriggerType.APP_START, "Al iniciar Easy MC")
+            new TriggerOption(AutomationTriggerType.APP_START, "Al iniciar Dora")
     };
     private static final TriggerOption[] COMMAND_TRIGGER_OPTIONS = {
             new TriggerOption(AutomationTriggerType.DAILY_TIME, "Hora diaria"),
             new TriggerOption(AutomationTriggerType.INTERVAL, "Intervalo"),
-            new TriggerOption(AutomationTriggerType.APP_START, "Al iniciar Easy MC"),
+            new TriggerOption(AutomationTriggerType.APP_START, "Al iniciar Dora"),
             new TriggerOption(AutomationTriggerType.BEFORE_STOP, "Antes de apagado"),
             new TriggerOption(AutomationTriggerType.BEFORE_RESTART, "Antes de reinicio"),
             new TriggerOption(AutomationTriggerType.AFTER_START, "Despues de encendido")
@@ -195,7 +195,7 @@ final class PanelAutomatizacion extends JPanel {
 
         JButton addButton = new FlatButton();
         addButton.setText(lifecycleButtonText(actionType));
-        addButton.setIcon(SvgIconFactory.create("easymcicons/plus.svg", 14, 14, AppTheme::getForeground));
+        addButton.setIcon(SvgIconFactory.create("doraicons/plus.svg", 14, 14, AppTheme::getForeground));
         addButton.setHorizontalAlignment(SwingConstants.CENTER);
         AppTheme.applyActionButtonStyle(addButton);
         addButton.setEnabled(server != null);
@@ -209,9 +209,9 @@ final class PanelAutomatizacion extends JPanel {
         CardPanel card = new CardPanel("Automatizacion de comandos");
         card.setBorder(BorderFactory.createEmptyBorder());
 
-        configureHeaderButton(addCommandButton, "Anadir comando", "easymcicons/plus.svg");
-        configureHeaderButton(editCommandButton, "Editar comando", "easymcicons/settings.svg");
-        configureHeaderButton(removeCommandButton, "Eliminar comando", "easymcicons/trash-unselected.svg");
+        configureHeaderButton(addCommandButton, "Anadir comando", "doraicons/plus.svg");
+        configureHeaderButton(editCommandButton, "Editar comando", "doraicons/settings.svg");
+        configureHeaderButton(removeCommandButton, "Eliminar comando", "doraicons/trash-unselected.svg");
         addCommandButton.addActionListener(e -> openRuleEditor(null, AutomationActionType.COMMAND));
         editCommandButton.addActionListener(e -> editSelectedCommandRule());
         removeCommandButton.addActionListener(e -> removeSelectedCommandRule());
@@ -348,8 +348,8 @@ final class PanelAutomatizacion extends JPanel {
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         actions.setOpaque(false);
-        JButton editButton = createInlineIconButton("Editar", "easymcicons/settings.svg");
-        JButton deleteButton = createInlineIconButton("Eliminar", "easymcicons/trash-unselected.svg");
+        JButton editButton = createInlineIconButton("Editar", "doraicons/settings.svg");
+        JButton deleteButton = createInlineIconButton("Eliminar", "doraicons/trash-unselected.svg");
         editButton.addActionListener(e -> openRuleEditor(rule, rule.getActionType()));
         deleteButton.addActionListener(e -> deleteRule(rule));
         actions.add(editButton);
@@ -736,7 +736,7 @@ final class PanelAutomatizacion extends JPanel {
                     : describeInterval(rule);
         }
         if (rule.getTriggerType() == AutomationTriggerType.APP_START) {
-            return "Al iniciar Easy MC";
+            return "Al iniciar Dora";
         }
         if (isRelativeTrigger(rule.getTriggerType())) {
             return describeWhen(rule) + " - " + describeRelativeOffset(rule);
@@ -751,7 +751,7 @@ final class PanelAutomatizacion extends JPanel {
         return switch (rule.getTriggerType()) {
             case DAILY_TIME -> firstNonBlank(rule.getTimeOfDay(), "-");
             case INTERVAL -> "-";
-            case APP_START -> "Inicio de Easy MC";
+            case APP_START -> "Inicio de Dora";
             case BEFORE_STOP -> "Antes de apagado";
             case BEFORE_RESTART -> "Antes de reinicio";
             case AFTER_START -> "Despues de encendido";

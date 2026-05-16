@@ -1,4 +1,4 @@
-# Application Shell Pipeline
+﻿# Application Shell Pipeline
 
 Use this guide before editing startup, navigation, window layout, or right-side panel composition.
 
@@ -66,7 +66,7 @@ See `debug-mode-pipeline.md`.
 
 ## System Tray And Exit
 
-`VentanaPrincipal` installs a tray icon when `SystemTray.isSupported()` succeeds. In that mode, the window close button hides the main frame instead of exiting the application. Explicit quit actions, including the tray `Salir de Easy MC Server` action and the no-tray fallback close path, keep the active-server confirmation and shutdown flow.
+`VentanaPrincipal` installs a tray icon when `SystemTray.isSupported()` succeeds. In that mode, the window close button hides the main frame instead of exiting the application. Explicit quit actions, including the tray `Salir de Dora` action and the no-tray fallback close path, keep the active-server confirmation and shutdown flow.
 
 Tray menu state should be rebuilt from `GestorServidores.getServidoresActivos()` so active server counts and names do not go stale. Swing frame restore and exit prompts launched from tray callbacks should return to the EDT.
 

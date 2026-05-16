@@ -351,7 +351,7 @@ public class PanelConfigServidor extends JPanel {
         }
 
         try{
-            Utilidades.guardarPropertiesUtf8(propertiesPath, out, "Edited by Easy-MC-Server");
+            Utilidades.guardarPropertiesUtf8(propertiesPath, out, "Edited by Dora");
         } catch (IOException ex){
             JOptionPane.showMessageDialog(this, tr("panel.config.save.error", "Error guardando: ") + ex.getMessage(), tr("panel.config.dialog.title", "CONFIG"), JOptionPane.ERROR_MESSAGE);
             return false;

@@ -150,11 +150,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
     private final JComboBox<VersionOption> versionCombo = new JComboBox<>(versionModel);
     private final JLabel catalogLoadingIconLabel = new JLabel();
     private final SvgIconFactory.RotatingIcon catalogLoadingIcon =
-            SvgIconFactory.createSpinning("easymcicons/hourglass.svg", 18, 18, AppTheme::getForeground);
+            SvgIconFactory.createSpinning("doraicons/hourglass.svg", 18, 18, AppTheme::getForeground);
     private final SvgIconFactory.RotatingIcon queueDownloadingIcon =
-            SvgIconFactory.createSpinning("easymcicons/loading.svg", 18, 18, () -> Color.WHITE);
+            SvgIconFactory.createSpinning("doraicons/loading.svg", 18, 18, () -> Color.WHITE);
     private final javax.swing.Icon queueCompletedIcon =
-            SvgIconFactory.create("easymcicons/check.svg", 18, 18, () -> Color.WHITE);
+            SvgIconFactory.create("doraicons/check.svg", 18, 18, () -> Color.WHITE);
     private final Timer catalogLoadingTimer;
 
     private final JLabel detailTitleLabel = new JLabel("Selecciona una extensión");
@@ -472,7 +472,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         queueCard.setBorder(BorderFactory.createEmptyBorder());
         queueCollapseButton.setToolTipText("Minimizar cola");
         AppTheme.applyHeaderIconButtonStyle(queueCollapseButton);
-        queueCollapseButton.setIcon(SvgIconFactory.create("easymcicons/arrow-down.svg", 20, 20, AppTheme::getForeground));
+        queueCollapseButton.setIcon(SvgIconFactory.create("doraicons/arrow-down.svg", 20, 20, AppTheme::getForeground));
         queueCollapseButton.addActionListener(e -> toggleQueueCollapsed());
         queueCard.getHeaderActionsPanel().add(queueCollapseButton);
 
@@ -558,7 +558,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         }
         queueCollapseButton.setToolTipText(queueCollapsed ? "Expandir cola" : "Minimizar cola");
         queueCollapseButton.setIcon(SvgIconFactory.create(
-                queueCollapsed ? "easymcicons/arrow-up.svg" : "easymcicons/arrow-down.svg",
+                queueCollapsed ? "doraicons/arrow-up.svg" : "doraicons/arrow-down.svg",
                 20,
                 20,
                 AppTheme::getForeground
@@ -2181,13 +2181,13 @@ final class ExtensionMarketplaceDialog extends JDialog {
         ExtensionInstallResolution resolution = selectedInstallResolution;
         if (selectedEntry == null) {
             queueButton.setEnabled(false);
-            queueButton.setIcon(SvgIconFactory.create("easymcicons/plus.svg", 48, 48, AppTheme::getForeground));
+            queueButton.setIcon(SvgIconFactory.create("doraicons/plus.svg", 48, 48, AppTheme::getForeground));
             queueButton.setToolTipText("Añadir a la cola");
             return;
         }
         boolean installed = resolution != null && resolution.alreadyInstalled();
         boolean queued = isQueued(selectedEntry);
-        String icon = installed || queued ? "easymcicons/trash-unselected.svg" : "easymcicons/plus.svg";
+        String icon = installed || queued ? "doraicons/trash-unselected.svg" : "doraicons/plus.svg";
         queueButton.setIcon(SvgIconFactory.create(icon, 48, 48, AppTheme::getForeground));
         queueButton.setToolTipText(installed ? "Desinstalar" : queued ? "Quitar de la cola" : "Añadir a la cola");
         queueButton.setEnabled(true);
@@ -2974,7 +2974,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
 
         JButton searchButton = new JButton();
         AppTheme.applyHeaderIconButtonStyle(searchButton);
-        searchButton.setIcon(SvgIconFactory.create("easymcicons/magnifier.svg", 24, 24, this::searchBarForeground));
+        searchButton.setIcon(SvgIconFactory.create("doraicons/magnifier.svg", 24, 24, this::searchBarForeground));
         searchButton.setToolTipText("Buscar");
         searchButton.setPreferredSize(new Dimension(30, 30));
         searchButton.addActionListener(e -> runSearch(true));
@@ -4144,7 +4144,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             loadMorePanel.setOpaque(false);
             loadMoreLabel.setFont(loadMoreLabel.getFont().deriveFont(Font.BOLD, 13.5f));
             loadMoreLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            loadMoreLabel.setIcon(SvgIconFactory.create("easymcicons/plus.svg", 18, 18, AppTheme::getForeground));
+            loadMoreLabel.setIcon(SvgIconFactory.create("doraicons/plus.svg", 18, 18, AppTheme::getForeground));
             loadMoreLabel.setIconTextGap(8);
             loadMorePanel.add(loadMoreLabel, BorderLayout.CENTER);
 
@@ -4280,7 +4280,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             sideLabel.setVisible(true);
             rowActionLabel.setVisible(showAction);
             rowActionLabel.setPreferredSize(new Dimension(56, 52));
-            rowActionLabel.setIcon(SvgIconFactory.create(installed || queued ? "easymcicons/trash-unselected.svg" : "easymcicons/plus.svg", 48, 48, AppTheme::getForeground));
+            rowActionLabel.setIcon(SvgIconFactory.create(installed || queued ? "doraicons/trash-unselected.svg" : "doraicons/plus.svg", 48, 48, AppTheme::getForeground));
             eastPanel.setPreferredSize(new Dimension(badgeWidth + actionWidth, statusHeight));
             eastPanel.setMinimumSize(new Dimension(badgeWidth + actionWidth, statusHeight));
             int descriptionWidth = Math.max(170, textColumnWidth);
@@ -4457,7 +4457,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             remove.setBackground(AppTheme.withAlpha(AppTheme.getForeground(), 16));
             remove.setBorder(AppTheme.createRoundedBorder(new Insets(0, 0, 0, 0), AppTheme.withAlpha(AppTheme.getBorderColor(), 120), 1f));
             remove.setIcon(SvgIconFactory.create(
-                    "easymcicons/trash-unselected.svg",
+                    "doraicons/trash-unselected.svg",
                     18,
                     18,
                     () -> currentState == QueueState.DOWNLOADING ? AppTheme.getMutedForeground() : AppTheme.getForeground()
@@ -4473,7 +4473,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
             state.setPreferredSize(new Dimension(34, 34));
             if (currentState == QueueState.PENDING) {
                 state.setText(null);
-                state.setIcon(SvgIconFactory.create("easymcicons/hourglass.svg", 18, 18, () -> stateForeground));
+                state.setIcon(SvgIconFactory.create("doraicons/hourglass.svg", 18, 18, () -> stateForeground));
             } else if (currentState == QueueState.DOWNLOADING) {
                 state.setText(null);
                 state.setIcon(queueDownloadingIcon);

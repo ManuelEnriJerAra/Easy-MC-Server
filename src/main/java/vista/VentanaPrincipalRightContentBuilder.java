@@ -158,7 +158,7 @@ final class VentanaPrincipalRightContentBuilder {
         FlatButton button = new FlatButton();
         AppTheme.applyHeaderIconButtonStyle(button);
         button.setToolTipText("Convertir a una plataforma compatible");
-        button.setIcon(SvgIconFactory.create("easymcicons/box-unselected.svg", 18, 18));
+        button.setIcon(SvgIconFactory.create("doraicons/box-unselected.svg", 18, 18));
         button.addActionListener(e -> {
             Server converted = gestorServidores.convertirServidorAPlataformaCompatible(server);
             if (converted != null && onServerConverted != null) {

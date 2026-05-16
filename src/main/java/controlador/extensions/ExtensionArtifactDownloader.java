@@ -13,7 +13,7 @@ import java.time.Duration;
 import java.util.Locale;
 
 public final class ExtensionArtifactDownloader implements FileDownloader {
-    private static final String USER_AGENT = "Easy-MC-Server/alpha (+https://github.com/ManuJara/Easy-MC-Server)";
+    private static final String USER_AGENT = "Dora/alpha (+https://github.com/ManuJara/Dora)";
 
     private final HttpClient client;
 

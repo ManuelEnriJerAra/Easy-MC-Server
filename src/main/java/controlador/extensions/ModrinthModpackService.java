@@ -177,9 +177,9 @@ public class ModrinthModpackService {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("formatVersion", 1);
         root.put("game", "minecraft");
-        root.put("versionId", "easy-mc-" + UUID.randomUUID());
+        root.put("versionId", "dora-" + UUID.randomUUID());
         root.put("name", safePackName(server));
-        root.put("summary", "Modpack exportado desde Easy-MC-Server.");
+        root.put("summary", "Modpack exportado desde Dora.");
         root.put("files", files);
         root.put("dependencies", dependencies);
 
@@ -1142,7 +1142,7 @@ public class ModrinthModpackService {
     }
 
     private String safePackName(Server server) {
-        return firstNonBlank(server == null ? null : server.getDisplayName(), "Easy MC Server Pack");
+        return firstNonBlank(server == null ? null : server.getDisplayName(), "Dora Pack");
     }
 
     private String text(JsonNode node, String fieldName) {

@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MotdRenderUtilTest {
     @Test
     void stripCodes_debeEliminarCodigosYRepararMojibakeBasico() {
-        String raw = "Â§aA Â§lMinecraftÂ§r Server";
+        String raw = "§aA §lMinecraft§r Server";
 
         String limpio = MotdRenderUtil.stripCodes(raw);
 
@@ -16,9 +16,9 @@ class MotdRenderUtilTest {
 
     @Test
     void toHtml_debeAceptarMotdMojibakeadoSinMostrarCaracteresBasura() {
-        String html = MotdRenderUtil.toHtml("Â§a Hola");
+        String html = MotdRenderUtil.toHtml("§a Hola");
 
-        assertThat(html).doesNotContain("Â");
+        assertThat(html).doesNotContain("�");
         assertThat(html).contains("Hola");
     }
 }

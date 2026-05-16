@@ -66,7 +66,7 @@ final class ExtensionIconLoader {
             TimeUnit.SECONDS,
             new PriorityBlockingQueue<>(),
             runnable -> {
-                Thread thread = new Thread(runnable, "easy-mc-extension-icons");
+                Thread thread = new Thread(runnable, "dora-extension-icons");
                 thread.setDaemon(true);
                 return thread;
             }
@@ -80,7 +80,7 @@ final class ExtensionIconLoader {
     private static final int READ_TIMEOUT_MILLIS = 10000;
     private static final AtomicBoolean CACHE_READY = new AtomicBoolean();
     private static final boolean CONSOLE_IMAGE_LOGGING = Boolean.parseBoolean(
-            System.getProperty("easy.mc.marketplace.imageLogging", "false")
+            System.getProperty("dora.marketplace.imageLogging", "false")
     );
 
     static {
@@ -303,7 +303,7 @@ final class ExtensionIconLoader {
         connection.setUseCaches(false);
         connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
         connection.setReadTimeout(READ_TIMEOUT_MILLIS);
-        connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://modrinth.com)");
+        connection.setRequestProperty("User-Agent", "Dora/1.0 (+https://modrinth.com)");
         connection.setRequestProperty("Accept", "image/png,image/jpeg,*/*;q=0.2");
         if (connection instanceof HttpURLConnection http) {
             http.setInstanceFollowRedirects(true);
@@ -362,7 +362,7 @@ final class ExtensionIconLoader {
             connection.setUseCaches(false);
             connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
             connection.setReadTimeout(READ_TIMEOUT_MILLIS);
-            connection.setRequestProperty("User-Agent", "Easy-MC-Server/1.0 (+https://modrinth.com)");
+            connection.setRequestProperty("User-Agent", "Dora/1.0 (+https://modrinth.com)");
             connection.setRequestProperty("Accept", "image/png,image/jpeg,*/*;q=0.2");
             if (connection instanceof HttpURLConnection http) {
                 http.setInstanceFollowRedirects(true);
@@ -486,11 +486,11 @@ final class ExtensionIconLoader {
     }
 
     private static Icon placeholder(int size) {
-        return SvgIconFactory.create("easymcicons/box-unselected.svg", size, size);
+        return SvgIconFactory.create("doraicons/box-unselected.svg", size, size);
     }
 
     private static Icon failurePlaceholder(int size) {
-        return SvgIconFactory.create("easymcicons/box-unselected.svg", size, size);
+        return SvgIconFactory.create("doraicons/box-unselected.svg", size, size);
     }
 
     private static String imageMagic(byte[] bytes) {

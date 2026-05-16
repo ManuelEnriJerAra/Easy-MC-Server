@@ -1,8 +1,8 @@
-# Easy MC Server
+﻿# Dora
 
-Easy MC Server is a Java desktop application for managing Minecraft servers from a single graphical interface. It focuses on everyday administration tasks such as creating or importing servers, starting and stopping them, reading live console output, editing server settings, managing worlds, and installing extensions.
+Dora is a Java desktop application for managing Minecraft servers from a single graphical interface. It focuses on everyday administration tasks such as creating or importing servers, starting and stopping them, reading live console output, editing server settings, managing worlds, and installing extensions.
 
-![Easy MC Server 0.6](docs/screenshots/0.6.home.png)
+![Dora 0.6](docs/screenshots/0.6.home.png)
 
 ## Features
 
@@ -43,7 +43,7 @@ mvn -q -DskipTests compile
 ## Run
 
 ```bash
-java -jar target/easy_mc_server_0.6-beta.jar
+java -jar target/dora_0.6-beta.jar
 ```
 
 You can also run the application directly from your IDE using the main class:

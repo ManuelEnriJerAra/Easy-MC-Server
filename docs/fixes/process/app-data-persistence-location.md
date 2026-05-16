@@ -1,4 +1,4 @@
-# App Data Persistence Location Fix Process
+﻿# App Data Persistence Location Fix Process
 
 ## Status
 
@@ -24,7 +24,7 @@ Resolve the pending issue where app-managed persistence could be written beside 
 
 ## Implementation Notes
 
-`AppPaths` exposes `rootDirectory()`, `configDirectory()`, `cacheDirectory()`, `locksDirectory()`, and `statsDirectory()`. The default root is `~/.easy-mc-server`, with a test override through `easy.mc.appRoot`.
+`AppPaths` exposes `rootDirectory()`, `configDirectory()`, `cacheDirectory()`, `locksDirectory()`, and `statsDirectory()`. The default root is `~/.dora`, with a test override through `dora.appRoot`.
 
 Legacy migration still resolves the old install/code-adjacent directory through `AppPaths.legacyBaseDirectory()`. When a new target file does not exist, old files are moved into the new config/stats locations.
 

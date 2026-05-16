@@ -33,8 +33,8 @@ public final class ProcessWizardDialog {
     private final JLabel statusLabel = new JLabel(" ");
     private final JButton backButton = new JButton();
     private final JButton nextButton = new JButton();
-    private final Icon nextIcon = SvgIconFactory.create("easymcicons/arrow-right.svg", 28, 28, AppTheme::getForeground);
-    private final Icon finishIcon = SvgIconFactory.create("easymcicons/rocket.svg", 28, 28, AppTheme::getForeground);
+    private final Icon nextIcon = SvgIconFactory.create("doraicons/arrow-right.svg", 28, 28, AppTheme::getForeground);
+    private final Icon finishIcon = SvgIconFactory.create("doraicons/rocket.svg", 28, 28, AppTheme::getForeground);
     private final List<Step> steps;
     private final Options options;
     private int stepIndex;
@@ -79,7 +79,7 @@ public final class ProcessWizardDialog {
 
         AppTheme.applyHeaderIconButtonStyle(backButton);
         AppTheme.applyHeaderIconButtonStyle(nextButton);
-        backButton.setIcon(SvgIconFactory.create("easymcicons/arrow-left.svg", 28, 28, AppTheme::getForeground));
+        backButton.setIcon(SvgIconFactory.create("doraicons/arrow-left.svg", 28, 28, AppTheme::getForeground));
         nextButton.setIcon(nextIcon);
         backButton.setToolTipText("Anterior");
         nextButton.setToolTipText("Siguiente");

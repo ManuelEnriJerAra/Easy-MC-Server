@@ -1,4 +1,4 @@
-# Debug Mode Pipeline
+﻿# Debug Mode Pipeline
 
 Debug mode is controlled globally by `src/main/java/vista/DebugMode.java`.
 
@@ -46,7 +46,7 @@ Use:
 
 - `AppTheme.applyHeaderIconButtonStyle(...)`
 - `SvgIconFactory.apply(...)`
-- `easymcicons/plus.svg`
-- `easymcicons/minus.svg`
+- `doraicons/plus.svg`
+- `doraicons/minus.svg`
 
 Always set tooltips for debug controls.

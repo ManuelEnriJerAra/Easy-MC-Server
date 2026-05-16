@@ -153,7 +153,7 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
                 request,
                 ServerPlatform.FORGE,
                 request.platformVersion(),
-                "Easy-MC Forge " + request.minecraftVersion(),
+                "Dora Forge " + request.minecraftVersion(),
                 List.of(request.targetDirectory().resolve("mods"), request.targetDirectory().resolve("config"))
         );
     }

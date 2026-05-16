@@ -1,4 +1,4 @@
-# Server Platform Icon Selector Process
+﻿# Server Platform Icon Selector Process
 
 ## Status
 
@@ -25,7 +25,7 @@ Implement a reusable icon-based `ServerPlatformAdapter` selector for server crea
 
 The creation wizard now builds a `ProcessWizardDialog.Step` list for platform, version, parent folder, and folder-name steps. `ProcessWizardDialog` exposes an instance API so the creation flow can refresh the Next/Create button when selector, version, EULA, folder, and background download-check state changes.
 
-`PlatformSelectorPanel` sorts known platforms into the requested display order, tries `easymcicons/<platform>.svg`, and falls back to `easymcicons/box.svg` when the platform-specific asset is not present.
+`PlatformSelectorPanel` sorts known platforms into the requested display order, tries `doraicons/<platform>.svg`, and falls back to `doraicons/box.svg` when the platform-specific asset is not present.
 
 Conversion targets are filtered through `ServerPlatformAdapter.supportsAutomatedCreation()` before rendering, so platforms that cannot be converted automatically are not presented.
 

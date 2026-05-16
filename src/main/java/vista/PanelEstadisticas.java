@@ -30,7 +30,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -1455,7 +1454,6 @@ public class PanelEstadisticas extends JPanel {
     private void borrarHistorialPersistido() {
         try {
             Files.deleteIfExists(getHistoryFile(getStatsSettingsServer(), getServerHistoryKey()));
-            Files.deleteIfExists(getLegacyHistoryFile(getServerHistoryKey()));
         } catch (IOException e) {
             System.err.println("No se ha podido borrar el historial de estadísticas de " + getServerHistoryKey() + ": " + e.getMessage());
         }
@@ -3315,7 +3313,6 @@ public class PanelEstadisticas extends JPanel {
 
     private static StatsHistory loadHistoryFromDiskByKey(Server server, String serverKey) {
         Path historyFile = getHistoryFile(server, serverKey);
-        migrateLegacyHistoryIfNeeded(server, serverKey, historyFile);
         if (!Files.exists(historyFile)) {
             return new StatsHistory();
         }
@@ -3350,7 +3347,6 @@ public class PanelEstadisticas extends JPanel {
             Files.createDirectories(historyFile.getParent());
             PersistedStatsHistory model = history.toPersistedModel();
             HISTORY_MAPPER.writerWithDefaultPrettyPrinter().writeValue(historyFile.toFile(), model);
-            cleanupLegacyHistoryFile(serverKey, historyFile);
             history.dirty = false;
         } catch (Exception e) {
             System.err.println("No se ha podido guardar el historial de estadísticas de " + serverKey + ": " + e.getMessage());
@@ -3359,7 +3355,7 @@ public class PanelEstadisticas extends JPanel {
 
     private static Path getHistoryFile(Server server, String serverKey) {
         if (server != null && server.getServerDir() != null && !server.getServerDir().isBlank()) {
-            return Path.of(server.getServerDir()).resolve("easy-mc-stats.json");
+            return Path.of(server.getServerDir()).resolve("dora-stats.json");
         }
         return getAppStatsHistoryFile(serverKey);
     }
@@ -3368,37 +3364,9 @@ public class PanelEstadisticas extends JPanel {
         return AppPaths.statsDirectory().resolve(getSafeHistoryFileName(serverKey));
     }
 
-    private static Path getLegacyHistoryFile(String serverKey) {
-        return AppPaths.legacyBaseDirectory().resolve("stats").resolve(getSafeHistoryFileName(serverKey));
-    }
-
     private static String getSafeHistoryFileName(String serverKey) {
         String safeName = (serverKey == null || serverKey.isBlank()) ? "__no_server__" : serverKey.replaceAll("[^a-zA-Z0-9._-]", "_");
         return safeName + ".json";
-    }
-
-    private static void migrateLegacyHistoryIfNeeded(Server server, String serverKey, Path targetHistoryFile) {
-        Path legacyHistoryFile = getLegacyHistoryFile(serverKey);
-        if (Objects.equals(legacyHistoryFile, targetHistoryFile) || !Files.exists(legacyHistoryFile) || Files.exists(targetHistoryFile)) {
-            return;
-        }
-        try {
-            Files.createDirectories(targetHistoryFile.getParent());
-            Files.move(legacyHistoryFile, targetHistoryFile, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            System.err.println("No se ha podido migrar el historial de estadísticas de " + serverKey + ": " + e.getMessage());
-        }
-    }
-
-    private static void cleanupLegacyHistoryFile(String serverKey, Path currentHistoryFile) {
-        Path legacyHistoryFile = getLegacyHistoryFile(serverKey);
-        if (Objects.equals(legacyHistoryFile, currentHistoryFile)) {
-            return;
-        }
-        try {
-            Files.deleteIfExists(legacyHistoryFile);
-        } catch (IOException ignored) {
-        }
     }
 
     private static void sampleActiveServers() {

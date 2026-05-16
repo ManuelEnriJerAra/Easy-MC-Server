@@ -1,4 +1,4 @@
-# Models And Data Pipeline
+﻿# Models And Data Pipeline
 
 Use this guide before editing model classes or cross-cutting data contracts.
 
@@ -10,7 +10,7 @@ Package: `src/main/java/modelo`.
 - `ServerConfig`: persisted per-server config.
 - `ServerProperties`: server.properties representation/helper.
 - `World`: world identity and metadata.
-- `EasyMCConfig`: app-level persisted config.
+- `DoraConfig`: app-level persisted config.
 - `MinecraftConstants`: shared Minecraft option constants.
 
 ## Extension Models

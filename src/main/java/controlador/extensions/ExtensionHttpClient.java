@@ -60,7 +60,7 @@ class ExtensionHttpClient {
                                 .uri(uri)
                                 .timeout(Duration.ofSeconds(12))
                                 .header("Accept", "application/json")
-                                .header("User-Agent", "Easy-MC-Server/alpha");
+                                .header("User-Agent", "Dora/alpha");
                         if (headers != null) {
                             for (Map.Entry<String, String> header : headers.entrySet()) {
                                 if (header == null || header.getKey() == null || header.getKey().isBlank()

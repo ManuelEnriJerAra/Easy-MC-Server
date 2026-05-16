@@ -116,7 +116,7 @@ public final class NeoForgeServerPlatformAdapter extends AbstractServerPlatformA
                 request,
                 ServerPlatform.NEOFORGE,
                 request.platformVersion(),
-                "Easy-MC NeoForge " + request.minecraftVersion(),
+                "Dora NeoForge " + request.minecraftVersion(),
                 List.of(request.targetDirectory().resolve("mods"), request.targetDirectory().resolve("config"))
         );
     }

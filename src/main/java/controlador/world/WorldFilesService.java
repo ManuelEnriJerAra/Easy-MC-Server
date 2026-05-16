@@ -12,10 +12,8 @@ import java.nio.file.Path;
 import java.util.Properties;
 
 public final class WorldFilesService {
-    public static final String WORLD_METADATA_FILE = "easy-mc-world-config.properties";
-    public static final String PREVIEW_METADATA_FILE = "easy-mc-preview-overlay.properties";
-    private static final String LEGACY_WORLD_METADATA_FILE = ".emw-world.properties";
-    private static final String LEGACY_PREVIEW_METADATA_FILE = ".preview-overlay.properties";
+    public static final String WORLD_METADATA_FILE = "dora-world-config.properties";
+    public static final String PREVIEW_METADATA_FILE = "dora-preview-overlay.properties";
 
     private WorldFilesService() {
     }
@@ -43,7 +41,7 @@ public final class WorldFilesService {
             Files.createDirectories(metadataPath.getParent());
         }
         try (OutputStream out = Files.newOutputStream(metadataPath)) {
-            metadata.store(out, "Easy MC Server managed world metadata");
+            metadata.store(out, "Dora managed world metadata");
         }
     }
 
@@ -79,18 +77,12 @@ public final class WorldFilesService {
 
     public static Path getPreviewOverlayMetadataPath(World world) {
         Path worldDir = getWorldDirectory(world);
-        return worldDir == null ? null : resolveMigratedPath(
-                worldDir.resolve(PREVIEW_METADATA_FILE),
-                worldDir.resolve(LEGACY_PREVIEW_METADATA_FILE)
-        );
+        return worldDir == null ? null : worldDir.resolve(PREVIEW_METADATA_FILE);
     }
 
     public static Path getWorldMetadataPath(World world) {
         Path worldDir = getWorldDirectory(world);
-        return worldDir == null ? null : resolveMigratedPath(
-                worldDir.resolve(WORLD_METADATA_FILE),
-                worldDir.resolve(LEGACY_WORLD_METADATA_FILE)
-        );
+        return worldDir == null ? null : worldDir.resolve(WORLD_METADATA_FILE);
     }
 
     public static Path getServerPropertiesPath(Server server) {
@@ -107,18 +99,4 @@ public final class WorldFilesService {
         return Path.of(world.getWorldDir());
     }
 
-    private static Path resolveMigratedPath(Path targetPath, Path legacyPath) {
-        if (targetPath == null || legacyPath == null || Files.exists(targetPath) || !Files.exists(legacyPath)) {
-            return targetPath;
-        }
-        try {
-            if (targetPath.getParent() != null) {
-                Files.createDirectories(targetPath.getParent());
-            }
-            Files.move(legacyPath, targetPath);
-            return targetPath;
-        } catch (IOException ignored) {
-            return legacyPath;
-        }
-    }
 }

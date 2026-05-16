@@ -1,4 +1,4 @@
-# Server Lifecycle Pipeline
+﻿# Server Lifecycle Pipeline
 
 Use this guide before editing server import/listing/persistence, start/stop/restart, backups, deletion, or process handling.
 
@@ -25,7 +25,7 @@ Typical responsibilities:
 - Expose `PropertyChangeSupport` events for UI panels.
 - Keep selected server consistent.
 
-Before changing persistence, inspect `GestorConfiguracion`, `EasyMCConfig`, `Server`, and tests in `GestorServidoresTest`.
+Before changing persistence, inspect `GestorConfiguracion`, `DoraConfig`, `Server`, and tests in `GestorServidoresTest`.
 
 ## Start Pipeline
 

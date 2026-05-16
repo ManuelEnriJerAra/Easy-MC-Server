@@ -1,4 +1,4 @@
-# Process Wizard
+﻿# Process Wizard
 
 ## Status
 
@@ -28,7 +28,7 @@ Modpack preflight now reads pack metadata and synchronizes existing extensions i
 - `src/main/java/vista/PanelExtensiones.java`
 - `src/main/java/controlador/GestorServidores.java`
 - `src/test/java/controlador/GestorServidoresTest.java`
-- `src/main/resources/easymcicons/rocket.svg`
+- `src/main/resources/doraicons/rocket.svg`
 - `docs/pipelines/ui-component-pipeline.md`
 - `docs/pipelines/extensions-pipeline.md`
 - `docs/pipelines/server-creation-pipeline.md`

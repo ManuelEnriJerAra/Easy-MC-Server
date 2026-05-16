@@ -80,9 +80,9 @@ public class PanelControlServidor extends JPanel {
         btnForzarCierreServidor.setBackground(AppTheme.getDestructiveColor());
         btnForzarCierreServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        FlatSVGIcon iconPlay = new FlatSVGIcon("easymcicons/play.svg", 32, 32);
-        FlatSVGIcon iconPause = new FlatSVGIcon("easymcicons/stop.svg", 32, 32);
-        FlatSVGIcon iconReset = new FlatSVGIcon("easymcicons/reset.svg", 32, 32);
+        FlatSVGIcon iconPlay = new FlatSVGIcon("doraicons/play.svg", 32, 32);
+        FlatSVGIcon iconPause = new FlatSVGIcon("doraicons/stop.svg", 32, 32);
+        FlatSVGIcon iconReset = new FlatSVGIcon("doraicons/reset.svg", 32, 32);
 
         configurarBotonAccion(btnIniciarServidor, iconPlay);
         configurarBotonAccion(btnPararServidor, iconPause);

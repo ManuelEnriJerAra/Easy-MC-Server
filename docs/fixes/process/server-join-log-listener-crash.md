@@ -1,4 +1,4 @@
-# Server Join Log Listener Crash Fix Process
+﻿# Server Join Log Listener Crash Fix Process
 
 ## Status
 
@@ -10,7 +10,7 @@ Fixed
 
 ## Scope
 
-Investigate and harden the path where Easy MC Server can crash or appear to freeze when a running server emits player join lines. This covers server process log reading, console listener fan-out, and player-panel listeners. It does not change Minecraft server startup commands or player list file editing behavior.
+Investigate and harden the path where Dora can crash or appear to freeze when a running server emits player join lines. This covers server process log reading, console listener fan-out, and player-panel listeners. It does not change Minecraft server startup commands or player list file editing behavior.
 
 ## Step Tracker
 

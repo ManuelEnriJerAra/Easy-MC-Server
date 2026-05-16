@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentMap;
 final class PlatformRemoteLookupPolicy {
     static final int CONNECT_TIMEOUT_MS = 5_000;
     static final int READ_TIMEOUT_MS = 10_000;
-    static final String USER_AGENT = "Easy-MC-Server/1.0 (+https://github.com/)";
+    static final String USER_AGENT = "Dora/1.0 (+https://github.com/)";
 
     private static final Duration SUCCESS_TTL = Duration.ofMinutes(10);
     private static final Duration FAILURE_TTL = Duration.ofSeconds(30);

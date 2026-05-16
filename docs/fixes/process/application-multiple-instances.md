@@ -1,4 +1,4 @@
-# Application Multiple Instances Fix Process
+﻿# Application Multiple Instances Fix Process
 
 ## Status
 
@@ -10,7 +10,7 @@ Fixed
 
 ## Scope
 
-Resolve the pending issue where multiple Easy MC Server JVMs could start against the same user profile/config scope. This covers adding a startup guard before controller/window initialization, keeping the OS file lock alive for the application lifetime, asking the already-running instance to restore/focus itself on duplicate launch, and documenting the solved behavior.
+Resolve the pending issue where multiple Dora JVMs could start against the same user profile/config scope. This covers adding a startup guard before controller/window initialization, keeping the OS file lock alive for the application lifetime, asking the already-running instance to restore/focus itself on duplicate launch, and documenting the solved behavior.
 
 ## Step Tracker
 
@@ -25,7 +25,7 @@ Resolve the pending issue where multiple Easy MC Server JVMs could start against
 
 ## Implementation Notes
 
-The guard uses `FileChannel.tryLock()` on `AppPaths.locksDirectory().resolve("easy-mc-server.lock")`. A second JVM receives `null` from `tryLock`; a second lock attempt inside the same JVM is treated the same way by catching `OverlappingFileLockException`.
+The guard uses `FileChannel.tryLock()` on `AppPaths.locksDirectory().resolve("dora.lock")`. A second JVM receives `null` from `tryLock`; a second lock attempt inside the same JVM is treated the same way by catching `OverlappingFileLockException`.
 
 `Main` acquires the lock before `SwingUtilities.invokeLater(...)`, before theme/config loading, and before creating `GestorServidores`. If the lock is unavailable, the duplicate launch sends `FOCUS` to the first instance's localhost handoff port and returns. The first instance restores either `VentanaPrincipal` or `NoServerFrame`, including when the main frame was hidden in the system tray. If the handoff fails, the duplicate launch shows the Spanish already-running fallback message.
 

@@ -17,7 +17,7 @@ Refresh the repository README and project metadata so the public project present
 | Status | Step | Summary |
 | --- | --- | --- |
 | DONE | 1. Inspect existing public docs | Reviewed `README.md`, Maven metadata, existing screenshot assets, and feature documentation standards. |
-| DONE | 2. Rewrite README for users | Reworked the README around what users can do with Easy MC Server, added an app walkthrough, and kept build details after the user-facing sections. |
+| DONE | 2. Rewrite README for users | Reworked the README around what users can do with Dora, added an app walkthrough, and kept build details after the user-facing sections. |
 | DONE | 3. Add screenshot slots | Added image references for the main areas the user plans to capture, reusing existing screenshots where available. |
 | DONE | 4. Update metadata description | Added Maven `name` and `description` fields with a short SEO-oriented Spanish description. |
 | DONE | 5. Verify documentation changes | Checked the targeted diff and whitespace for the edited documentation and metadata files. |

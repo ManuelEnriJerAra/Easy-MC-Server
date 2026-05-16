@@ -29,9 +29,7 @@ import java.util.logging.Logger;
 public final class InstalledExtensionsCacheService {
     private static final Logger LOGGER = Logger.getLogger(InstalledExtensionsCacheService.class.getName());
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String CACHE_FILE_NAME = "easy-mc-extensions.json";
-    private static final String PREVIOUS_CACHE_FILE_NAME = "easy-mc-extension-list.json";
-    private static final String LEGACY_CACHE_FILE_NAME = "easy-mc-mod-list.json";
+    private static final String CACHE_FILE_NAME = "dora-extensions.json";
     private static final int CACHE_SCHEMA_VERSION = 1;
 
     private final Map<Path, MemoryCacheEntry> memoryCache = new ConcurrentHashMap<>();
@@ -106,16 +104,7 @@ public final class InstalledExtensionsCacheService {
     }
 
     private Path resolveReadableCacheFile(Server server) {
-        Path cacheFile = resolveCacheFile(server);
-        if (cacheFile == null || Files.isRegularFile(cacheFile)) {
-            return cacheFile;
-        }
-        Path legacyCacheFile = cacheFile.resolveSibling(LEGACY_CACHE_FILE_NAME);
-        if (Files.isRegularFile(legacyCacheFile)) {
-            return legacyCacheFile;
-        }
-        Path previousCacheFile = cacheFile.resolveSibling(PREVIOUS_CACHE_FILE_NAME);
-        return Files.isRegularFile(previousCacheFile) ? previousCacheFile : cacheFile;
+        return resolveCacheFile(server);
     }
 
     private List<ServerExtension> normalizeExtensions(List<ServerExtension> extensions) {

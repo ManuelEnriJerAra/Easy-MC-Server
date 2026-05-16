@@ -1,4 +1,4 @@
-# System Tray Process
+﻿# System Tray Process
 
 ## Status
 
@@ -10,7 +10,7 @@ Implemented
 
 ## Scope
 
-Implement a local system tray integration for the main Easy MC Server window from `docs/pending-features/system-tray.md`. The feature covers hiding `VentanaPrincipal` to the tray when supported, restoring the window from tray actions, showing current active server information in the tray menu, and moving the active-server shutdown confirmation to an explicit quit action. The no-tray fallback keeps the existing safe exit confirmation path.
+Implement a local system tray integration for the main Dora window from `docs/pending-features/system-tray.md`. The feature covers hiding `VentanaPrincipal` to the tray when supported, restoring the window from tray actions, showing current active server information in the tray menu, and moving the active-server shutdown confirmation to an explicit quit action. The no-tray fallback keeps the existing safe exit confirmation path.
 
 ## Step Tracker
 

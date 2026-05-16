@@ -22,7 +22,7 @@ Hide Forge creation options that the current automated installer flow cannot ins
 
 ## Implementation Notes
 
-Forge Maven metadata includes old coordinates such as `1.1-1.3.4.29`, but those coordinates expose legacy ZIP artifacts rather than `forge-<artifactVersion>-installer.jar`. Easy MC currently installs Forge through the installer jar URL, so those options should not be listed.
+Forge Maven metadata includes old coordinates such as `1.1-1.3.4.29`, but those coordinates expose legacy ZIP artifacts rather than `forge-<artifactVersion>-installer.jar`. Dora currently installs Forge through the installer jar URL, so those options should not be listed.
 
 Checked representative Maven artifacts:
 

@@ -1,4 +1,4 @@
-# README User SEO Refresh
+﻿# README User SEO Refresh
 
 ## Status
 
@@ -6,7 +6,7 @@ Implemented
 
 ## Feature
 
-The public README now presents Easy MC Server as an end-user Minecraft server manager instead of opening primarily as developer documentation.
+The public README now presents Dora as an end-user Minecraft server manager instead of opening primarily as developer documentation.
 
 ## Motivation
 

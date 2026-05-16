@@ -71,8 +71,8 @@ import controlador.world.WorldPreviewOption;
 import modelo.Server;
 
 public class PanelPrevisualizacion extends JPanel {
-    private static final String[] EASY_MC_IMAGE_RESOURCES = {
-            "easymcimages/logo_64.png"
+    private static final String[] DORA_IMAGE_RESOURCES = {
+            "doraimages/logo_64.png"
     };
 
     private final GestorServidores gestorServidores;
@@ -91,7 +91,7 @@ public class PanelPrevisualizacion extends JPanel {
         iconoRedondo.setToolTipText("Cambiar icono del servidor");
         iconoRedondo.setHoverOverlayEnabled(true);
         iconoRedondo.setHoverIcon(SvgIconFactory.create(
-                "easymcicons/gallery-edit.svg",
+                "doraicons/gallery-edit.svg",
                 80,
                 80,
                 AppTheme::getImageHoverTextColor
@@ -555,12 +555,12 @@ public class PanelPrevisualizacion extends JPanel {
     }
 
     private ImageSelectionResult seleccionarImagenServidor(Server server) throws IOException {
-        List<EasyMcImageOption> easyMcImages = obtenerEasyMcImages();
+        List<DoraImageOption> doraImages = obtenerDoraImages();
         List<Server> servidores = gestorServidores != null && gestorServidores.getListaServidores() != null
                 ? gestorServidores.getListaServidores()
                 : List.of();
         Window owner = SwingUtilities.getWindowAncestor(this);
-        return SelectorImagenServidorDialog.show(owner, servidores, server, easyMcImages, this::elegirImagenNativa);
+        return SelectorImagenServidorDialog.show(owner, servidores, server, doraImages, this::elegirImagenNativa);
     }
 
     private File elegirImagenNativa(){
@@ -591,7 +591,7 @@ public class PanelPrevisualizacion extends JPanel {
         return new File(dir, file);
     }
 
-    private record EasyMcImageOption(String name, String resourcePath) {}
+    private record DoraImageOption(String name, String resourcePath) {}
     private record ImageSelectionResult(BufferedImage image, boolean useDirectly) {}
 
     @FunctionalInterface
@@ -599,9 +599,9 @@ public class PanelPrevisualizacion extends JPanel {
         File pick();
     }
 
-    private List<EasyMcImageOption> obtenerEasyMcImages() {
-        List<EasyMcImageOption> images = new ArrayList<>();
-        for(String resourcePath : EASY_MC_IMAGE_RESOURCES){
+    private List<DoraImageOption> obtenerDoraImages() {
+        List<DoraImageOption> images = new ArrayList<>();
+        for(String resourcePath : DORA_IMAGE_RESOURCES){
             if(resourcePath == null || resourcePath.isBlank()) continue;
             if(getClass().getClassLoader().getResource(resourcePath) == null) continue;
 
@@ -610,7 +610,7 @@ public class PanelPrevisualizacion extends JPanel {
             if(slash >= 0 && slash + 1 < fileName.length()){
                 fileName = fileName.substring(slash + 1);
             }
-            images.add(new EasyMcImageOption(fileName, resourcePath));
+            images.add(new DoraImageOption(fileName, resourcePath));
         }
         return images;
     }
@@ -646,7 +646,7 @@ public class PanelPrevisualizacion extends JPanel {
             }
         }
 
-        private static ImageSelectionResult show(Window owner, List<Server> servers, Server selectedServer, List<EasyMcImageOption> easyMcImages, ImageFilePicker picker) throws IOException {
+        private static ImageSelectionResult show(Window owner, List<Server> servers, Server selectedServer, List<DoraImageOption> doraImages, ImageFilePicker picker) throws IOException {
             JDialog dialog = new JDialog(owner, "Seleccionar imagen del servidor", Dialog.ModalityType.APPLICATION_MODAL);
             dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
@@ -664,7 +664,7 @@ public class PanelPrevisualizacion extends JPanel {
             JPanel center = new JPanel(new BorderLayout(12, 12));
             center.setOpaque(false);
             center.add(crearZonaArrastre(dialog, result, picker), BorderLayout.NORTH);
-            center.add(crearListadoImagenes(dialog, servers, selectedServer, easyMcImages, result), BorderLayout.CENTER);
+            center.add(crearListadoImagenes(dialog, servers, selectedServer, doraImages, result), BorderLayout.CENTER);
             content.add(center, BorderLayout.CENTER);
 
             JButton cancel = new FlatButton();
@@ -740,12 +740,12 @@ public class PanelPrevisualizacion extends JPanel {
             return uploadPanel;
         }
 
-        private static JComponent crearListadoImagenes(JDialog dialog, List<Server> servers, Server selectedServer, List<EasyMcImageOption> easyMcImages, ImageSelectionResult[] result) {
+        private static JComponent crearListadoImagenes(JDialog dialog, List<Server> servers, Server selectedServer, List<DoraImageOption> doraImages, ImageSelectionResult[] result) {
             JPanel sections = new ViewportFillPanel();
             sections.setOpaque(false);
             sections.setLayout(new BoxLayout(sections, BoxLayout.Y_AXIS));
 
-            sections.add(crearSeccionEasyMcImages(dialog, easyMcImages, result));
+            sections.add(crearSeccionDoraImages(dialog, doraImages, result));
             sections.add(Box.createVerticalStrut(12));
             sections.add(crearSeccionPreviews(dialog, servers, selectedServer, result));
 
@@ -760,19 +760,19 @@ public class PanelPrevisualizacion extends JPanel {
             return scrollPane;
         }
 
-        private static JComponent crearSeccionEasyMcImages(JDialog dialog, List<EasyMcImageOption> easyMcImages, ImageSelectionResult[] result) {
+        private static JComponent crearSeccionDoraImages(JDialog dialog, List<DoraImageOption> doraImages, ImageSelectionResult[] result) {
             JPanel wrap = new JPanel(new WrapLayout(FlowLayout.LEFT, 12, 12));
             wrap.setOpaque(false);
 
-            if(easyMcImages == null || easyMcImages.isEmpty()){
+            if(doraImages == null || doraImages.isEmpty()){
                 wrap.add(crearTarjetaVacia("No hay imágenes internas disponibles ahora mismo."));
             } else {
-                for(EasyMcImageOption image : easyMcImages){
-                    wrap.add(crearBotonEasyMcImage(dialog, image, result));
+                for(DoraImageOption image : doraImages){
+                    wrap.add(crearBotonDoraImage(dialog, image, result));
                 }
             }
 
-            JPanel section = BoxCategory.createTitledSection("Easy MC Images", 8);
+            JPanel section = BoxCategory.createTitledSection("Dora Images", 8);
             section.add(wrap, BorderLayout.CENTER);
             return section;
         }
@@ -883,7 +883,7 @@ public class PanelPrevisualizacion extends JPanel {
             return card;
         }
 
-        private static JComponent crearBotonEasyMcImage(JDialog dialog, EasyMcImageOption imageOption, ImageSelectionResult[] result) {
+        private static JComponent crearBotonDoraImage(JDialog dialog, DoraImageOption imageOption, ImageSelectionResult[] result) {
             JButton button = new FlatButton();
             button.setPreferredSize(new Dimension(64, 64));
             button.setMinimumSize(new Dimension(64, 64));
@@ -894,7 +894,7 @@ public class PanelPrevisualizacion extends JPanel {
             button.setOpaque(false);
             button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             button.setToolTipText(imageOption.name());
-            cargarMiniaturaEasyMcImage(imageOption.resourcePath(), button);
+            cargarMiniaturaDoraImage(imageOption.resourcePath(), button);
             button.addActionListener(e -> {
                 try{
                     BufferedImage image = leerImagenRecurso(imageOption.resourcePath());
@@ -940,7 +940,7 @@ public class PanelPrevisualizacion extends JPanel {
             worker.execute();
         }
 
-        private static void cargarMiniaturaEasyMcImage(String resourcePath, AbstractButton target) {
+        private static void cargarMiniaturaDoraImage(String resourcePath, AbstractButton target) {
             SwingWorker<ImageIcon, Void> worker = new SwingWorker<>() {
                 @Override
                 protected ImageIcon doInBackground() throws Exception {

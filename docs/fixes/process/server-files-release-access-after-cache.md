@@ -1,4 +1,4 @@
-# Server Files Release Access After Cache Process
+﻿# Server Files Release Access After Cache Process
 
 ## Status
 
@@ -10,7 +10,7 @@ Completed
 
 ## Scope
 
-Resolve the pending issue where installed mod jars could remain locked while Easy MC Server stayed open after extension scans and icon rendering.
+Resolve the pending issue where installed mod jars could remain locked while Dora stayed open after extension scans and icon rendering.
 
 ## Step Tracker
 

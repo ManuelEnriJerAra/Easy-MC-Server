@@ -1,4 +1,4 @@
-# App Data Persistence Location
+﻿# App Data Persistence Location
 
 ## Status
 
@@ -6,7 +6,7 @@ Fixed
 
 ## Original Issue
 
-Core app persistence used executable-relative paths from `GestorConfiguracion.getBaseDirectory()`, which could point to the project folder, `target/classes`, or the install directory. Extension caches already used `~/.easy-mc-server/cache/...`, so app data was split across locations and installed builds could write into fragile or read-only directories.
+Core app persistence used executable-relative paths from `GestorConfiguracion.getBaseDirectory()`, which could point to the project folder, `target/classes`, or the install directory. Extension caches already used `~/.dora/cache/...`, so app data was split across locations and installed builds could write into fragile or read-only directories.
 
 ## Root Cause
 
@@ -16,7 +16,7 @@ Each persistence area resolved its own base path. Config and server-list files d
 
 Added `controlador.AppPaths` as the central app-owned user data root helper:
 
-- `rootDirectory()`: `~/.easy-mc-server`
+- `rootDirectory()`: `~/.dora`
 - `configDirectory()`: persistent config and app lists
 - `cacheDirectory()`: disposable cache data
 - `locksDirectory()`: future startup/single-instance locks

@@ -4,13 +4,12 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import modelo.EasyMCConfig;
+import modelo.DoraConfig;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 public final class GestorConfiguracion {
-    private static final String JSON_FILE = "easy-mc-config.json";
-    private static final String LEGACY_JSON_FILE = "EasyMCConfig.json";
+    private static final String JSON_FILE = "dora-config.json";
     private static final String DEFAULT_THEME_CLASS =
             "com.formdev.flatlaf.intellijthemes.FlatArcIJTheme";
     private static final int DEFAULT_STATS_RANGE_SECONDS = 60;
@@ -26,16 +25,16 @@ public final class GestorConfiguracion {
     private GestorConfiguracion() {
     }
 
-    public static EasyMCConfig cargarConfiguracion() {
+    public static DoraConfig cargarConfiguracion() {
         File file = getJsonFile();
         if (!file.exists()) {
-            EasyMCConfig config = crearConfiguracionPorDefecto();
+            DoraConfig config = crearConfiguracionPorDefecto();
             guardarConfiguracion(config);
             return config;
         }
 
         try {
-            EasyMCConfig config = MAPPER.readValue(file, EasyMCConfig.class);
+            DoraConfig config = MAPPER.readValue(file, DoraConfig.class);
             if (config == null || config.getTemaClassName() == null || config.getTemaClassName().isBlank()) {
                 config = crearConfiguracionPorDefecto();
                 guardarConfiguracion(config);
@@ -45,13 +44,13 @@ public final class GestorConfiguracion {
             return config;
         } catch (JacksonException e) {
             System.err.println("Error al cargar " + JSON_FILE + ": " + e.getMessage());
-            EasyMCConfig config = crearConfiguracionPorDefecto();
+            DoraConfig config = crearConfiguracionPorDefecto();
             guardarConfiguracion(config);
             return config;
         }
     }
 
-    public static void guardarConfiguracion(EasyMCConfig config) {
+    public static void guardarConfiguracion(DoraConfig config) {
         if (config == null) return;
         if (config.getTemaClassName() == null || config.getTemaClassName().isBlank()) {
             config.setTemaClassName(DEFAULT_THEME_CLASS);
@@ -91,7 +90,7 @@ public final class GestorConfiguracion {
     }
 
     public static void guardarTema(String temaClassName) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setTemaClassName(temaClassName);
         guardarConfiguracion(config);
     }
@@ -110,7 +109,7 @@ public final class GestorConfiguracion {
     }
 
     public static void guardarEstadisticasRangoSegundos(int seconds) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setEstadisticasRangoSegundos(seconds > 0 ? seconds : DEFAULT_STATS_RANGE_SECONDS);
         guardarConfiguracion(config);
     }
@@ -131,19 +130,19 @@ public final class GestorConfiguracion {
     }
 
     public static void guardarEstadisticasPersistenciaActiva(boolean enabled) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setEstadisticasPersistenciaActiva(enabled);
         guardarConfiguracion(config);
     }
 
     public static void guardarEstadisticasVentanaRecienteSegundos(int seconds) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setEstadisticasVentanaRecienteSegundos(seconds > 0 ? seconds : DEFAULT_STATS_RECENT_WINDOW_SECONDS);
         guardarConfiguracion(config);
     }
 
     public static void guardarEstadisticasResolucionHistoricaSegundos(int seconds) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setEstadisticasResolucionHistoricaSegundos(seconds > 0 ? seconds : DEFAULT_STATS_HISTORICAL_RESOLUTION_SECONDS);
         guardarConfiguracion(config);
     }
@@ -154,7 +153,7 @@ public final class GestorConfiguracion {
     }
 
     public static void guardarJugadoresListaCompacta(boolean compacta) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setJugadoresListaCompacta(compacta);
         guardarConfiguracion(config);
     }
@@ -165,7 +164,7 @@ public final class GestorConfiguracion {
     }
 
     public static void guardarExtensionesListaCompacta(boolean compacta) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setExtensionesListaCompacta(compacta);
         guardarConfiguracion(config);
     }
@@ -176,7 +175,7 @@ public final class GestorConfiguracion {
     }
 
     public static void guardarConsolaVistaSimple(boolean vistaSimple) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setConsolaVistaSimple(vistaSimple);
     }
 
@@ -186,7 +185,7 @@ public final class GestorConfiguracion {
     }
 
     public static void guardarCurseForgeApiKey(String apiKey) {
-        EasyMCConfig config = cargarConfiguracion();
+        DoraConfig config = cargarConfiguracion();
         config.setCurseForgeApiKey(apiKey == null || apiKey.isBlank() ? null : apiKey.trim());
         guardarConfiguracion(config);
     }
@@ -195,8 +194,8 @@ public final class GestorConfiguracion {
         return AppPaths.rootDirectory();
     }
 
-    private static EasyMCConfig crearConfiguracionPorDefecto() {
-        return new EasyMCConfig(
+    private static DoraConfig crearConfiguracionPorDefecto() {
+        return new DoraConfig(
                 DEFAULT_THEME_CLASS,
                 DEFAULT_STATS_RANGE_SECONDS,
                 DEFAULT_STATS_PERSISTENCE_ENABLED,
@@ -208,14 +207,10 @@ public final class GestorConfiguracion {
     }
 
     private static File getJsonFile() {
-        Path jsonPath = AppPaths.configDirectory().resolve(JSON_FILE);
-        Path legacyBaseDir = AppPaths.legacyBaseDirectory();
-        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(JSON_FILE), jsonPath);
-        AppPaths.migrateLegacyFileIfNeeded(legacyBaseDir.resolve(LEGACY_JSON_FILE), jsonPath);
-        return jsonPath.toFile();
+        return AppPaths.configDirectory().resolve(JSON_FILE).toFile();
     }
 
-    private static boolean normalizarConfiguracion(EasyMCConfig config) {
+    private static boolean normalizarConfiguracion(DoraConfig config) {
         boolean changed = false;
         if (config.getEstadisticasRangoSegundos() == null || config.getEstadisticasRangoSegundos() <= 0) {
             config.setEstadisticasRangoSegundos(DEFAULT_STATS_RANGE_SECONDS);

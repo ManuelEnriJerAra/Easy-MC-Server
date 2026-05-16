@@ -1,4 +1,4 @@
-# UI Component Pipeline
+﻿# UI Component Pipeline
 
 The UI is Swing with FlatLaf. Most custom UI helpers are in `src/main/java/vista`.
 
@@ -21,7 +21,7 @@ Avoid hard-coded colors unless the surrounding code already uses them or the val
 
 ## Icons
 
-Use SVG assets from `src/main/resources/easymcicons` through `SvgIconFactory`.
+Use SVG assets from `src/main/resources/doraicons` through `SvgIconFactory`.
 
 Prefer existing icon assets:
 

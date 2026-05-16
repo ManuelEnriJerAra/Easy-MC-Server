@@ -178,11 +178,11 @@ public class PanelJugadores extends JPanel {
         add(panelCentro, BorderLayout.CENTER);
         aplicarEstiloScrollJugadores();
 
-        configurarBotonCabecera(btnWhitelist, "Whitelist", "easymcicons/whitelist.svg", () -> abrirDialogoLista("Whitelist", TipoLista.WHITELIST));
-        configurarBotonCabecera(btnBaneados, "Baneados", "easymcicons/user-block.svg", this::abrirDialogoBaneados);
-        configurarBotonCabecera(btnOps, "OPs", "easymcicons/shield-user.svg", () -> abrirDialogoLista("OPs", TipoLista.OPS));
-        configurarBotonDebug(btnDebugAddPlayer, "Anadir jugador falso", "easymcicons/plus.svg", this::addFakePlayer);
-        configurarBotonDebug(btnDebugRemovePlayer, "Eliminar jugador falso", "easymcicons/minus.svg", this::removeFakePlayer);
+        configurarBotonCabecera(btnWhitelist, "Whitelist", "doraicons/whitelist.svg", () -> abrirDialogoLista("Whitelist", TipoLista.WHITELIST));
+        configurarBotonCabecera(btnBaneados, "Baneados", "doraicons/user-block.svg", this::abrirDialogoBaneados);
+        configurarBotonCabecera(btnOps, "OPs", "doraicons/shield-user.svg", () -> abrirDialogoLista("OPs", TipoLista.OPS));
+        configurarBotonDebug(btnDebugAddPlayer, "Anadir jugador falso", "doraicons/plus.svg", this::addFakePlayer);
+        configurarBotonDebug(btnDebugRemovePlayer, "Eliminar jugador falso", "doraicons/minus.svg", this::removeFakePlayer);
         debugModeListener = DebugModeUiBinder.createUiListener(this::actualizarModoDebug);
         DebugMode.addPropertyChangeListener(debugModeListener);
 
@@ -628,7 +628,7 @@ public class PanelJugadores extends JPanel {
         JButton compactToggleButton = null;
         if (admiteModoCompacto) {
             compactToggleButton = new FlatButton();
-            configureListIconButton(compactToggleButton, "easymcicons/minimize.svg", "Vista normal");
+            configureListIconButton(compactToggleButton, "doraicons/minimize.svg", "Vista normal");
             JButton finalCompactToggleButton = compactToggleButton;
             compactToggleButton.addActionListener(e -> {
                 PlayerIdentityView.SizePreset currentPreset = playerRowsControllerRef[0] == null
@@ -646,8 +646,8 @@ public class PanelJugadores extends JPanel {
             actualizarIconoModoCompacto(compactToggleButton, initialPreset);
         }
 
-        configureListIconButton(btnAdd, "easymcicons/plus.svg", "Añadir");
-        configureListIconButton(btnRemove, "easymcicons/minus.svg", "Quitar");
+        configureListIconButton(btnAdd, "doraicons/plus.svg", "Añadir");
+        configureListIconButton(btnRemove, "doraicons/minus.svg", "Quitar");
 
         JLabel contadorLabel = new JLabel(formatearContadorLista(tipo, model.getSize()));
         contadorLabel.setForeground(AppTheme.getMutedForeground());
@@ -778,7 +778,7 @@ public class PanelJugadores extends JPanel {
                     ? Utilidades.cargarPropertiesUtf8(propertiesPath)
                     : new Properties();
             props.setProperty("white-list", Boolean.toString(enabled));
-            Utilidades.guardarPropertiesUtf8(propertiesPath, props, "Edited by Easy-MC-Server");
+            Utilidades.guardarPropertiesUtf8(propertiesPath, props, "Edited by Dora");
 
             if (isServerActivo()) {
                 enviarComando(enabled ? "whitelist on" : "whitelist off");
@@ -961,7 +961,7 @@ public class PanelJugadores extends JPanel {
         boolean compactActive = sizePreset == PlayerIdentityView.SizePreset.COMPACT;
         SvgIconFactory.apply(
                 button,
-                compactActive ? "easymcicons/maximize.svg" : "easymcicons/minimize.svg",
+                compactActive ? "doraicons/maximize.svg" : "doraicons/minimize.svg",
                 18,
                 18,
                 AppTheme::getForeground
@@ -1026,7 +1026,7 @@ public class PanelJugadores extends JPanel {
         JTextField inputField = new JTextField(24);
         JLabel checkingLabel = new JLabel();
         SvgIconFactory.RotatingIcon checkingIcon = SvgIconFactory.createRotating(
-                "easymcicons/refresh.svg",
+                "doraicons/refresh.svg",
                 16,
                 16,
                 AppTheme::getMutedForeground
@@ -1526,14 +1526,14 @@ public class PanelJugadores extends JPanel {
                 entry.put("uuid", uuid);
                 entry.put("name", value);
                 entry.put("created", timestamp);
-                entry.put("source", "Easy MC Server");
+                entry.put("source", "Dora");
                 entry.put("expires", "forever");
                 entry.put("reason", "Banned by an operator.");
             }
             case BANNED_IPS -> {
                 entry.put("ip", value);
                 entry.put("created", timestamp);
-                entry.put("source", "Easy MC Server");
+                entry.put("source", "Dora");
                 entry.put("expires", "forever");
                 entry.put("reason", "Banned by an operator.");
             }
@@ -1983,7 +1983,7 @@ public class PanelJugadores extends JPanel {
                 }
 
                 PlayerIdentityView view = new PlayerIdentityView(value, sizePreset);
-                view.addActionButton("easymcicons/trash-unselected.svg", "Eliminar", () -> onRemove(tipo, value, model));
+                view.addActionButton("doraicons/trash-unselected.svg", "Eliminar", () -> onRemove(tipo, value, model));
                 view.setActionsVisibleOnHover(true);
                 view.setHighlighted(value.equalsIgnoreCase(selectedValue));
 

@@ -1,4 +1,4 @@
-# Server Start Silent Crash
+﻿# Server Start Silent Crash
 
 ## Status
 
@@ -19,7 +19,7 @@ The start flow now handles startup failures without rethrowing on the UI thread:
 - start button and context-menu start actions report errors and append a server console line;
 - `GestorServidores.iniciarServidor(...)` logs `ProcessBuilder.start()` failures instead of throwing a runtime exception;
 - server-state notification failures are reported instead of escaping;
-- `AppErrorReporter` installs a global uncaught exception handler and writes app errors to `%USERPROFILE%\.easy-mc-server\logs\easy-mc-errors.log`.
+- `AppErrorReporter` installs a global uncaught exception handler and writes app errors to `%USERPROFILE%\.dora\logs\dora-errors.log`.
 
 ## Files Changed
 

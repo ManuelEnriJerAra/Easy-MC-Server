@@ -13,7 +13,7 @@ import java.time.format.DateTimeFormatter;
 
 public final class AppErrorReporter {
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final Path LOG_FILE = AppPaths.rootDirectory().resolve("logs").resolve("easy-mc-errors.log");
+    private static final Path LOG_FILE = AppPaths.rootDirectory().resolve("logs").resolve("dora-errors.log");
 
     private AppErrorReporter() {
     }

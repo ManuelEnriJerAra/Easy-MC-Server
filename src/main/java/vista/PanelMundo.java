@@ -2805,7 +2805,7 @@ public class PanelMundo extends JPanel {
         if (button == null) return;
         AppTheme.applyActionButtonStyle(button);
         button.setText(null);
-        button.setIcon(SvgIconFactory.create("easymcicons/tuning-2.svg", 18, 18));
+        button.setIcon(SvgIconFactory.create("doraicons/tuning-2.svg", 18, 18));
         button.setMargin(new Insets(4, 8, 4, 8));
         button.setToolTipText("Opciones de preview");
         stylePreviewOverlayButton(button);

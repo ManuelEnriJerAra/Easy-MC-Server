@@ -35,14 +35,14 @@ final class VentanaPrincipalNavigationBuilder {
         botones.setOpaque(false);
         botones.setLayout(new BoxLayout(botones, BoxLayout.Y_AXIS));
 
-        JButton home = crearNavButton("easymcicons/home.svg", "Home", VentanaPrincipal.PaginaDerecha.HOME, pageNavigator, navButtons);
-        JButton mundo = crearNavButton("easymcicons/earth.svg", "Mundos", VentanaPrincipal.PaginaDerecha.MUNDO, pageNavigator, navButtons);
-        JButton config = crearNavButton("easymcicons/settings.svg", "Configuración del servidor", VentanaPrincipal.PaginaDerecha.CONFIG, pageNavigator, navButtons);
-        JButton stats = crearNavButton("easymcicons/chart.svg", "Estadísticas", VentanaPrincipal.PaginaDerecha.STATS, pageNavigator, navButtons);
-        JButton automation = crearNavButton("easymcicons/cpu.svg", "Automatización", VentanaPrincipal.PaginaDerecha.AUTOMATION, pageNavigator, navButtons);
-        JButton extensiones = crearNavButton("easymcicons/box.svg", "Extensiones", VentanaPrincipal.PaginaDerecha.EXTENSIONES, pageNavigator, navButtons);
-        JButton temas = crearActionButton("easymcicons/pallete-unselected.svg", "Temas", openThemeSelector);
-        JButton info = crearNavButton("easymcicons/info.svg", "Información", VentanaPrincipal.PaginaDerecha.INFO, pageNavigator, navButtons);
+        JButton home = crearNavButton("doraicons/home.svg", "Home", VentanaPrincipal.PaginaDerecha.HOME, pageNavigator, navButtons);
+        JButton mundo = crearNavButton("doraicons/earth.svg", "Mundos", VentanaPrincipal.PaginaDerecha.MUNDO, pageNavigator, navButtons);
+        JButton config = crearNavButton("doraicons/settings.svg", "Configuración del servidor", VentanaPrincipal.PaginaDerecha.CONFIG, pageNavigator, navButtons);
+        JButton stats = crearNavButton("doraicons/chart.svg", "Estadísticas", VentanaPrincipal.PaginaDerecha.STATS, pageNavigator, navButtons);
+        JButton automation = crearNavButton("doraicons/cpu.svg", "Automatización", VentanaPrincipal.PaginaDerecha.AUTOMATION, pageNavigator, navButtons);
+        JButton extensiones = crearNavButton("doraicons/box.svg", "Extensiones", VentanaPrincipal.PaginaDerecha.EXTENSIONES, pageNavigator, navButtons);
+        JButton temas = crearActionButton("doraicons/pallete-unselected.svg", "Temas", openThemeSelector);
+        JButton info = crearNavButton("doraicons/info.svg", "Información", VentanaPrincipal.PaginaDerecha.INFO, pageNavigator, navButtons);
 
         botones.add(home);
         botones.add(Box.createVerticalStrut(8));

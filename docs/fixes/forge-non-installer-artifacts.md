@@ -6,7 +6,7 @@ Fixed
 
 ## Original Issue
 
-Forge server creation could show old Forge versions such as Minecraft `1.1` even though Easy MC installs Forge through `forge-<artifactVersion>-installer.jar` and those old Maven coordinates only expose legacy ZIP artifacts.
+Forge server creation could show old Forge versions such as Minecraft `1.1` even though Dora installs Forge through `forge-<artifactVersion>-installer.jar` and those old Maven coordinates only expose legacy ZIP artifacts.
 
 ## Root Cause
 

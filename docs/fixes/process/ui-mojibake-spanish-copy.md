@@ -19,9 +19,9 @@ This does not rename Java identifiers, change persisted property keys, alter bin
 | Status | Step | Summary |
 | --- | --- | --- |
 | DONE | 1. Read repository guidance | Read `docs/README.md`, `docs/pipelines/ui-component-pipeline.md`, `docs/pipelines/application-shell-pipeline.md`, and the pending-fix note to keep the cleanup focused on UI/controller copy. |
-| DONE | 2. Search for mojibake markers | Searched source for `Ã`, `Â`, and replacement characters. Found one production mojibake string in `PanelExtensiones`; `MotdRenderUtilTest` keeps `Â§` intentionally for MOTD cleanup coverage. |
+| DONE | 2. Search for mojibake markers | Searched source for `�`, `�`, and replacement characters. Found one production mojibake string in `PanelExtensiones`; `MotdRenderUtilTest` keeps `§` intentionally for MOTD cleanup coverage. |
 | DONE | 3. Patch user-facing Spanish copy | Replaced the production mojibake prompt and corrected clear user-facing Spanish accents in world preview, extension compatibility, marketplace, server conversion, platform installation, and related error text. |
-| DONE | 4. Re-scan for mojibake markers | Re-ran the marker search against `src/main/java`; no production `Ã`, `Â`, or replacement-character matches remain. |
+| DONE | 4. Re-scan for mojibake markers | Re-ran the marker search against `src/main/java`; no production `�`, `�`, or replacement-character matches remain. |
 | DONE | 5. Verify compile | Ran `mvn -q -DskipTests compile` successfully after the source cleanup. |
 | DONE | 6. Document the completed fix | Added a solved note in `docs/fixes/`, kept the detailed process here, and removed the issue from `docs/pending-fixes/` because solved fixes do not remain pending. |
 
@@ -33,6 +33,6 @@ One functional follow-up was needed in `ExtensionMarketplaceDialog`: friendly er
 
 ## Verification Notes
 
-- `rg -n "Ã|Â|�" src\main\java`
+- `rg -n "�|�|?" src\main\java`
 - `git diff --check`
 - `mvn -q -DskipTests compile`

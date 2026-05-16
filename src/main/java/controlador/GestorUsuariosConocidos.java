@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class GestorUsuariosConocidos {
-    private static final String JSON_FILE = "easy-mc-known-users.json";
+    private static final String JSON_FILE = "dora-known-users.json";
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Map<String, KnownUser> USERS_BY_NAME = new LinkedHashMap<>();
 
@@ -218,9 +218,7 @@ public final class GestorUsuariosConocidos {
     }
 
     private static Path getJsonPath() {
-        Path jsonPath = AppPaths.configDirectory().resolve(JSON_FILE);
-        AppPaths.migrateLegacyFileIfNeeded(AppPaths.legacyBaseDirectory().resolve(JSON_FILE), jsonPath);
-        return jsonPath;
+        return AppPaths.configDirectory().resolve(JSON_FILE);
     }
 
     private static String normalize(String value) {

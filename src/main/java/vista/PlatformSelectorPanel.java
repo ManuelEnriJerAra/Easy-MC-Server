@@ -34,7 +34,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class PlatformSelectorPanel extends JPanel {
-    private static final String FALLBACK_ICON = "easymcicons/box.svg";
+    private static final String FALLBACK_ICON = "doraicons/box.svg";
     private static final int OPTION_WIDTH = 96;
     private static final int OPTION_HEIGHT = 84;
     private static final int ICON_SIZE = 38;
@@ -263,7 +263,7 @@ public final class PlatformSelectorPanel extends JPanel {
     private static String iconResourceFor(ServerPlatformAdapter adapter) {
         ServerPlatform platform = adapter == null ? ServerPlatform.UNKNOWN : adapter.getPlatform();
         String platformName = platform == null ? "" : platform.name().toLowerCase(java.util.Locale.ROOT);
-        String resource = "easymcicons/" + platformName + ".svg";
+        String resource = "doraicons/" + platformName + ".svg";
         return resourceExists(resource) ? resource : FALLBACK_ICON;
     }
 

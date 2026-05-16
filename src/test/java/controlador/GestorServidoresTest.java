@@ -71,7 +71,7 @@ class GestorServidoresTest {
 
     @Test
     void filtrosCreacionVersiones_debenMostrarReleasesYSnapshotsCuandoAmbosEstanActivos() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Method debeMostrar = GestorServidores.class.getDeclaredMethod(
                 "debeMostrarOpcionCreacion",
                 ServerCreationOption.class,
@@ -115,7 +115,7 @@ class GestorServidoresTest {
 
     @Test
     void cargarOpcionesConversion_debeEmparejarSnapshotsVanillaConVersionCanonicaDelLoader() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Server server = new Server();
         server.setVersion("1.7.10_pre4");
         ServerPlatformAdapter adapter = new ServerPlatformAdapter() {
@@ -192,7 +192,7 @@ class GestorServidoresTest {
 
     @Test
     void cargarOpcionesConversion_debeEmparejarSnapshotModernoConFabric() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Server server = new Server();
         server.setVersion("26.2-snapshot-7");
         ServerPlatformAdapter adapter = new ServerPlatformAdapter() {
@@ -269,7 +269,7 @@ class GestorServidoresTest {
 
     @Test
     void evaluarDisponibilidadConversion_debeMarcarPlataformasSinVersionCompatibleComoNoDisponibles() {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Server server = new Server();
         server.setVersion("26.2-snapshot-7");
 
@@ -321,7 +321,7 @@ class GestorServidoresTest {
 
     @Test
     void guardarServidor_debeCompletarMetadatosYPersistirEnJsonAislado() throws Exception {
-        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        Path jsonPath = tempDir.resolve("dora-server-list.json");
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());
         Server server = new Server();
         server.setId(null);
@@ -355,7 +355,7 @@ class GestorServidoresTest {
 
     @Test
     void constructor_debeCompletarPreferenciasPreviewFaltantes() throws Exception {
-        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        Path jsonPath = tempDir.resolve("dora-server-list.json");
         Path serverDir = tempDir.resolve("previewless-server");
         TestWorldFixtures.createValidServerJar(serverDir, "server.jar");
         Server server = new Server();
@@ -567,7 +567,7 @@ class GestorServidoresTest {
                         modId="examplemod"
                         version="1.0.0"
                         displayName="Example Mod"
-                        authors="Easy MC"
+                        authors="Dora"
                         description="Forge test mod"
                         """,
                         "META-INF/MANIFEST.MF",
@@ -643,9 +643,9 @@ class GestorServidoresTest {
         assertThat(nestedJar).isRegularFile();
         assertThat(serverDir.resolve("mods").resolve("new.jar")).isRegularFile();
         assertThat(modpackService.downloads).isEqualTo(1);
-        assertThat(warnings).noneSatisfy(warning -> assertThat(warning).contains("easy-mc-modpack-backups"));
+        assertThat(warnings).noneSatisfy(warning -> assertThat(warning).contains("dora-modpack-backups"));
         assertThat(warnings).anySatisfy(warning -> assertThat(warning).contains("Se han eliminado 1 mod actual"));
-        assertThat(serverDir.resolve("easy-mc-modpack-backups")).doesNotExist();
+        assertThat(serverDir.resolve("dora-modpack-backups")).doesNotExist();
     }
 
     @Test
@@ -671,7 +671,7 @@ class GestorServidoresTest {
         assertThat(modpackService.downloads).isEqualTo(1);
         assertThat(warnings).noneSatisfy(warning -> assertThat(warning).contains("ya existe"));
         assertThat(warnings).anySatisfy(warning -> assertThat(warning).contains("Se han eliminado 1 mod actual"));
-        assertThat(serverDir.resolve("easy-mc-modpack-backups")).doesNotExist();
+        assertThat(serverDir.resolve("dora-modpack-backups")).doesNotExist();
     }
 
     @Test
@@ -764,7 +764,7 @@ class GestorServidoresTest {
                         """
                         name: WelcomePlugin
                         version: 2.5.1
-                        author: Easy MC
+                        author: Dora
                         description: Sends welcome messages
                         """
                 )
@@ -835,7 +835,7 @@ class GestorServidoresTest {
                         modId="removeexample"
                         version="1.0.0"
                         displayName="Remove Example"
-                        authors="Easy MC"
+                        authors="Dora"
                         description="Forge test mod"
                         """
                 )
@@ -896,7 +896,7 @@ class GestorServidoresTest {
                         """
                         name: PluginOnly
                         version: 1.0.0
-                        author: Easy MC
+                        author: Dora
                         api-version: 1.20
                         description: Plugin test
                         """
@@ -936,7 +936,7 @@ class GestorServidoresTest {
                         """
                         name: FuturePlugin
                         version: 1.0.0
-                        author: Easy MC
+                        author: Dora
                         api-version: 1.21
                         description: Needs a newer server
                         """
@@ -983,7 +983,7 @@ class GestorServidoresTest {
                         modId="examplemod"
                         version="1.17.1-2.0.0"
                         displayName="Example Mod"
-                        authors="Easy MC"
+                        authors="Dora"
                         description="Legacy 1.17.1 build"
                         """
                 )
@@ -1395,7 +1395,7 @@ class GestorServidoresTest {
                     assertThat(gestor.evaluarEstadoExtensionInstalada(converted, extension).severity())
                             .isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
                 });
-        assertThat(Files.readString(serverDir.resolve("easy-mc-extensions.json"))).contains("example-mod.jar");
+        assertThat(Files.readString(serverDir.resolve("dora-extensions.json"))).contains("example-mod.jar");
 
         try (var backups = Files.list(tempDir)) {
             assertThat(backups.map(path -> path.getFileName().toString())
@@ -1514,7 +1514,7 @@ class GestorServidoresTest {
                     assertThat(gestor.evaluarEstadoExtensionInstalada(converted, extension).severity())
                             .isEqualTo(ExtensionCompatibilityStatus.INCOMPATIBLE);
                 });
-        assertThat(Files.readString(serverDir.resolve("easy-mc-extensions.json"))).contains("welcome-plugin.jar");
+        assertThat(Files.readString(serverDir.resolve("dora-extensions.json"))).contains("welcome-plugin.jar");
 
         try (var backups = Files.list(tempDir)) {
             assertThat(backups.map(path -> path.getFileName().toString())
@@ -1550,7 +1550,7 @@ class GestorServidoresTest {
 
     @Test
     void establecerFavoritoYReordenarServidores_debenMantenerOrdenVisualEstable() {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Server alpha = new Server();
         alpha.setDisplayName("Alpha");
         Server beta = new Server();
@@ -1571,7 +1571,7 @@ class GestorServidoresTest {
 
     @Test
     void reordenarServidores_debePersistirOrdenManualDeFavoritos() throws Exception {
-        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        Path jsonPath = tempDir.resolve("dora-server-list.json");
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());
         Server alpha = crearServidorPersistible("Alpha", tempDir.resolve("alpha"));
         Server beta = crearServidorPersistible("Beta", tempDir.resolve("beta"));
@@ -1595,7 +1595,7 @@ class GestorServidoresTest {
 
     @Test
     void reordenarServidores_debeMantenerOrdenBaseDeNoFavoritosConFavoritosOrdenados() throws Exception {
-        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        Path jsonPath = tempDir.resolve("dora-server-list.json");
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());
         Server alpha = crearServidorPersistible("Alpha", tempDir.resolve("alpha"));
         Server beta = crearServidorPersistible("Beta", tempDir.resolve("beta"));
@@ -1619,7 +1619,7 @@ class GestorServidoresTest {
 
     @Test
     void refrescarServidoresGuardados_debeEliminarCarpetasBorradasYLimpiarSeleccion() throws Exception {
-        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        Path jsonPath = tempDir.resolve("dora-server-list.json");
         GestorServidores gestor = new GestorServidores(jsonPath.toFile());
         Path staleDir = tempDir.resolve("stale");
         Server stale = crearServidorPersistible("Stale", staleDir);
@@ -1641,7 +1641,7 @@ class GestorServidoresTest {
 
     @Test
     void constructor_debeEliminarServidoresPersistidosNoCargables() throws Exception {
-        Path jsonPath = tempDir.resolve("easy-mc-server-list.json");
+        Path jsonPath = tempDir.resolve("dora-server-list.json");
         Path validDir = tempDir.resolve("valid-server");
         Path invalidDir = tempDir.resolve("invalid-server");
         Files.createDirectories(invalidDir);
@@ -1665,7 +1665,7 @@ class GestorServidoresTest {
 
     @Test
     void importarServidorNoVanillaSinVersionDetectada_debePersistirloYUsarNombreDeCarpeta() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("paper-import");
         TestWorldFixtures.createValidServerJar(
                 serverDir,
@@ -1686,7 +1686,7 @@ class GestorServidoresTest {
 
     @Test
     void importarServidorDebeEvitarDuplicadosConRutasNormalizadas() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("paper-duplicate");
         TestWorldFixtures.createValidServerJar(
                 serverDir,
@@ -1705,7 +1705,7 @@ class GestorServidoresTest {
 
     @Test
     void importarServidorDebeDetectarVersionAntiguaDesdeMetadatos() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("forge-legacy");
         TestWorldFixtures.createValidServerJar(
                 serverDir,
@@ -1726,7 +1726,7 @@ class GestorServidoresTest {
 
     @Test
     void importarServidorDebeAceptarVersionSemanticaFuturaDesdeVersionJson() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("future-vanilla");
         TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"26.1.2\",\"name\":\"26.1.2\"}");
 
@@ -1739,7 +1739,7 @@ class GestorServidoresTest {
 
     @Test
     void importarServidorDebeAceptarSnapshotSemanticoFuturoDesdeVersionJson() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("future-snapshot-vanilla");
         TestWorldFixtures.createValidServerJar(serverDir, "server.jar", "{\"id\":\"26.2-snapshot-7\",\"name\":\"26.2-snapshot-7\"}");
 
@@ -1752,7 +1752,7 @@ class GestorServidoresTest {
 
     @Test
     void importarServidorDebePreferirIdSnapshotSobreNombreReleaseDesdeVersionJson() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("future-snapshot-vanilla-release-name");
         TestWorldFixtures.createValidServerJar(
                 serverDir,
@@ -1770,7 +1770,7 @@ class GestorServidoresTest {
 
     @Test
     void resolverOrigenConversionDebeActualizarSnapshotTruncadoDesdeJar() throws Exception {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("existing-snapshot-vanilla-release-name");
         TestWorldFixtures.createValidServerJar(
                 serverDir,
@@ -1795,7 +1795,7 @@ class GestorServidoresTest {
 
     @Test
     void eliminarServidor_debeFallarSiProcesoSigueVivo() {
-        GestorServidores gestor = new GestorServidores(tempDir.resolve("easy-mc-server-list.json").toFile());
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Server server = new Server();
         server.setDisplayName("Busy");
         gestor.guardarServidor(server);

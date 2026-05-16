@@ -91,7 +91,7 @@ public final class CurseForgeModpackService {
         root.put("manifestVersion", 1);
         root.put("name", safePackName(server));
         root.put("version", "1.0.0");
-        root.put("author", "Easy-MC-Server");
+        root.put("author", "Dora");
         root.put("files", files);
         root.put("overrides", "overrides");
 
@@ -271,7 +271,7 @@ public final class CurseForgeModpackService {
     private String safePackName(Server server) {
         String name = server == null ? null : server.getDisplayName();
         if (name == null || name.isBlank()) {
-            return "Easy MC Server Pack";
+            return "Dora Pack";
         }
         return name.trim();
     }

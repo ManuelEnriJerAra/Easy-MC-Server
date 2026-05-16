@@ -30,10 +30,10 @@ import controlador.Main;
 public final class AppTheme {
     private static final int REFRESH_ROTATION_TIMER_MS = 16;
     private static final double REFRESH_ROTATION_STEP_RADIANS = Math.toRadians(6);
-    private static final String PROP_REFRESH_TIMER = "easy-mc-server.refreshTimer";
-    private static final String PROP_REFRESH_ICON = "easy-mc-server.refreshIcon";
-    private static final String PROP_REFRESH_HOVER = "easy-mc-server.refreshHover";
-    private static final String PROP_REFRESH_INSTALLED = "easy-mc-server.refreshInstalled";
+    private static final String PROP_REFRESH_TIMER = "dora.refreshTimer";
+    private static final String PROP_REFRESH_ICON = "dora.refreshIcon";
+    private static final String PROP_REFRESH_HOVER = "dora.refreshHover";
+    private static final String PROP_REFRESH_INSTALLED = "dora.refreshInstalled";
     private static final Color FALLBACK_BACKGROUND = Color.LIGHT_GRAY;
     private static final Color FALLBACK_ACCENT = new Color(0, 120, 215);
     private static final Color FALLBACK_BORDER = new Color(0, 0, 0, 60);
@@ -351,7 +351,7 @@ public final class AppTheme {
         applyHeaderIconButtonStyle(button);
 
         SvgIconFactory.RotatingIcon rotatingIcon = SvgIconFactory.createRotating(
-                "easymcicons/refresh.svg",
+                "doraicons/refresh.svg",
                 18,
                 18,
                 AppTheme::getForeground
@@ -528,11 +528,11 @@ public final class AppTheme {
     }
 
     private static double iconAngle(AbstractButton button) {
-        Object value = button.getClientProperty("easy-mc-server.refreshAngle");
+        Object value = button.getClientProperty("dora.refreshAngle");
         return value instanceof Number number ? number.doubleValue() : 0d;
     }
 
     private static void storeIconAngle(AbstractButton button, double angle) {
-        button.putClientProperty("easy-mc-server.refreshAngle", angle);
+        button.putClientProperty("dora.refreshAngle", angle);
     }
 }

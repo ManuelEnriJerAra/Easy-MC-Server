@@ -89,7 +89,7 @@ public final class PaperServerPlatformAdapter extends AbstractServerPlatformAdap
                 request,
                 ServerPlatform.PAPER,
                 build.id(),
-                "Easy-MC Paper " + request.minecraftVersion(),
+                "Dora Paper " + request.minecraftVersion(),
                 getExtensionDirectories(request.targetDirectory())
         );
     }

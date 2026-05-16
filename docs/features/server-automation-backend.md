@@ -1,4 +1,4 @@
-# Server Automation Backend
+﻿# Server Automation Backend
 
 ## Status
 
@@ -29,7 +29,7 @@ The vertical navigation includes a lazy Automation tab using the CPU icon pair. 
 - `src/main/java/vista/VentanaPrincipal.java`
 - `src/main/java/vista/VentanaPrincipalNavigationBuilder.java`
 - `src/main/java/vista/VentanaPrincipalRightContentBuilder.java`
-- `src/main/resources/easymcicons/cpu.svg`
+- `src/main/resources/doraicons/cpu.svg`
 - `src/test/java/controlador/ServerAutomationServiceTest.java`
 
 ## Verification

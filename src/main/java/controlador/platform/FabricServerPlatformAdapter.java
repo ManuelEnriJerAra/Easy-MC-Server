@@ -115,7 +115,7 @@ public final class FabricServerPlatformAdapter extends AbstractServerPlatformAda
                 request,
                 ServerPlatform.FABRIC,
                 selection.loaderVersion(),
-                "Easy-MC Fabric " + request.minecraftVersion(),
+                "Dora Fabric " + request.minecraftVersion(),
                 List.of(request.targetDirectory().resolve("mods"), request.targetDirectory().resolve("config"))
         );
     }

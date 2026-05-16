@@ -1,4 +1,4 @@
-# Server Start Silent Crash Fix Process
+﻿# Server Start Silent Crash Fix Process
 
 ## Status
 
@@ -28,7 +28,7 @@ Minecraft server logs only exist after the child process starts and emits output
 
 Uncaught app exceptions are now written to:
 
-- `%USERPROFILE%\.easy-mc-server\logs\easy-mc-errors.log`
+- `%USERPROFILE%\.dora\logs\dora-errors.log`
 
 This gives future crash reports a durable place to inspect even when the visible UI disappears.
 

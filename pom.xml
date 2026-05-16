@@ -5,8 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.example</groupId>
-    <artifactId>easy_mc_server_0.6</artifactId>
+    <artifactId>dora_0.6</artifactId>
     <version>beta</version>
+    <name>Dora</name>
+    <description>Desktop Minecraft server manager.</description>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>

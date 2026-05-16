@@ -10,7 +10,7 @@ Some Spanish UI/controller strings were mojibaked or written as ASCII fallbacks,
 
 ## Root Cause
 
-Older user-facing literals had been added with inconsistent encoding/copy hygiene. One production prompt kept a mojibaked `Â¿` prefix, and several nearby UI/controller messages used unaccented Spanish words such as "version", "tamano", "instalacion", and "generacion".
+Older user-facing literals had been added with inconsistent encoding/copy hygiene. One production prompt kept a mojibaked `¿` prefix, and several nearby UI/controller messages used unaccented Spanish words such as "version", "tamano", "instalacion", and "generacion".
 
 ## Solution
 
@@ -35,7 +35,7 @@ Replaced the production mojibake marker and corrected unambiguous user-facing Sp
 
 ## Verification
 
-- `rg -n "Ã|Â|�" src\main\java`
+- `rg -n "�|�|?" src\main\java`
 - `git diff --check`
 - `mvn -q -DskipTests compile`
 
@@ -45,9 +45,9 @@ Replaced the production mojibake marker and corrected unambiguous user-facing Sp
 
 ## Regression Notes
 
-If mojibake returns, first search production sources for `Ã`, `Â`, and replacement characters, then inspect recent copy changes for files saved with the wrong encoding.
+If mojibake returns, first search production sources for `�`, `�`, and replacement characters, then inspect recent copy changes for files saved with the wrong encoding.
 
-Do not treat `src/test/java/vista/MotdRenderUtilTest.java` `Â§` strings as regressions unless the MOTD section-code cleanup behavior changes; those strings intentionally exercise malformed MOTD input.
+Do not treat `src/test/java/vista/MotdRenderUtilTest.java` `§` strings as regressions unless the MOTD section-code cleanup behavior changes; those strings intentionally exercise malformed MOTD input.
 
 ## Related Docs
 

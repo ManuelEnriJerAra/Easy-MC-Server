@@ -16,8 +16,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 public final class ApplicationInstanceLock implements AutoCloseable {
-    private static final String LOCK_FILE_NAME = "easy-mc-server.lock";
-    private static final String PORT_FILE_NAME = "easy-mc-server.port";
+    private static final String LOCK_FILE_NAME = "dora.lock";
+    private static final String PORT_FILE_NAME = "dora.port";
     private static final String FOCUS_COMMAND = "FOCUS";
     private static final int HANDOFF_CONNECT_TIMEOUT_MS = 800;
 
@@ -69,7 +69,7 @@ public final class ApplicationInstanceLock implements AutoCloseable {
         Path portPath = AppPaths.locksDirectory().resolve(PORT_FILE_NAME);
         Files.writeString(portPath, Integer.toString(serverSocket.getLocalPort()), StandardCharsets.UTF_8);
 
-        handoffThread = new Thread(() -> runHandoffServer(serverSocket, focusRequestHandler), "easy-mc-server-instance-handoff");
+        handoffThread = new Thread(() -> runHandoffServer(serverSocket, focusRequestHandler), "dora-instance-handoff");
         handoffThread.setDaemon(true);
         handoffThread.start();
     }

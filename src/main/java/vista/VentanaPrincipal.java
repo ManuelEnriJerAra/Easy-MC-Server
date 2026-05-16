@@ -51,13 +51,13 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 
 public class VentanaPrincipal extends JFrame {
-    private static final String BASE_TITLE = "Easy-MC-Server";
+    private static final String BASE_TITLE = "Dora";
     private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
     private static final int SERVER_LIST_INITIAL_WIDTH = 320;
     private static final int SERVER_LIST_MIN_WIDTH = 220;
     private static final int TRAY_SERVER_NAME_COLUMN_WIDTH = 28;
-    private static final String PROP_MANAGED_ROUNDED_BORDER = "easy-mc-server.managedRoundedBorder";
-    private static final String PROP_ROUNDED_BORDER_ENABLED = "easy-mc-server.roundedBorderEnabled";
+    private static final String PROP_MANAGED_ROUNDED_BORDER = "dora.managedRoundedBorder";
+    private static final String PROP_ROUNDED_BORDER_ENABLED = "dora.roundedBorderEnabled";
 
     private final JPanel panelIzquierdo, panelDerecho;
     private final GestorServidores gestorServidores;
@@ -204,10 +204,10 @@ public class VentanaPrincipal extends JFrame {
         estilizarBoton(importarServerButton);
         estilizarBoton(borrarServerButton);
         estilizarBoton(abrirCarpetaServerButton);
-        aplicarIconoBotonServidores(nuevoServerButton, "easymcicons/plus.svg");
-        aplicarIconoBotonServidores(importarServerButton, "easymcicons/download.svg");
-        aplicarIconoBotonServidores(borrarServerButton, "easymcicons/minus.svg");
-        aplicarIconoBotonServidores(abrirCarpetaServerButton, "easymcicons/folder.svg");
+        aplicarIconoBotonServidores(nuevoServerButton, "doraicons/plus.svg");
+        aplicarIconoBotonServidores(importarServerButton, "doraicons/download.svg");
+        aplicarIconoBotonServidores(borrarServerButton, "doraicons/minus.svg");
+        aplicarIconoBotonServidores(abrirCarpetaServerButton, "doraicons/folder.svg");
         configurarHoverIconoCarpeta(abrirCarpetaServerButton);
 
         botonesServidoresPanel.add(nuevoServerButton);
@@ -603,12 +603,12 @@ public class VentanaPrincipal extends JFrame {
         botones.setOpaque(false);
         botones.setLayout(new BoxLayout(botones, BoxLayout.Y_AXIS));
 
-        FlatSVGIcon iconHome = new FlatSVGIcon("easymcicons/home.svg", 32, 32);
-        FlatSVGIcon iconMundo = new FlatSVGIcon("easymcicons/earth.svg", 32, 32);
-        FlatSVGIcon iconConfig = new FlatSVGIcon("easymcicons/settings.svg", 32, 32);
-        FlatSVGIcon iconStats = new FlatSVGIcon("easymcicons/chart.svg", 32, 32);
-        FlatSVGIcon iconTemas = new FlatSVGIcon("easymcicons/pallete.svg", 32, 32);
-        FlatSVGIcon iconInfo = new FlatSVGIcon("easymcicons/info.svg", 32, 32);
+        FlatSVGIcon iconHome = new FlatSVGIcon("doraicons/home.svg", 32, 32);
+        FlatSVGIcon iconMundo = new FlatSVGIcon("doraicons/earth.svg", 32, 32);
+        FlatSVGIcon iconConfig = new FlatSVGIcon("doraicons/settings.svg", 32, 32);
+        FlatSVGIcon iconStats = new FlatSVGIcon("doraicons/chart.svg", 32, 32);
+        FlatSVGIcon iconTemas = new FlatSVGIcon("doraicons/pallete.svg", 32, 32);
+        FlatSVGIcon iconInfo = new FlatSVGIcon("doraicons/info.svg", 32, 32);
 
         JButton home = crearSVGButton(iconHome, "Home", PaginaDerecha.HOME);
         JButton mundo = crearSVGButton(iconMundo, "Mundos", PaginaDerecha.MUNDO);
@@ -1135,7 +1135,7 @@ public class VentanaPrincipal extends JFrame {
         if(trayIcon == null) return;
 
         PopupMenu menu = new PopupMenu();
-        MenuItem abrir = new MenuItem("Abrir Easy MC Server");
+        MenuItem abrir = new MenuItem("Abrir Dora");
         abrir.addActionListener(e -> restaurarDesdeBandeja());
         menu.add(abrir);
         menu.addSeparator();
@@ -1164,7 +1164,7 @@ public class VentanaPrincipal extends JFrame {
         }
 
         menu.addSeparator();
-        MenuItem salir = new MenuItem("Salir de Easy MC Server");
+        MenuItem salir = new MenuItem("Salir de Dora");
         salir.addActionListener(e -> solicitarSalidaDesdeBandeja());
         menu.add(salir);
 
@@ -1254,7 +1254,7 @@ public class VentanaPrincipal extends JFrame {
             avisoBandejaMostrado = true;
             trayIcon.displayMessage(
                     BASE_TITLE,
-                    "Easy MC Server sigue ejecutandose en segundo plano.",
+                    "Dora sigue ejecutandose en segundo plano.",
                     TrayIcon.MessageType.INFO
             );
         }
@@ -1514,12 +1514,12 @@ public class VentanaPrincipal extends JFrame {
             @Override
             public void mouseEntered(MouseEvent e) {
                 if(!button.isEnabled()) return;
-                button.setIcon(SvgIconFactory.create("easymcicons/folder-open.svg", 20, 20));
+                button.setIcon(SvgIconFactory.create("doraicons/folder-open.svg", 20, 20));
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                button.setIcon(SvgIconFactory.create("easymcicons/folder.svg", 20, 20));
+                button.setIcon(SvgIconFactory.create("doraicons/folder.svg", 20, 20));
             }
         });
     }

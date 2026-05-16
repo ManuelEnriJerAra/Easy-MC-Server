@@ -80,7 +80,7 @@ final class ConversionPreservationHelper {
     }
 
     private static Path crearSnapshotPreservacionConversion(Path serverDir) throws IOException {
-        Path snapshotDir = Files.createTempDirectory("easy-mc-conversion-preserve-");
+        Path snapshotDir = Files.createTempDirectory("dora-conversion-preserve-");
         for (String fileName : ARCHIVOS_CONFIG_PRESERVABLES) {
             Path source = serverDir.resolve(fileName);
             if (Files.isRegularFile(source)) {

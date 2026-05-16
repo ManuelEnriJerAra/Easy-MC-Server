@@ -1,4 +1,4 @@
-# Easy MC Server Docs
+﻿# Dora Docs
 
 This folder is the project playbook for coding agents. Before editing an established area, open the matching guide below and use it as local context. If behavior changes, update the relevant doc in the same change.
 

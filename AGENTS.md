@@ -1,17 +1,17 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 Guidance for coding agents working in this repository.
 
 ## Project Overview
 
-Easy MC Server is a Java 25 Swing desktop application for managing Minecraft servers. It uses Maven, FlatLaf/FlatLaf Extras for UI, Jackson/Gson for data handling, Lombok, and JUnit 5 tests.
+Dora is a Java 25 Swing desktop application for managing Minecraft servers. It uses Maven, FlatLaf/FlatLaf Extras for UI, Jackson/Gson for data handling, Lombok, and JUnit 5 tests.
 
 Primary source areas:
 
 - `src/main/java/controlador`: application logic, server lifecycle, platform installation, world/extension services, and creation/import flows.
 - `src/main/java/vista`: Swing views, custom components, theme helpers, and UI panels.
 - `src/main/java/modelo`: domain models and configuration objects.
-- `src/main/resources/easymcicons`: SVG icons used by the UI through `SvgIconFactory`.
+- `src/main/resources/doraicons`: SVG icons used by the UI through `SvgIconFactory`.
 - `src/test/java`: unit and integration-style tests.
 - `docs`: implementation guides for important program pipelines.
 - `docs/pending-fixes`: known issues and cleanup candidates, one Markdown file per issue.
@@ -68,7 +68,7 @@ The app is Swing/FlatLaf, with many reusable view helpers in `vista`:
 - `FlatButton`, `FlatTextField`, `FlatComboBox`, `FlatScrollPane`, and related FlatLaf components where already used.
 - `AppTheme.applyHeaderIconButtonStyle(...)` for icon-only header/debug buttons.
 
-For icon buttons, use existing SVG assets from `src/main/resources/easymcicons` and set meaningful tooltips.
+For icon buttons, use existing SVG assets from `src/main/resources/doraicons` and set meaningful tooltips.
 
 Avoid large visual redesigns unless requested. Fix layout issues by respecting existing panel structure and component sizing.
 

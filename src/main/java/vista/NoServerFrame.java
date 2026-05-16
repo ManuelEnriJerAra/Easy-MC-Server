@@ -30,7 +30,7 @@ public class NoServerFrame extends JFrame {
         // Creo un gestor de servidores que recibirá como argumento la propia ventana, esto es para que
         // cualquier ventana emergente que muestre gestorServidores tenga de padre esta ventana
 
-        this.setTitle("Easy MC Server");
+        this.setTitle("Dora");
         this.setSize(800, 600);
         this.setLocationRelativeTo(null);
         this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -75,7 +75,7 @@ public class NoServerFrame extends JFrame {
         c.gridy = 0;
 
 
-        JLabel nombreAppLabel = new JLabel("Easy MC Server");
+        JLabel nombreAppLabel = new JLabel("Dora");
         panelInfo.add(nombreAppLabel, c);
 
         c.gridy = 1;
