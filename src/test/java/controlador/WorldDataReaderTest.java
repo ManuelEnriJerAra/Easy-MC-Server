@@ -132,6 +132,70 @@ class WorldDataReaderTest {
     }
 
     @Test
+    void readMetadata_debeLeerDatosDeLevelDatEnUnSnapshot() throws Exception {
+        Path worldDir = tempDir.resolve("snapshot");
+        CompoundTag data = baseWorldData();
+        data.put("Version", versionTag("1.21.4"));
+        data.putLong("RandomSeed", 123L);
+        data.putInt("SpawnX", 8);
+        data.putInt("SpawnY", 72);
+        data.putInt("SpawnZ", -9);
+        data.putLong("DayTime", 6000L);
+        data.putInt("raining", 1);
+        data.putInt("DifficultyLocked", 1);
+        CompoundTag gameRules = new CompoundTag();
+        gameRules.putString("keepInventory", "true");
+        data.put("GameRules", gameRules);
+        TestWorldFixtures.writeLevelDat(worldDir, data);
+
+        WorldDataReader.WorldMetadata metadata = WorldDataReader.readMetadata(TestWorldFixtures.world(worldDir, "snapshot"));
+
+        assertThat(metadata.activeTicks()).isEqualTo(1200L);
+        assertThat(metadata.versionName()).isEqualTo("1.21.4");
+        assertThat(metadata.dataVersion()).isEqualTo("3700");
+        assertThat(metadata.seed()).isEqualTo("123");
+        assertThat(metadata.spawnPoint()).isEqualTo(new WorldDataReader.SpawnPoint(8, 72, -9, 0f));
+        assertThat(metadata.dayTime()).isEqualTo("Dia 1 - 12:00");
+        assertThat(metadata.weatherSummary()).isEqualTo("Lluvia");
+        assertThat(metadata.difficulty()).isEqualTo("Normal");
+        assertThat(metadata.difficultyLocked()).isNotBlank();
+        assertThat(metadata.gameRules()).containsEntry(
+                "keepInventory",
+                WorldDataReader.getGameRules(TestWorldFixtures.world(worldDir, "snapshot")).get("keepInventory")
+        );
+        assertThat(metadata.gameRulesSummary()).contains("Inventario");
+    }
+
+    @Test
+    void readMetadata_debeAceptarNumerosNbtDeDistintosTipos() throws Exception {
+        Path worldDir = tempDir.resolve("numeric-tags");
+        CompoundTag data = baseWorldData();
+        data.putByte("GameType", (byte) 1);
+        data.putByte("Difficulty", (byte) 3);
+        data.putByte("DifficultyLocked", (byte) 1);
+        data.putInt("Time", 2400);
+        data.putInt("LastPlayed", 0);
+        data.putInt("DayTime", 6000);
+        data.putInt("RandomSeed", 42);
+        data.putShort("SpawnX", (short) 1);
+        data.putShort("SpawnY", (short) 64);
+        data.putShort("SpawnZ", (short) -2);
+        TestWorldFixtures.writeLevelDat(worldDir, data);
+
+        World world = TestWorldFixtures.world(worldDir, "numeric-tags");
+        WorldDataReader.WorldMetadata metadata = WorldDataReader.readMetadata(world);
+
+        assertThat(metadata.activeTicks()).isEqualTo(2400L);
+        assertThat(metadata.seed()).isEqualTo("42");
+        assertThat(metadata.spawnPoint()).isEqualTo(new WorldDataReader.SpawnPoint(1, 64, -2, 0f));
+        assertThat(metadata.gameMode()).isEqualTo("Creativo");
+        assertThat(metadata.difficulty()).isEqualTo("Dificil");
+        assertThat(metadata.difficultyLocked()).isNotBlank();
+        assertThat(metadata.dayTime()).isEqualTo("Dia 1 - 12:00");
+        assertThat(WorldDataReader.getDifficulty(world)).isEqualTo("Dificil");
+    }
+
+    @Test
     void getGameRules_debeOrdenarYNormalizarValores() throws Exception {
         Path worldDir = tempDir.resolve("rules");
         CompoundTag data = baseWorldData();

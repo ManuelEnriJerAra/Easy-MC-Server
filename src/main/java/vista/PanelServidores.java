@@ -263,9 +263,15 @@ public class PanelServidores extends FlatScrollPane {
         if(servidorSeleccionadoActual != null){
             mostrarSeleccionServidor(servidorSeleccionadoActual);
         }
-        restaurarPosicionScroll(posicionScroll);
+        restaurarPosicionScrollTrasLayout(posicionScroll);
         this.revalidate();
         this.repaint();
+    }
+
+    private void restaurarPosicionScrollTrasLayout(Point posicionScroll){
+        if(posicionScroll == null) return;
+        restaurarPosicionScroll(posicionScroll);
+        SwingUtilities.invokeLater(() -> restaurarPosicionScroll(posicionScroll));
     }
 
     private void restaurarPosicionScroll(Point posicionScroll){
@@ -275,8 +281,12 @@ public class PanelServidores extends FlatScrollPane {
         Component vista = viewport.getView();
         if(vista == null) return;
 
-        int maxX = Math.max(0, vista.getWidth() - viewport.getWidth());
-        int maxY = Math.max(0, vista.getHeight() - viewport.getHeight());
+        Dimension tamanioVista = vista.getSize();
+        Dimension preferidoVista = vista.getPreferredSize();
+        int anchoVista = Math.max(tamanioVista.width, preferidoVista.width);
+        int altoVista = Math.max(tamanioVista.height, preferidoVista.height);
+        int maxX = Math.max(0, anchoVista - viewport.getWidth());
+        int maxY = Math.max(0, altoVista - viewport.getHeight());
         Point ajustada = new Point(
                 Math.max(0, Math.min(posicionScroll.x, maxX)),
                 Math.max(0, Math.min(posicionScroll.y, maxY))

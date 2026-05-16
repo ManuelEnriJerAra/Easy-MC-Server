@@ -580,7 +580,7 @@ public final class ServerExtensionsService {
             warnings.add("No se conoce el estado de instalación local.");
         }
 
-        List<String> missingDependencies = findMissingDependencies(extension, context.installedDependencyKeys());
+        List<String> missingDependencies = findMissingDependencies(extension, context.installedExtensions());
         return new InstalledExtensionStatus(
                 compatibility,
                 installState,
@@ -601,7 +601,7 @@ public final class ServerExtensionsService {
                 resolveServerDir(server),
                 platform,
                 ecosystem,
-                buildInstalledDependencyKeys(extensions)
+                extensions == null ? List.of() : List.copyOf(extensions)
         );
     }
 
@@ -628,7 +628,7 @@ public final class ServerExtensionsService {
         return true;
     }
 
-    private List<String> findMissingDependencies(ServerExtension extension, Set<String> installedDependencyKeys) {
+    private List<String> findMissingDependencies(ServerExtension extension, List<ServerExtension> installedExtensions) {
         ExtensionLocalMetadata metadata = extension == null ? null : extension.getLocalMetadata();
         if (metadata == null || metadata.getDependencies() == null || metadata.getDependencies().isEmpty()) {
             return List.of();
@@ -638,55 +638,28 @@ public final class ServerExtensionsService {
             if (dependency == null || Boolean.FALSE.equals(dependency.getRequired())) {
                 continue;
             }
-            if (!isDependencyInstalled(installedDependencyKeys, dependency)) {
+            if (!isDependencyInstalled(installedExtensions, extension, dependency)) {
                 missing.add(firstNonBlank(dependency.getDisplayName(), dependency.getProjectId(), "Dependencia sin nombre"));
             }
         }
         return missing;
     }
 
-    private Set<String> buildInstalledDependencyKeys(List<ServerExtension> extensions) {
-        if (extensions == null || extensions.isEmpty()) {
-            return Set.of();
-        }
-        Set<String> keys = new HashSet<>();
-        for (ServerExtension installed : extensions) {
-            if (installed == null) {
-                continue;
-            }
-            ExtensionSource source = installed.getSource();
-            String provider = normalizeDependencyKey(source == null ? null : source.getProvider());
-            String projectId = normalizeDependencyKey(source == null ? null : source.getProjectId());
-            if (provider != null && projectId != null) {
-                keys.add("remote:" + provider + "::" + projectId);
-            }
-            String displayName = normalizeDependencyKey(installed.getDisplayName());
-            if (displayName != null) {
-                keys.add("name:" + displayName);
-            }
-        }
-        return keys;
-    }
-
-    private boolean isDependencyInstalled(Set<String> installedDependencyKeys, ExtensionRemoteDependency dependency) {
-        if (installedDependencyKeys == null || installedDependencyKeys.isEmpty() || dependency == null) {
+    private boolean isDependencyInstalled(List<ServerExtension> installedExtensions,
+                                          ServerExtension checkedExtension,
+                                          ExtensionRemoteDependency dependency) {
+        if (installedExtensions == null || installedExtensions.isEmpty() || dependency == null) {
             return false;
         }
-        String provider = normalizeDependencyKey(dependency.getProviderId());
-        String projectId = normalizeDependencyKey(dependency.getProjectId());
-        if (provider != null && projectId != null && installedDependencyKeys.contains("remote:" + provider + "::" + projectId)) {
-            return true;
+        for (ServerExtension installed : installedExtensions) {
+            if (installed == null || installed == checkedExtension) {
+                continue;
+            }
+            if (ExtensionDependencyMatcher.matchesInstalledExtension(dependency, installed)) {
+                return true;
+            }
         }
-        String displayName = normalizeDependencyKey(dependency.getDisplayName());
-        return displayName != null && installedDependencyKeys.contains("name:" + displayName);
-    }
-
-    private String normalizeDependencyKey(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
-        return normalized.isBlank() ? null : normalized;
+        return false;
     }
 
     private boolean isSameText(String left, String right) {
@@ -754,10 +727,10 @@ public final class ServerExtensionsService {
             if (installed.getLocalMetadata().getEmbeddedMetadataFiles() != null) {
                 detected.getLocalMetadata().setEmbeddedMetadataFiles(new ArrayList<>(installed.getLocalMetadata().getEmbeddedMetadataFiles()));
             }
-            if (detected.getLocalMetadata().getDependencies() == null
-                    || detected.getLocalMetadata().getDependencies().isEmpty()) {
-                detected.getLocalMetadata().setDependencies(copyDependencies(installed.getLocalMetadata().getDependencies()));
-            }
+            detected.getLocalMetadata().setDependencies(mergeDependenciesPreservingIdentities(
+                    installed.getLocalMetadata().getDependencies(),
+                    detected.getLocalMetadata().getDependencies()
+            ));
         }
         return detected;
     }
@@ -1174,7 +1147,10 @@ public final class ServerExtensionsService {
                 metadata.setCategories(new ArrayList<>(downloadPlan.categories()));
             }
             if (downloadPlan.dependencies() != null && !downloadPlan.dependencies().isEmpty()) {
-                metadata.setDependencies(copyDependenciesFromPlan(downloadPlan.dependencies()));
+                metadata.setDependencies(mergeDependenciesPreservingIdentities(
+                        copyDependenciesFromPlan(downloadPlan.dependencies()),
+                        metadata.getDependencies()
+                ));
             }
             if (metadata.getInstalledVersion() != null
                     && metadata.getInstalledVersion().equalsIgnoreCase(firstNonBlank(downloadPlan.versionNumber(), metadata.getInstalledVersion()))) {
@@ -1310,10 +1286,9 @@ public final class ServerExtensionsService {
         metadata.setLicenseName(descriptor.licenseName());
         metadata.setEmbeddedMetadataFiles(copyStrings(descriptor.embeddedMetadataFiles()));
         metadata.setManifestAttributes(new LinkedHashMap<>(descriptor.manifestAttributes()));
+        List<ExtensionRemoteDependency> existingDependencies = copyDependencies(metadata.getDependencies());
         List<ExtensionRemoteDependency> descriptorDependencies = copyDependencies(descriptor.dependencies());
-        if (!descriptorDependencies.isEmpty() || metadata.getDependencies() == null) {
-            metadata.setDependencies(descriptorDependencies);
-        }
+        metadata.setDependencies(mergeDependenciesPreservingIdentities(existingDependencies, descriptorDependencies));
         metadata.setLocalDependencyDescriptions(copyStrings(descriptor.localDependencyDescriptions()));
         metadata.setClientSide(firstNonBlank(descriptor.clientSide(), metadata.getClientSide()));
         metadata.setServerSide(firstNonBlank(descriptor.serverSide(), metadata.getServerSide()));
@@ -1515,6 +1490,60 @@ public final class ServerExtensionsService {
             copied.add(copy);
         }
         return copied;
+    }
+
+    private List<ExtensionRemoteDependency> mergeDependenciesPreservingIdentities(List<ExtensionRemoteDependency> preferred,
+                                                                                  List<ExtensionRemoteDependency> additional) {
+        if ((preferred == null || preferred.isEmpty()) && (additional == null || additional.isEmpty())) {
+            return List.of();
+        }
+        Map<String, ExtensionRemoteDependency> merged = new LinkedHashMap<>();
+        addDependenciesByIdentity(merged, preferred);
+        addDependenciesByIdentity(merged, additional);
+        return new ArrayList<>(merged.values());
+    }
+
+    private void addDependenciesByIdentity(Map<String, ExtensionRemoteDependency> target,
+                                           List<ExtensionRemoteDependency> dependencies) {
+        if (target == null || dependencies == null || dependencies.isEmpty()) {
+            return;
+        }
+        for (ExtensionRemoteDependency dependency : dependencies) {
+            if (dependency == null) {
+                continue;
+            }
+            target.putIfAbsent(dependencyIdentityKey(dependency), copyDependency(dependency));
+        }
+    }
+
+    private String dependencyIdentityKey(ExtensionRemoteDependency dependency) {
+        String normalized = ExtensionDependencyMatcher.normalizedDependencyKey(dependency);
+        if (normalized != null) {
+            return normalized;
+        }
+        return "anonymous::"
+                + firstNonBlank(dependency.getProviderId(), "")
+                + "::"
+                + firstNonBlank(dependency.getProjectId(), "")
+                + "::"
+                + firstNonBlank(dependency.getVersionId(), "")
+                + "::"
+                + firstNonBlank(dependency.getDisplayName(), "")
+                + "::"
+                + firstNonBlank(dependency.getDependencyType(), "")
+                + "::"
+                + dependency.getRequired();
+    }
+
+    private ExtensionRemoteDependency copyDependency(ExtensionRemoteDependency dependency) {
+        ExtensionRemoteDependency copy = new ExtensionRemoteDependency();
+        copy.setProviderId(dependency.getProviderId());
+        copy.setProjectId(dependency.getProjectId());
+        copy.setVersionId(dependency.getVersionId());
+        copy.setDisplayName(dependency.getDisplayName());
+        copy.setDependencyType(dependency.getDependencyType());
+        copy.setRequired(dependency.getRequired());
+        return copy;
     }
 
     private List<ExtensionRemoteDependency> copyDependenciesFromPlan(List<ExtensionDependency> dependencies) {
@@ -2983,7 +3012,7 @@ public final class ServerExtensionsService {
             Path serverDir,
             ServerPlatform serverPlatform,
             ServerEcosystemType serverEcosystem,
-            Set<String> installedDependencyKeys
+            List<ServerExtension> installedExtensions
     ) {
     }
 

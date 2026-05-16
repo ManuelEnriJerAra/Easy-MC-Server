@@ -38,6 +38,8 @@ Responsibilities:
 - Open and edit lists such as whitelist, banned players, banned IPs, and OPs.
 - Sync known users and remote Mojang profile data where available.
 
+List counters and known-user synchronization are non-urgent page metadata. Keep those reads off the page-construction path when possible and apply results back on the EDT.
+
 ## List Files
 
 Player management touches server list files such as:

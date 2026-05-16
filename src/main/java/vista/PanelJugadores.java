@@ -72,6 +72,7 @@ import javax.swing.Scrollable;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import javax.swing.event.ListDataEvent;
@@ -129,6 +130,7 @@ public class PanelJugadores extends JPanel {
     private final PropertyChangeListener listenerEstadoServidor;
     private int maxPlayers;
     private int fakePlayerSequence;
+    private long contadorRefreshSequence;
     private WatchService listasWatchService;
     private Thread listasWatchThread;
     private JPanel headerActionsPanel;
@@ -190,7 +192,6 @@ public class PanelJugadores extends JPanel {
         maxPlayers = leerMaxPlayers(server);
         if (server != null) {
             recomputarDesdeLogs(server.getRawLogLines());
-            sincronizarUsuariosConocidosServidorActual();
             consoleListener = this::procesarLinea;
             server.addConsoleListener(consoleListener);
             iniciarWatcherListas(server);
@@ -210,7 +211,7 @@ public class PanelJugadores extends JPanel {
         };
         gestorServidores.addPropertyChangeListener("estadoServidor", listenerEstadoServidor);
 
-        recargarContadores();
+        recargarContadoresAsync();
 
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
@@ -235,7 +236,7 @@ public class PanelJugadores extends JPanel {
         actualizarListasAutomaticamente();
         if (server != null) {
             recomputarDesdeLogs(server.getRawLogLines());
-            sincronizarUsuariosConocidosServidorActual();
+            recargarContadoresAsync();
         } else {
             setJugadores(Set.of());
         }
@@ -277,6 +278,24 @@ public class PanelJugadores extends JPanel {
 
         TipoLista(String filename) {
             this.filename = filename;
+        }
+    }
+
+    private record CounterSnapshot(
+            List<String> whitelist,
+            List<String> bannedPlayers,
+            List<String> bannedIps,
+            List<String> ops
+    ) {
+        private CounterSnapshot {
+            whitelist = whitelist == null ? List.of() : List.copyOf(whitelist);
+            bannedPlayers = bannedPlayers == null ? List.of() : List.copyOf(bannedPlayers);
+            bannedIps = bannedIps == null ? List.of() : List.copyOf(bannedIps);
+            ops = ops == null ? List.of() : List.copyOf(ops);
+        }
+
+        static CounterSnapshot empty() {
+            return new CounterSnapshot(List.of(), List.of(), List.of(), List.of());
         }
     }
 
@@ -467,10 +486,52 @@ public class PanelJugadores extends JPanel {
     }
 
     private void recargarContadores() {
-        int whitelistCount = cargarListaDesdeArchivo(TipoLista.WHITELIST).size();
-        int bannedPlayersCount = cargarListaDesdeArchivo(TipoLista.BANNED_PLAYERS).size();
-        int bannedIpsCount = cargarListaDesdeArchivo(TipoLista.BANNED_IPS).size();
-        List<String> ops = cargarListaDesdeArchivo(TipoLista.OPS);
+        CounterSnapshot snapshot = cargarContadores(server);
+        aplicarContadores(snapshot);
+    }
+
+    private void recargarContadoresAsync() {
+        Server servidorSnapshot = server;
+        Set<String> onlineSnapshot = new LinkedHashSet<>(panelsPorJugador.keySet());
+        long requestId = ++contadorRefreshSequence;
+        new SwingWorker<CounterSnapshot, Void>() {
+            @Override
+            protected CounterSnapshot doInBackground() {
+                CounterSnapshot snapshot = cargarContadores(servidorSnapshot);
+                recordarUsuariosConocidos(snapshot, onlineSnapshot);
+                return snapshot;
+            }
+
+            @Override
+            protected void done() {
+                if (requestId != contadorRefreshSequence || servidorSnapshot != server) {
+                    return;
+                }
+                try {
+                    aplicarContadores(get());
+                } catch (Exception ignored) {
+                    aplicarContadores(CounterSnapshot.empty());
+                }
+            }
+        }.execute();
+    }
+
+    private CounterSnapshot cargarContadores(Server servidorActual) {
+        List<String> whitelist = cargarListaDesdeArchivo(servidorActual, TipoLista.WHITELIST);
+        List<String> bannedPlayers = cargarListaDesdeArchivo(servidorActual, TipoLista.BANNED_PLAYERS);
+        List<String> bannedIps = cargarListaDesdeArchivo(servidorActual, TipoLista.BANNED_IPS);
+        List<String> ops = cargarListaDesdeArchivo(servidorActual, TipoLista.OPS);
+        return new CounterSnapshot(whitelist, bannedPlayers, bannedIps, ops);
+    }
+
+    private void aplicarContadores(CounterSnapshot snapshot) {
+        if (snapshot == null) {
+            snapshot = CounterSnapshot.empty();
+        }
+        int whitelistCount = snapshot.whitelist().size();
+        int bannedPlayersCount = snapshot.bannedPlayers().size();
+        int bannedIpsCount = snapshot.bannedIps().size();
+        List<String> ops = snapshot.ops();
         int opsCount = ops.size();
         operadores.clear();
         operadores.addAll(ops);
@@ -485,7 +546,10 @@ public class PanelJugadores extends JPanel {
     }
 
     private List<String> cargarListaDesdeArchivo(TipoLista tipo) {
-        Server servidorActual = server;
+        return cargarListaDesdeArchivo(server, tipo);
+    }
+
+    private List<String> cargarListaDesdeArchivo(Server servidorActual, TipoLista tipo) {
         if (servidorActual == null) return List.of();
         String dir = servidorActual.getServerDir();
         if (dir == null || dir.isBlank()) return List.of();
@@ -1379,10 +1443,18 @@ public class PanelJugadores extends JPanel {
         if (server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
             return;
         }
-        GestorUsuariosConocidos.recordarUsuarios(cargarListaDesdeArchivo(TipoLista.WHITELIST), "whitelist");
-        GestorUsuariosConocidos.recordarUsuarios(cargarListaDesdeArchivo(TipoLista.OPS), "ops");
-        GestorUsuariosConocidos.recordarUsuarios(cargarListaDesdeArchivo(TipoLista.BANNED_PLAYERS), "banned-players");
-        GestorUsuariosConocidos.recordarUsuarios(panelsPorJugador.keySet(), "online-players");
+        CounterSnapshot snapshot = cargarContadores(server);
+        recordarUsuariosConocidos(snapshot, new LinkedHashSet<>(panelsPorJugador.keySet()));
+    }
+
+    private void recordarUsuariosConocidos(CounterSnapshot snapshot, Set<String> onlinePlayers) {
+        if (snapshot == null) {
+            return;
+        }
+        GestorUsuariosConocidos.recordarUsuarios(snapshot.whitelist(), "whitelist");
+        GestorUsuariosConocidos.recordarUsuarios(snapshot.ops(), "ops");
+        GestorUsuariosConocidos.recordarUsuarios(snapshot.bannedPlayers(), "banned-players");
+        GestorUsuariosConocidos.recordarUsuarios(onlinePlayers == null ? Set.of() : onlinePlayers, "online-players");
     }
 
     private void recordarUsuarioConocidoSiProcede(TipoLista tipo, String username, String source) {

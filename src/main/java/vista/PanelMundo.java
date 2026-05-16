@@ -707,8 +707,10 @@ public class PanelMundo extends JPanel {
     private void actualizarVistaMundos() {
         updateUseWorldButtonState();
         cargarPreferenciasPreviewServidorActual();
-        actualizarLabelsDatosServidor();
-        actualizarConfiguracionMundo();
+        World mundo = getMundoSeleccionadoOActivo();
+        WorldDataReader.WorldMetadata metadata = mundo == null ? null : WorldDataReader.readMetadata(mundo);
+        actualizarLabelsDatosServidor(metadata);
+        actualizarConfiguracionMundo(metadata);
         actualizarPreviewSeleccionada();
         actualizarTextoBotonPreview();
         actualizarIndicadorRenderEnCurso();
@@ -718,6 +720,11 @@ public class PanelMundo extends JPanel {
     }
 
     private void actualizarLabelsDatosServidor() {
+        World mundo = getMundoSeleccionadoOActivo();
+        actualizarLabelsDatosServidor(mundo == null ? null : WorldDataReader.readMetadata(mundo));
+    }
+
+    private void actualizarLabelsDatosServidor(WorldDataReader.WorldMetadata metadataMundo) {
         Server server = gestorServidores.getServidorSeleccionado();
         if (server == null) {
             limpiarVistaSinServidor();
@@ -740,40 +747,49 @@ public class PanelMundo extends JPanel {
             return;
         }
 
-        long ticksArchivo = WorldDataReader.getActiveTicks(mundo);
+        WorldDataReader.WorldMetadata metadata = metadataMundo == null ? WorldDataReader.readMetadata(mundo) : metadataMundo;
+        long ticksArchivo = metadata.activeTicks();
         tiempoRealValueLabel.setText(ticksArchivo >= 0L ? formatearTiempo(ticksArchivo) : "-");
-        String lastPlayed = WorldDataReader.getLastPlayed(mundo);
+        String lastPlayed = metadata.lastPlayed();
         lastPlayedValueLabel.setText(valorOPlaceholder(lastPlayed));
-        versionValueLabel.setText(valorOPlaceholder(WorldDataReader.getVersionName(mundo)));
-        dataVersionValueLabel.setText(valorOPlaceholder(WorldDataReader.getDataVersion(mundo)));
+        versionValueLabel.setText(valorOPlaceholder(metadata.versionName()));
+        dataVersionValueLabel.setText(valorOPlaceholder(metadata.dataVersion()));
         tipoMundoValueLabel.setText(valorOPlaceholder(leerTipoMundo(mundo)));
-        seedValueLabel.setText(valorOPlaceholder(WorldDataReader.getSeed(mundo)));
-        dayTimeValueLabel.setText(valorOPlaceholder(WorldDataReader.getDayTime(mundo)));
-        gamemodeValueLabel.setText(valorOPlaceholder(WorldDataReader.getGameMode(mundo)));
-        difficultyValueLabel.setText(construirResumenDificultad(mundo));
-        weatherValueLabel.setText(valorOPlaceholder(WorldDataReader.getWeatherSummary(mundo)));
-        spawnValueLabel.setText(valorOPlaceholder(formatearSpawn(WorldDataReader.getSpawnPoint(mundo))));
+        seedValueLabel.setText(valorOPlaceholder(metadata.seed()));
+        dayTimeValueLabel.setText(valorOPlaceholder(metadata.dayTime()));
+        gamemodeValueLabel.setText(valorOPlaceholder(metadata.gameMode()));
+        difficultyValueLabel.setText(construirResumenDificultad(metadata));
+        weatherValueLabel.setText(valorOPlaceholder(metadata.weatherSummary()));
+        spawnValueLabel.setText(valorOPlaceholder(formatearSpawn(metadata.spawnPoint())));
     }
 
     private void actualizarConfiguracionMundo() {
+        World mundo = getMundoSeleccionadoOActivo();
+        actualizarConfiguracionMundo(mundo == null ? null : WorldDataReader.readMetadata(mundo));
+    }
+
+    private void actualizarConfiguracionMundo(WorldDataReader.WorldMetadata metadataMundo) {
         Server server = gestorServidores.getServidorSeleccionado();
         World mundo = getMundoSeleccionadoOActivo();
         Properties metadata = WorldFilesService.readWorldMetadata(mundo);
         Properties serverProps = WorldFilesService.readServerProperties(server);
+        WorldDataReader.WorldMetadata levelMetadata = metadataMundo == null && mundo != null
+                ? WorldDataReader.readMetadata(mundo)
+                : metadataMundo;
 
-        dayTimeValueLabel.setText(valorOPlaceholder(WorldDataReader.getDayTime(mundo)));
-        hardcoreValueLabel.setText(valorOPlaceholder(primeroNoVacio(WorldDataReader.getHardcore(mundo), formatearBoolean(metadata.getProperty("hardcore")))));
-        allowCommandsValueLabel.setText(valorOPlaceholder(WorldDataReader.getAllowCommands(mundo)));
+        dayTimeValueLabel.setText(valorOPlaceholder(levelMetadata == null ? null : levelMetadata.dayTime()));
+        hardcoreValueLabel.setText(valorOPlaceholder(primeroNoVacio(levelMetadata == null ? null : levelMetadata.hardcore(), formatearBoolean(metadata.getProperty("hardcore")))));
+        allowCommandsValueLabel.setText(valorOPlaceholder(levelMetadata == null ? null : levelMetadata.allowCommands()));
         generatorSettingsValueLabel.setText(formatearGeneratorSettings(metadata.getProperty("generator-settings")));
         estructurasValueLabel.setText(formatearEstructuras(metadata.getProperty("generate-structures")));
         dataPacksValueLabel.setText(valorOPlaceholder(primeroNoVacio(
-                WorldDataReader.getDataPacksSummary(mundo),
+                levelMetadata == null ? null : levelMetadata.dataPacksSummary(),
                 construirResumenPacksIniciales(metadata)
         )));
-        gameRulesValueLabel.setText(valorOPlaceholder(WorldDataReader.getGameRulesSummary(mundo)));
+        gameRulesValueLabel.setText(valorOPlaceholder(levelMetadata == null ? null : levelMetadata.gameRulesSummary()));
         initialEnabledPacksValueLabel.setText(valorOPlaceholder(metadata.getProperty("initial-enabled-packs")));
         initialDisabledPacksValueLabel.setText(valorOPlaceholder(metadata.getProperty("initial-disabled-packs")));
-        reconstruirMetadataMundo(mundo);
+        reconstruirMetadataMundo(levelMetadata);
         actualizarTooltipResumenLargo(dataPacksValueLabel, construirTooltipPacks(metadata));
         actualizarTooltipResumenLargo(gameRulesValueLabel, "Resumen de gamerules principales leidas desde level.dat.");
 
@@ -787,7 +803,7 @@ public class PanelMundo extends JPanel {
         updateWorldSettingsSaveButtonState();
     }
 
-    private void reconstruirMetadataMundo(World mundo) {
+    private void reconstruirMetadataMundo(WorldDataReader.WorldMetadata metadata) {
         metadataReadPanel.removeAll();
         agregarSeccionMetadata("Identidad");
         metadataReadPanel.add(crearInfoRow("Data version:", dataVersionValueLabel));
@@ -820,7 +836,7 @@ public class PanelMundo extends JPanel {
         metadataReadPanel.add(Box.createVerticalStrut(10));
 
         agregarSeccionMetadata("Gamerules");
-        metadataReadPanel.add(crearSeccionGameRules(WorldDataReader.getGameRules(mundo)));
+        metadataReadPanel.add(crearSeccionGameRules(metadata == null ? Map.of() : metadata.gameRules()));
         metadataReadPanel.add(Box.createVerticalGlue());
         metadataReadPanel.revalidate();
         metadataReadPanel.repaint();
@@ -998,12 +1014,12 @@ public class PanelMundo extends JPanel {
         return value;
     }
 
-    private String construirResumenDificultad(World mundo) {
-        String difficulty = WorldDataReader.getDifficulty(mundo);
+    private String construirResumenDificultad(WorldDataReader.WorldMetadata metadata) {
+        String difficulty = metadata == null ? null : metadata.difficulty();
         if (difficulty == null || difficulty.isBlank()) {
             return "-";
         }
-        String locked = WorldDataReader.getDifficultyLocked(mundo);
+        String locked = metadata.difficultyLocked();
         if (locked == null || locked.isBlank()) {
             return difficulty;
         }

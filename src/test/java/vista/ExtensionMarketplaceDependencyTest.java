@@ -1,6 +1,7 @@
 package vista;
 
 import controlador.extensions.ExtensionDependency;
+import controlador.extensions.ExtensionDependencyMatcher;
 import controlador.extensions.ExtensionDownloadPlan;
 import controlador.extensions.ExtensionInstallResolution;
 import controlador.extensions.ExtensionInstallResolutionState;
@@ -70,6 +71,24 @@ class ExtensionMarketplaceDependencyTest {
         installed.setLocalMetadata(metadata);
 
         assertThat(ExtensionMarketplaceDialog.dependencyMatchesInstalledExtension(dependency, installed)).isTrue();
+    }
+
+    @Test
+    void sharedDependencyMatcherMatchesMarketplaceAndInstalledStatusDependencies() {
+        ServerExtension installed = new ServerExtension();
+        installed.setDisplayName("Fabric API");
+        ExtensionLocalMetadata metadata = new ExtensionLocalMetadata();
+        metadata.setFileName("fabric-api.jar");
+        installed.setLocalMetadata(metadata);
+
+        ExtensionDependency marketplaceDependency = new ExtensionDependency("modrinth", "FabricAPI", null, "Fabric API", "required", true);
+        ExtensionRemoteDependency installedStatusDependency = new ExtensionRemoteDependency();
+        installedStatusDependency.setProviderId("modrinth");
+        installedStatusDependency.setProjectId("FabricAPI");
+        installedStatusDependency.setDisplayName("Fabric API");
+
+        assertThat(ExtensionDependencyMatcher.matchesInstalledExtension(marketplaceDependency, installed)).isTrue();
+        assertThat(ExtensionDependencyMatcher.matchesInstalledExtension(installedStatusDependency, installed)).isTrue();
     }
 
     @Test

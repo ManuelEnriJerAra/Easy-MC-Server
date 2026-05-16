@@ -4,6 +4,20 @@
 
 Pending
 
+## Progress Notes
+
+Partially implemented in `docs/features/server-pages-metadata-cache-background-loading.md`:
+
+- `WorldDataReader` now exposes a one-read `WorldMetadata` snapshot for `level.dat`.
+- `PanelMundo` reuses one snapshot across labels, settings, and gamerule rendering during a refresh.
+- `PanelJugadores` refreshes list counters and known-user sync in a background worker.
+
+Remaining work in this pending feature:
+
+- full loading placeholders and async page-level refresh for Mundo;
+- async history loading and cached `server.properties` reads for Estadisticas;
+- optional async recent-connection data loading in `WorldRecentConnectionsPanel`.
+
 ## Area
 
 `vista.PanelMundo`, `vista.PanelEstadisticas`, `vista.PanelJugadores`, and the right-side server-detail loading flow.

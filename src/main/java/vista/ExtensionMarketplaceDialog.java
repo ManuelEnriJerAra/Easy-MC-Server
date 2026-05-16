@@ -90,6 +90,7 @@ import controlador.extensions.ExtensionCatalogQuery;
 import controlador.extensions.ExtensionCatalogVersion;
 import controlador.extensions.ExtensionCompatibilityStatus;
 import controlador.extensions.ExtensionDependency;
+import controlador.extensions.ExtensionDependencyMatcher;
 import controlador.extensions.ExtensionDownloadPlan;
 import controlador.extensions.ExtensionInstallResolution;
 import controlador.extensions.ExtensionInstallResolutionState;
@@ -4612,52 +4613,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     static boolean dependencyMatchesInstalledExtension(ExtensionDependency dependency, ServerExtension extension) {
-        if (dependency == null || extension == null) {
-            return false;
-        }
-        ExtensionSource source = extension.getSource();
-        if (source != null && dependencyMatchesCandidate(
-                dependency,
-                source.getProvider(),
-                source.getProjectId(),
-                extension.getDisplayName(),
-                extension.getId())) {
-            return true;
-        }
-        ExtensionLocalMetadata metadata = extension.getLocalMetadata();
-        if (dependencyMatchesCandidate(
-                dependency,
-                null,
-                null,
-                extension.getDisplayName(),
-                extension.getId())) {
-            return true;
-        }
-        if (metadata != null) {
-            if (dependencyMatchesCandidate(dependency, null, null, stripJarExtensionStatic(metadata.getFileName()), metadata.getFileName())) {
-                return true;
-            }
-            if (metadata.getLocalDependencyDescriptions() != null) {
-                for (String localId : metadata.getLocalDependencyDescriptions()) {
-                    if (dependencyMatchesCandidate(dependency, null, null, localId, localId)) {
-                        return true;
-                    }
-                }
-            }
-            if (metadata.getDependencies() != null) {
-                for (modelo.extensions.ExtensionRemoteDependency localDependency : metadata.getDependencies()) {
-                    if (localDependency != null && dependencyMatchesCandidate(
-                            dependency,
-                            localDependency.getProviderId(),
-                            localDependency.getProjectId(),
-                            localDependency.getDisplayName(),
-                            localDependency.getProjectId())) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        return ExtensionDependencyMatcher.matchesInstalledExtension(dependency, extension);
     }
 
     static boolean dependencyMatchesCandidate(ExtensionDependency dependency,
@@ -4668,56 +4624,19 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (dependency == null) {
             return false;
         }
-        String dependencyProvider = normalizeIdentifier(dependency.providerId());
-        String dependencyProject = normalizeIdentifier(dependency.projectId());
-        if (dependencyProvider != null && dependencyProject != null
-                && dependencyProvider.equals(normalizeIdentifier(providerId))
-                && dependencyProject.equals(normalizeIdentifier(projectId))) {
-            return true;
-        }
-        String dependencyName = normalizeIdentifier(dependency.displayName());
-        return (dependencyProject != null && (dependencyProject.equals(normalizeIdentifier(localId))
-                || dependencyProject.equals(normalizeIdentifier(displayName))))
-                || (dependencyName != null && (dependencyName.equals(normalizeIdentifier(localId))
-                || dependencyName.equals(normalizeIdentifier(displayName))
-                || dependencyName.equals(normalizeIdentifier(projectId))));
+        return ExtensionDependencyMatcher.matchesCandidate(dependency, providerId, projectId, displayName, localId);
     }
 
     static String normalizedDependencyKey(ExtensionDependency dependency) {
-        if (dependency == null) {
-            return null;
-        }
-        String provider = normalizeIdentifier(dependency.providerId());
-        String project = normalizeIdentifier(dependency.projectId());
-        if (provider != null && project != null) {
-            return provider + "::" + project;
-        }
-        String fallback = normalizeIdentifier(defaultStringStatic(dependency.projectId(), dependency.displayName()));
-        return fallback == null ? null : "local::" + fallback;
+        return ExtensionDependencyMatcher.normalizedDependencyKey(dependency);
     }
 
     private static String normalizeIdentifier(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        String normalized = value.trim().toLowerCase(Locale.ROOT)
-                .replaceAll("\\.jar$", "")
-                .replaceAll("[^a-z0-9]+", "");
-        return normalized.isBlank() ? null : normalized;
+        return ExtensionDependencyMatcher.normalizeIdentifier(value);
     }
 
     private static String defaultStringStatic(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
-    }
-
-    private static String stripJarExtensionStatic(String fileName) {
-        if (fileName == null || fileName.isBlank()) {
-            return null;
-        }
-        String normalized = fileName.trim();
-        return normalized.toLowerCase(Locale.ROOT).endsWith(".jar")
-                ? normalized.substring(0, normalized.length() - 4)
-                : normalized;
     }
 
     private String summarizeDependencies(List<ExtensionDependency> dependencies) {

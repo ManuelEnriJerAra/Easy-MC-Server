@@ -57,6 +57,31 @@ public class WorldDataReader {
         return root == null ? null : root.getCompoundTag("Data");
     }
 
+    public static WorldMetadata readMetadata(World mundo) {
+        CompoundTag data = getDataTag(mundo);
+        if(data == null) return WorldMetadata.empty();
+
+        Map<String, String> gameRules = readGameRules(data);
+        return new WorldMetadata(
+                readActiveTicks(data),
+                readLastPlayed(data),
+                readVersionName(data),
+                readDataVersion(data),
+                readSeed(data),
+                readSpawnPoint(data),
+                readGameMode(data),
+                readDifficulty(data),
+                readBooleanLabel(data, "DifficultyLocked"),
+                readWeatherSummary(data),
+                readDayTime(data),
+                readBooleanLabel(data, "hardcore"),
+                readBooleanLabel(data, "allowCommands"),
+                readDataPacksSummary(data),
+                readGameRulesSummary(gameRules),
+                gameRules
+        );
+    }
+
     public static String getVersionName(World mundo) {
         try {
             CompoundTag data = getDataTag(mundo);
@@ -77,7 +102,7 @@ public class WorldDataReader {
             CompoundTag data = getDataTag(mundo);
             if(data == null) return null;
 
-            IntTag dataVersionTag = data.getIntTag("DataVersion");
+            NumberTag<?> dataVersionTag = readNumberTag(data, "DataVersion");
             if(dataVersionTag == null) return null;
             return Integer.toString(dataVersionTag.asInt());
         } catch (Exception ex) {
@@ -146,7 +171,7 @@ public class WorldDataReader {
             CompoundTag data = getDataTag(mundo);
             if(data == null) return 0L;
 
-            LongTag timeTag = data.getLongTag("Time");
+            NumberTag<?> timeTag = readNumberTag(data, "Time");
             if(timeTag == null) return 0L;
             return Math.max(0L, timeTag.asLong());
         } catch (Exception ex){
@@ -160,7 +185,7 @@ public class WorldDataReader {
             CompoundTag data = getDataTag(mundo);
             if(data == null) return null;
 
-            LongTag timeTag = data.getLongTag("LastPlayed");
+            NumberTag<?> timeTag = readNumberTag(data, "LastPlayed");
             if(timeTag == null) return null;
             return fromMStoDateString(timeTag.asLong());
         } catch (Exception ex){
@@ -175,7 +200,7 @@ public class WorldDataReader {
             if(data == null) return "-";
 
             // Mundos legacy y muchas versiones intermedias guardan la seed en Data.RandomSeed.
-            LongTag randomSeedTag = data.getLongTag("RandomSeed");
+            NumberTag<?> randomSeedTag = readNumberTag(data, "RandomSeed");
             if(randomSeedTag != null) {
                 return Long.toString(randomSeedTag.asLong());
             }
@@ -213,9 +238,9 @@ public class WorldDataReader {
             CompoundTag data = getDataTag(mundo);
             if(data == null) return null;
 
-            IntTag spawnXTag = data.getIntTag("SpawnX");
-            IntTag spawnYTag = data.getIntTag("SpawnY");
-            IntTag spawnZTag = data.getIntTag("SpawnZ");
+            NumberTag<?> spawnXTag = readNumberTag(data, "SpawnX");
+            NumberTag<?> spawnYTag = readNumberTag(data, "SpawnY");
+            NumberTag<?> spawnZTag = readNumberTag(data, "SpawnZ");
             if(spawnXTag != null && spawnZTag != null) {
                 int spawnY = spawnYTag != null ? spawnYTag.asInt() : 0;
                 float angle = readFloat(data.get("SpawnAngle"), 0f);
@@ -256,15 +281,9 @@ public class WorldDataReader {
             CompoundTag data = getDataTag(mundo);
             if(data == null) return null;
 
-            IntTag gameTypeTag = data.getIntTag("GameType");
+            NumberTag<?> gameTypeTag = readNumberTag(data, "GameType");
             if(gameTypeTag == null) return null;
-            return switch (gameTypeTag.asInt()) {
-                case 0 -> "Supervivencia";
-                case 1 -> "Creativo";
-                case 2 -> "Aventura";
-                case 3 -> "Espectador";
-                default -> Integer.toString(gameTypeTag.asInt());
-            };
+            return formatGameMode(gameTypeTag.asInt());
         } catch (Exception ex) {
             return null;
         }
@@ -275,15 +294,9 @@ public class WorldDataReader {
             CompoundTag data = getDataTag(mundo);
             if(data == null) return null;
 
-            IntTag difficultyTag = data.getIntTag("Difficulty");
+            NumberTag<?> difficultyTag = readNumberTag(data, "Difficulty");
             if(difficultyTag == null) return null;
-            return switch (difficultyTag.asInt()) {
-                case 0 -> "Pacifica";
-                case 1 -> "Facil";
-                case 2 -> "Normal";
-                case 3 -> "Dificil";
-                default -> Integer.toString(difficultyTag.asInt());
-            };
+            return formatDifficulty(difficultyTag.asInt());
         } catch (Exception ex) {
             return null;
         }
@@ -327,7 +340,7 @@ public class WorldDataReader {
             CompoundTag data = getDataTag(mundo);
             if(data == null) return null;
 
-            LongTag dayTimeTag = data.getLongTag("DayTime");
+            NumberTag<?> dayTimeTag = readNumberTag(data, "DayTime");
             if(dayTimeTag == null) return null;
 
             long absoluteTicks = Math.max(0L, dayTimeTag.asLong());
@@ -439,6 +452,180 @@ public class WorldDataReader {
         }
     }   
 
+    private static long readActiveTicks(CompoundTag data) {
+        NumberTag<?> timeTag = readNumberTag(data, "Time");
+        return timeTag == null ? 0L : Math.max(0L, timeTag.asLong());
+    }
+
+    private static String readLastPlayed(CompoundTag data) {
+        NumberTag<?> timeTag = readNumberTag(data, "LastPlayed");
+        return timeTag == null ? null : fromMStoDateString(timeTag.asLong());
+    }
+
+    private static String readVersionName(CompoundTag data) {
+        CompoundTag versionTag = data == null ? null : data.getCompoundTag("Version");
+        if(versionTag == null) return null;
+        String versionName = versionTag.getString("Name");
+        return versionName == null || versionName.isBlank() ? null : versionName;
+    }
+
+    private static String readDataVersion(CompoundTag data) {
+        NumberTag<?> dataVersionTag = readNumberTag(data, "DataVersion");
+        return dataVersionTag == null ? null : Integer.toString(dataVersionTag.asInt());
+    }
+
+    private static String readSeed(CompoundTag data) {
+        if(data == null) return "-";
+        NumberTag<?> randomSeedTag = readNumberTag(data, "RandomSeed");
+        if(randomSeedTag != null) {
+            return Long.toString(randomSeedTag.asLong());
+        }
+        CompoundTag worldGenSettings = data.getCompoundTag("WorldGenSettings");
+        if(worldGenSettings != null) {
+            Tag<?> seedTag = worldGenSettings.get("seed");
+            if(seedTag instanceof LongTag longSeedTag) {
+                return Long.toString(longSeedTag.asLong());
+            }
+            if(seedTag instanceof IntTag intSeedTag) {
+                return Integer.toString(intSeedTag.asInt());
+            }
+            if(seedTag instanceof StringTag stringSeedTag) {
+                return normalizeRawString(stringSeedTag.getValue());
+            }
+            if(seedTag != null) {
+                String genericSeedValue = normalizeRawString(seedTag.valueToString());
+                if(genericSeedValue != null && !genericSeedValue.isBlank()) {
+                    return genericSeedValue;
+                }
+            }
+        }
+        return "-";
+    }
+
+    private static SpawnPoint readSpawnPoint(CompoundTag data) {
+        if(data == null) return null;
+        NumberTag<?> spawnXTag = readNumberTag(data, "SpawnX");
+        NumberTag<?> spawnYTag = readNumberTag(data, "SpawnY");
+        NumberTag<?> spawnZTag = readNumberTag(data, "SpawnZ");
+        if(spawnXTag != null && spawnZTag != null) {
+            int spawnY = spawnYTag != null ? spawnYTag.asInt() : 0;
+            float angle = readFloat(data.get("SpawnAngle"), 0f);
+            return new SpawnPoint(spawnXTag.asInt(), spawnY, spawnZTag.asInt(), angle);
+        }
+
+        CompoundTag spawnTag = data.getCompoundTag("spawn");
+        if(spawnTag == null) return null;
+
+        int[] spawnPos = spawnTag.getIntArray("pos");
+        if(spawnPos != null && spawnPos.length >= 3) {
+            float angle = readFloat(spawnTag.get("angle"), 0f);
+            return new SpawnPoint(spawnPos[0], spawnPos[1], spawnPos[2], angle);
+        }
+
+        ListTag<?> spawnPosList = spawnTag.getListTag("pos");
+        if(spawnPosList != null && spawnPosList.size() >= 3) {
+            Tag<?> xTag = spawnPosList.get(0);
+            Tag<?> yTag = spawnPosList.get(1);
+            Tag<?> zTag = spawnPosList.get(2);
+            if(xTag instanceof NumberTag<?> xNumber
+                    && yTag instanceof NumberTag<?> yNumber
+                    && zTag instanceof NumberTag<?> zNumber) {
+                float angle = readFloat(spawnTag.get("angle"), 0f);
+                return new SpawnPoint(xNumber.asInt(), yNumber.asInt(), zNumber.asInt(), angle);
+            }
+        }
+        return null;
+    }
+
+    private static String readGameMode(CompoundTag data) {
+        NumberTag<?> gameTypeTag = readNumberTag(data, "GameType");
+        if(gameTypeTag == null) return null;
+        return formatGameMode(gameTypeTag.asInt());
+    }
+
+    private static String readDifficulty(CompoundTag data) {
+        NumberTag<?> difficultyTag = readNumberTag(data, "Difficulty");
+        if(difficultyTag == null) return null;
+        return formatDifficulty(difficultyTag.asInt());
+    }
+
+    private static String readBooleanLabel(CompoundTag data, String key) {
+        Tag<?> tag = data == null || key == null ? null : data.get(key);
+        if(tag == null) return null;
+        return readBoolean(tag) ? "âœ“" : "âœ—";
+    }
+
+    private static String readWeatherSummary(CompoundTag data) {
+        if(data == null) return null;
+        boolean thundering = readBoolean(data.get("thundering"));
+        boolean raining = readBoolean(data.get("raining"));
+        if(thundering) return "Tormenta";
+        if(raining) return "Lluvia";
+        return "Despejado";
+    }
+
+    private static String readDayTime(CompoundTag data) {
+        NumberTag<?> dayTimeTag = readNumberTag(data, "DayTime");
+        if(dayTimeTag == null) return null;
+
+        long absoluteTicks = Math.max(0L, dayTimeTag.asLong());
+        long day = absoluteTicks / 24000L;
+        long timeOfDay = Math.floorMod(absoluteTicks, 24000L);
+        long hours = Math.floorMod((timeOfDay / 1000L) + 6L, 24L);
+        long minutes = Math.round((timeOfDay % 1000L) * 60.0 / 1000.0);
+        if(minutes == 60L) {
+            hours = (hours + 1L) % 24L;
+            minutes = 0L;
+        }
+        return String.format(Locale.ROOT, "Dia %d - %02d:%02d", day + 1L, hours, minutes);
+    }
+
+    private static String readDataPacksSummary(CompoundTag data) {
+        CompoundTag dataPacks = data == null ? null : data.getCompoundTag("DataPacks");
+        if(dataPacks == null) return null;
+
+        int enabled = getStringListSize(dataPacks.getListTag("Enabled"));
+        int disabled = getStringListSize(dataPacks.getListTag("Disabled"));
+        if(enabled == 0 && disabled == 0) return null;
+        return enabled + " activos / " + disabled + " desactivados";
+    }
+
+    private static Map<String, String> readGameRules(CompoundTag data) {
+        CompoundTag gameRules = data == null ? null : data.getCompoundTag("GameRules");
+        if(gameRules == null || gameRules.size() == 0) return Map.of();
+
+        Map<String, String> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<String, Tag<?>> entry : gameRules.entrySet()) {
+            String key = entry.getKey();
+            if(key == null || key.isBlank()) continue;
+            Tag<?> tag = entry.getValue();
+            if(tag == null) continue;
+            result.put(key, normalizeRuleValue(tag.valueToString()));
+        }
+        return result.isEmpty() ? Map.of() : new LinkedHashMap<>(result);
+    }
+
+    private static String readGameRulesSummary(Map<String, String> gameRules) {
+        if(gameRules == null || gameRules.isEmpty()) return null;
+
+        String keepInventory = readStringValue(gameRules, "keepInventory");
+        String daylight = readStringValue(gameRules, "doDaylightCycle");
+        String mobSpawning = readStringValue(gameRules, "doMobSpawning");
+        String mobGriefing = readStringValue(gameRules, "mobGriefing");
+
+        StringBuilder summary = new StringBuilder();
+        appendRuleSummary(summary, "Inventario", keepInventory);
+        appendRuleSummary(summary, "Dia", daylight);
+        appendRuleSummary(summary, "Mobs", mobSpawning);
+        appendRuleSummary(summary, "Griefing", mobGriefing);
+
+        if(summary.isEmpty()) {
+            return gameRules.size() + " reglas";
+        }
+        summary.append(" (").append(gameRules.size()).append(" reglas)");
+        return summary.toString();
+    }
+
     private static void appendRuleSummary(StringBuilder summary, String label, String value) {
         if(value == null || value.isBlank()) return;
         if(!summary.isEmpty()) summary.append(" | ");
@@ -472,10 +659,35 @@ public class WorldDataReader {
 
     private static String readStringValue(CompoundTag compound, String key) {
         if(compound == null || key == null) return null;
-        StringTag stringTag = compound.getStringTag(key);
-        if(stringTag != null) return stringTag.getValue();
         Tag<?> tag = compound.get(key);
+        if(tag instanceof StringTag stringTag) return stringTag.getValue();
         return tag == null ? null : tag.valueToString();
+    }
+
+    private static NumberTag<?> readNumberTag(CompoundTag compound, String key) {
+        if(compound == null || key == null) return null;
+        Tag<?> tag = compound.get(key);
+        return tag instanceof NumberTag<?> numberTag ? numberTag : null;
+    }
+
+    private static String formatGameMode(int gameType) {
+        return switch (gameType) {
+            case 0 -> "Supervivencia";
+            case 1 -> "Creativo";
+            case 2 -> "Aventura";
+            case 3 -> "Espectador";
+            default -> Integer.toString(gameType);
+        };
+    }
+
+    private static String formatDifficulty(int difficulty) {
+        return switch (difficulty) {
+            case 0 -> "Pacifica";
+            case 1 -> "Facil";
+            case 2 -> "Normal";
+            case 3 -> "Dificil";
+            default -> Integer.toString(difficulty);
+        };
     }
 
     private static Boolean readBooleanValue(World mundo, String key) {
@@ -514,6 +726,50 @@ public class WorldDataReader {
     }
 
     // Solo necesitamos X y Z para la preview, pero para la UI tenemos disponible el spawn completo.
+    public record WorldMetadata(
+            long activeTicks,
+            String lastPlayed,
+            String versionName,
+            String dataVersion,
+            String seed,
+            SpawnPoint spawnPoint,
+            String gameMode,
+            String difficulty,
+            String difficultyLocked,
+            String weatherSummary,
+            String dayTime,
+            String hardcore,
+            String allowCommands,
+            String dataPacksSummary,
+            String gameRulesSummary,
+            Map<String, String> gameRules
+    ) {
+        public WorldMetadata {
+            gameRules = gameRules == null || gameRules.isEmpty() ? Map.of() : new LinkedHashMap<>(gameRules);
+        }
+
+        static WorldMetadata empty() {
+            return new WorldMetadata(
+                    0L,
+                    null,
+                    null,
+                    null,
+                    "-",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Map.of()
+            );
+        }
+    }
+
     public record SpawnPoint(int x, int y, int z, float angle) {
         public SpawnPoint(int x, int z) {
             this(x, 0, z, 0f);

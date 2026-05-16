@@ -933,7 +933,103 @@ class ServerExtensionsServiceTest {
         assertThat(detected).hasSize(1);
         assertThat(detected.getFirst().getLocalMetadata().getDependencies())
                 .extracting(ExtensionRemoteDependency::getProjectId)
-                .containsExactly("ViaBackwards");
+                .containsExactly("viafabric", "ViaBackwards");
+    }
+
+    @Test
+    void shouldRecognizeCatalogDependencyAfterDescriptorRescanUsesLocalId() throws Exception {
+        ServerExtensionsService service = new ServerExtensionsService();
+        Server server = extensionServer("dependency-local-id-match", ServerPlatform.FABRIC);
+        createJar(serverDir(server).resolve("mods").resolve("ParentMod.jar"), Map.of("fabric.mod.json", """
+                {
+                  "schemaVersion": 1,
+                  "id": "parent-mod",
+                  "version": "1.0.0",
+                  "name": "Parent Mod"
+                }
+                """));
+        createJar(serverDir(server).resolve("mods").resolve("fabric-api.jar"), Map.of("fabric.mod.json", """
+                {
+                  "schemaVersion": 1,
+                  "id": "fabric-api",
+                  "version": "1.0.0",
+                  "name": "Fabric API"
+                }
+                """));
+
+        ServerExtension parent = new ServerExtension();
+        parent.setDisplayName("Parent Mod");
+        parent.setFileName("ParentMod.jar");
+        parent.setInstallState(ExtensionInstallState.INSTALLED);
+        parent.setExtensionType(ServerExtensionType.MOD);
+        parent.setPlatform(ServerPlatform.FABRIC);
+        ExtensionLocalMetadata parentMetadata = new ExtensionLocalMetadata();
+        parentMetadata.setRelativePath("mods/ParentMod.jar");
+        parentMetadata.setFileName("ParentMod.jar");
+        ExtensionRemoteDependency fabricApi = new ExtensionRemoteDependency();
+        fabricApi.setProviderId("modrinth");
+        fabricApi.setProjectId("FabricAPI");
+        fabricApi.setDisplayName("Fabric API");
+        fabricApi.setDependencyType("required");
+        fabricApi.setRequired(true);
+        parentMetadata.setDependencies(List.of(fabricApi));
+        parent.setLocalMetadata(parentMetadata);
+
+        ServerExtension dependency = service.detectInstalledExtensions(server).stream()
+                .filter(extension -> "fabric-api.jar".equals(extension.getFileName()))
+                .findFirst()
+                .orElseThrow();
+        server.setExtensions(List.of(parent, dependency));
+
+        InstalledExtensionStatus status = service.assessInstalledExtension(server, parent);
+
+        assertThat(status.missingDependencies()).isEmpty();
+    }
+
+    @Test
+    void shouldPreserveCatalogAndDescriptorDependenciesAcrossRescan() throws Exception {
+        ServerExtensionsService service = new ServerExtensionsService();
+        Server server = extensionServer("merge-catalog-and-local-dependencies", ServerPlatform.FORGE);
+        Path modJar = serverDir(server).resolve("mods").resolve("ParentMod.jar");
+        createJar(modJar, Map.of("META-INF/mods.toml", """
+                modLoader="javafml"
+                loaderVersion="[47,)"
+                [[mods]]
+                modId="parentmod"
+                version="1.0.0"
+                displayName="Parent Mod"
+                [[dependencies.parentmod]]
+                modId="fabric-api"
+                mandatory=true
+                type="required"
+                """));
+
+        ServerExtension extension = new ServerExtension();
+        extension.setDisplayName("Parent Mod");
+        extension.setFileName("ParentMod.jar");
+        extension.setInstallState(ExtensionInstallState.INSTALLED);
+        ExtensionLocalMetadata metadata = new ExtensionLocalMetadata();
+        metadata.setRelativePath("mods/ParentMod.jar");
+        metadata.setFileName("ParentMod.jar");
+        ExtensionRemoteDependency catalogDependency = new ExtensionRemoteDependency();
+        catalogDependency.setProviderId("modrinth");
+        catalogDependency.setProjectId("fabric-api");
+        catalogDependency.setDisplayName("Fabric API");
+        catalogDependency.setDependencyType("required");
+        catalogDependency.setRequired(true);
+        metadata.setDependencies(List.of(catalogDependency));
+        extension.setLocalMetadata(metadata);
+        server.setExtensions(List.of(extension));
+
+        List<ServerExtension> detected = service.detectInstalledExtensions(server);
+
+        assertThat(detected).hasSize(1);
+        assertThat(detected.getFirst().getLocalMetadata().getDependencies())
+                .extracting(ExtensionRemoteDependency::getProviderId, ExtensionRemoteDependency::getProjectId)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("modrinth", "fabric-api"),
+                        org.assertj.core.groups.Tuple.tuple("forge", "fabric-api")
+                );
     }
 
     @Test

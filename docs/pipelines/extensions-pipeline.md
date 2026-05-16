@@ -99,6 +99,8 @@ Dependency prompts and queue logic live mostly in `ExtensionMarketplaceDialog`, 
 
 Keep UI dependency decisions and service-level validation consistent. Service validation is the safety net.
 
+Dependency identity matching is shared through `controlador.extensions.ExtensionDependencyMatcher`. Use it for marketplace queue checks and installed-tab diagnostics so provider/project IDs, normalized names, file names, local IDs, local dependency descriptions, and embedded dependency metadata stay aligned. After catalog installs, preserve catalog dependency identities when rescanning jars that also declare local descriptor dependency IDs.
+
 Marketplace dialog option records, queue/dependency helper models, and related view-state types may live beside the dialog in package-scoped helper files when extracted for size control. Keep the dialog focused on orchestration and rendering, and keep extracted types behavior-neutral unless a broader redesign is intentional.
 
 ## Modpack Import/Export
