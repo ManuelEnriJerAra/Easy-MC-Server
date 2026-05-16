@@ -65,8 +65,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -96,23 +94,6 @@ public class GestorServidores {
         REPLACE_EXISTING
     }
 
-    private static final List<String> ARCHIVOS_CONFIG_PRESERVABLES = List.of(
-            "server.properties",
-            "eula.txt",
-            "server-icon.png",
-            "whitelist.json",
-            "whitelist.txt",
-            "ops.json",
-            "ops.txt",
-            "banned-ips.json",
-            "banned-ips.txt",
-            "banned-players.json",
-            "banned-players.txt",
-            "permissions.json",
-            "usercache.json"
-    );
-    private static final Set<String> DIRECTORIOS_EXTENSION_PRESERVABLES = Set.of("mods", "plugins", "config");
-    private static final DateTimeFormatter BACKUP_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final Pattern MINECRAFT_VERSION_PATTERN = Pattern.compile("(?i)(?:1\\.(?:0|[1-9][0-9]*)(?:\\.\\d+)?(?:-(?:snapshot|pre|rc)-?\\d+)?|[2-9]\\d*\\.\\d+(?:\\.\\d+)?(?:-(?:snapshot|pre|rc)-?\\d+)?|\\d{2}w\\d{2}[a-z]|[ab]\\d+\\.\\d+(?:\\.\\d+)?)");
 
     // ===== ATRIBUTOS =====
@@ -2211,19 +2192,14 @@ public class GestorServidores {
         Path serverDir = Path.of(server.getServerDir());
         if (!Files.isDirectory(serverDir)) return null;
 
-        Path preservationSource = null;
-        boolean temporaryPreservation = false;
+        ConversionPreservationHelper.Snapshot preservationSnapshot = null;
         try {
             ConversionSource source = resolverOrigenConversion(server);
             ServerEcosystemType sourceEcosystem = source == null ? ServerEcosystemType.UNKNOWN : source.ecosystemType();
             ServerEcosystemType targetEcosystem = option.platform() == null
                     ? ServerEcosystemType.UNKNOWN
                     : option.platform().getDefaultEcosystemType();
-            preservationSource = createBackup
-                    ? crearBackupConversion(serverDir, option.platform())
-                    : crearSnapshotPreservacionConversion(serverDir);
-            temporaryPreservation = !createBackup;
-            Properties preservedProperties = cargarPropertiesSilenciosamente(serverDir.resolve("server.properties"));
+            preservationSnapshot = ConversionPreservationHelper.prepare(serverDir, option.platform(), createBackup);
 
             ejecutarTareaConDialogo(
                     "Convirtiendo servidor",
@@ -2242,7 +2218,7 @@ public class GestorServidores {
                     }
             );
 
-            restaurarDatosTrasConversion(preservationSource, serverDir, preservedProperties);
+            ConversionPreservationHelper.restore(preservationSnapshot, serverDir);
             for (Path extensionDirectory : targetAdapter.getExtensionDirectories(serverDir)) {
                 if (extensionDirectory != null) {
                     Files.createDirectories(extensionDirectory);
@@ -2272,12 +2248,7 @@ public class GestorServidores {
             );
             return null;
         } finally {
-            if (temporaryPreservation && preservationSource != null) {
-                try {
-                    Utilidades.eliminarDirectorio(preservationSource);
-                } catch (IOException ignored) {
-                }
-            }
+            ConversionPreservationHelper.cleanup(preservationSnapshot);
         }
     }
 
@@ -2314,87 +2285,6 @@ public class GestorServidores {
                 && targetEcosystem != ServerEcosystemType.NONE
                 && sourceEcosystem != ServerEcosystemType.UNKNOWN
                 && targetEcosystem != ServerEcosystemType.UNKNOWN;
-    }
-
-    private Path crearBackupConversion(Path serverDir, modelo.extensions.ServerPlatform targetPlatform) throws IOException {
-        Path parent = serverDir.getParent();
-        if (parent == null) {
-            parent = serverDir.toAbsolutePath().getParent();
-        }
-        if (parent == null) {
-            throw new IOException("No se ha podido resolver una carpeta para el backup.");
-        }
-
-        String platformName = targetPlatform == null ? "conversion" : targetPlatform.getLegacyTypeName().toLowerCase();
-        String backupName = serverDir.getFileName() + "_backup_before_" + platformName + "_" + BACKUP_TIMESTAMP_FORMAT.format(LocalDateTime.now());
-        Path backupDir = parent.resolve(backupName);
-        Utilidades.copiarDirectorio(serverDir, backupDir);
-        return backupDir;
-    }
-
-    private Path crearSnapshotPreservacionConversion(Path serverDir) throws IOException {
-        Path snapshotDir = Files.createTempDirectory("easy-mc-conversion-preserve-");
-        for (String fileName : ARCHIVOS_CONFIG_PRESERVABLES) {
-            Path source = serverDir.resolve(fileName);
-            if (Files.isRegularFile(source)) {
-                Files.copy(source, snapshotDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
-        try (Stream<Path> children = Files.list(serverDir)) {
-            for (Path child : children.toList()) {
-                if (!Files.isDirectory(child)) continue;
-                String name = child.getFileName().toString();
-                if (!debePreservarseDirectorioEnConversion(child, name)) continue;
-                Utilidades.copiarDirectorio(child, snapshotDir.resolve(name));
-            }
-        }
-        return snapshotDir;
-    }
-
-    private void restaurarDatosTrasConversion(Path backupDir, Path targetDir, Properties preservedProperties) throws IOException {
-        if (backupDir == null || targetDir == null) return;
-
-        for (String fileName : ARCHIVOS_CONFIG_PRESERVABLES) {
-            Path backupFile = backupDir.resolve(fileName);
-            Path targetFile = targetDir.resolve(fileName);
-            if (Files.isRegularFile(backupFile) && !Files.exists(targetFile)) {
-                Files.copy(backupFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
-
-        if (preservedProperties != null && !preservedProperties.isEmpty()) {
-            Properties current = cargarPropertiesSilenciosamente(targetDir.resolve("server.properties"));
-            current.putAll(preservedProperties);
-            Utilidades.guardarPropertiesUtf8(targetDir.resolve("server.properties"), current, null);
-        }
-
-        try (Stream<Path> children = Files.list(backupDir)) {
-            for (Path backupChild : children.toList()) {
-                if (!Files.isDirectory(backupChild)) continue;
-                String name = backupChild.getFileName().toString();
-                if (!debePreservarseDirectorioEnConversion(backupChild, name)) continue;
-                Path targetChild = targetDir.resolve(name);
-                if (!Files.exists(targetChild)) {
-                    Utilidades.copiarDirectorio(backupChild, targetChild);
-                }
-            }
-        }
-    }
-
-    private boolean debePreservarseDirectorioEnConversion(Path backupChild, String name) {
-        if (name == null || name.isBlank()) return false;
-        if (DIRECTORIOS_EXTENSION_PRESERVABLES.contains(name)) return true;
-        if (GestorMundos.DIRECTORIO_MUNDOS.equals(name)) return true;
-        if (Files.isRegularFile(backupChild.resolve("level.dat"))) return true;
-        return name.endsWith("_nether") || name.endsWith("_the_end");
-    }
-
-    private Properties cargarPropertiesSilenciosamente(Path propertiesPath) {
-        try {
-            return Utilidades.cargarPropertiesUtf8(propertiesPath);
-        } catch (IOException e) {
-            return new Properties();
-        }
     }
 
     private <T> T ejecutarTareaConDialogo(String titulo, String descripcion, Callable<T> task) throws IOException {

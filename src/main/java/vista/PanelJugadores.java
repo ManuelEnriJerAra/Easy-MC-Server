@@ -183,10 +183,7 @@ public class PanelJugadores extends JPanel {
         configurarBotonCabecera(btnOps, "OPs", "easymcicons/shield-user.svg", () -> abrirDialogoLista("OPs", TipoLista.OPS));
         configurarBotonDebug(btnDebugAddPlayer, "Anadir jugador falso", "easymcicons/plus.svg", this::addFakePlayer);
         configurarBotonDebug(btnDebugRemovePlayer, "Eliminar jugador falso", "easymcicons/minus.svg", this::removeFakePlayer);
-        debugModeListener = evt -> {
-            if (!DebugMode.PROPERTY_ENABLED.equals(evt.getPropertyName())) return;
-            SwingUtilities.invokeLater(this::actualizarModoDebug);
-        };
+        debugModeListener = DebugModeUiBinder.createUiListener(this::actualizarModoDebug);
         DebugMode.addPropertyChangeListener(debugModeListener);
 
         server = gestorServidores.getServidorSeleccionado();
@@ -293,17 +290,11 @@ public class PanelJugadores extends JPanel {
     }
 
     private void actualizarAccionesCabecera() {
-        if (headerActionsPanel == null) return;
-        headerActionsPanel.removeAll();
-        if (DebugMode.isEnabled()) {
-            headerActionsPanel.add(btnDebugAddPlayer);
-            headerActionsPanel.add(btnDebugRemovePlayer);
-        }
-        headerActionsPanel.add(btnWhitelist);
-        headerActionsPanel.add(btnBaneados);
-        headerActionsPanel.add(btnOps);
-        headerActionsPanel.revalidate();
-        headerActionsPanel.repaint();
+        DebugModeUiBinder.rebuildHeaderActions(
+                headerActionsPanel,
+                List.of(btnDebugAddPlayer, btnDebugRemovePlayer),
+                List.of(btnWhitelist, btnBaneados, btnOps)
+        );
     }
 
     private void actualizarModoDebug() {

@@ -159,7 +159,7 @@ public class PanelServidores extends FlatScrollPane {
 
             marcarFilaSeleccionada(fila);
             if(asegurarVisible){
-                fila.scrollRectToVisible(new Rectangle(0, 0, fila.getWidth(), fila.getHeight()));
+                asegurarFilaVisible(fila);
             }
             if(notificar && listener != null){
                 listener.servidorSeleccionado(filaServer);
@@ -177,7 +177,7 @@ public class PanelServidores extends FlatScrollPane {
             Object serverObj = fila.getClientProperty("server");
             if(!(serverObj instanceof Server server)) continue;
             marcarFilaSeleccionada(fila);
-            fila.scrollRectToVisible(new Rectangle(0, 0, fila.getWidth(), fila.getHeight()));
+            asegurarFilaVisible(fila);
             if(listener != null){
                 listener.servidorSeleccionado(server);
             }
@@ -539,11 +539,22 @@ public class PanelServidores extends FlatScrollPane {
         Object serverObj = fila.getClientProperty("server");
         if(!(serverObj instanceof Server serverSeleccionado)) return;
 
+        Point posicionScrollAntes = null;
+        JViewport viewport = getViewport();
+        if(viewport != null && viewport.getViewPosition() != null){
+            posicionScrollAntes = new Point(viewport.getViewPosition());
+        }
+
         boolean yaEstabaSeleccionada = fila == filaSeleccionada;
         marcarFilaSeleccionada(fila);
 
         if(listener != null && (!yaEstabaSeleccionada || notificarSiYaEstabaSeleccionada)){
             listener.servidorSeleccionado(serverSeleccionado);
+        }
+
+        if(posicionScrollAntes != null){
+            Point posicionFinal = new Point(posicionScrollAntes);
+            SwingUtilities.invokeLater(() -> restaurarPosicionScroll(posicionFinal));
         }
     }
 
@@ -1138,6 +1149,20 @@ public class PanelServidores extends FlatScrollPane {
         // Mantener el fondo transparente evita que sobresalga por los bordes redondeados
         panelIcono.setOpaque(false);
         panelIcono.repaint();
+    }
+
+    private void asegurarFilaVisible(JPanel fila){
+        if(fila == null) return;
+        JViewport viewport = getViewport();
+        Component vista = viewport == null ? null : viewport.getView();
+        if(viewport == null || !(vista instanceof JComponent vistaComponente)) return;
+
+        Rectangle filaBounds = SwingUtilities.convertRectangle(fila.getParent(), fila.getBounds(), vistaComponente);
+        Rectangle visible = viewport.getViewRect();
+        if(visible.contains(filaBounds)) {
+            return;
+        }
+        vistaComponente.scrollRectToVisible(filaBounds);
     }
 
     private void aplicarEllipsisLabel(JLabel label, int maxWidthPx){

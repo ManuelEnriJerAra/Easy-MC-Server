@@ -89,6 +89,8 @@ public class VentanaPrincipal extends JFrame {
     private PaginaDerecha paginaDerechaActual = PaginaDerecha.HOME;
     private JPanel panelDerechoCards;
     private CardLayout cardDerecho;
+    private final Map<PaginaDerecha, JPanel> contenedoresPaginasDerechas = new EnumMap<>(PaginaDerecha.class);
+    private VentanaPrincipalRightContentBuilder.Result contenidoDerechoActual;
     private JPanel panelBarraVertical;
     private CardPanel jugadoresCard; // card dentro del split del HOME
     private JPanel consolaCard; // card dentro del split del HOME
@@ -472,33 +474,21 @@ public class VentanaPrincipal extends JFrame {
             return;
         }
 
-        panelDerechoCards.removeAll();
-        VentanaPrincipalRightContentBuilder.Result content = new VentanaPrincipalRightContentBuilder()
-                .build(server, gestorServidores, this::actualizarServidorTrasConversion);
-        splitHome = content.splitHome();
-        jugadoresCard = content.jugadoresCard();
-        consolaCard = content.consolaCard();
-        setBordeRedondoGestionado(consolaCard, false);
-        configurarSplitPane(splitHome, 8);
-
-        PanelConsola panelConsola = content.panelConsola();
-        panelConsola.actualizarConsola();
-
-        if(serverMostrado != null && consoleListenerActual != null){
+        if (serverMostrado != null && consoleListenerActual != null) {
             serverMostrado.removeConsoleListener(consoleListenerActual);
         }
-
-        consoleListenerActual = panelConsola::escribirLinea;
-        server.addConsoleListener(consoleListenerActual);
+        consoleListenerActual = null;
+        splitHome = null;
+        jugadoresCard = null;
+        consolaCard = null;
+        panelConfigServidor = null;
         serverMostrado = server;
 
-        panelConfigServidor = content.panelConfigServidor();
-
-        panelDerechoCards.add(content.homePanel(), PaginaDerecha.HOME.name());
-        panelDerechoCards.add(content.mundoPanel(), PaginaDerecha.MUNDO.name());
-        panelDerechoCards.add(content.configPanel(), PaginaDerecha.CONFIG.name());
-        panelDerechoCards.add(content.extensionesPanel(), PaginaDerecha.EXTENSIONES.name());
-        panelDerechoCards.add(content.statsPanel(), PaginaDerecha.STATS.name());
+        panelDerechoCards.removeAll();
+        contenedoresPaginasDerechas.clear();
+        contenidoDerechoActual = new VentanaPrincipalRightContentBuilder()
+                .build(server, gestorServidores, this::actualizarServidorTrasConversion);
+        prepararContenedoresPaginasDerechas();
 
         PaginaDerecha paginaAMostrar = paginaDerechaActual != null ? paginaDerechaActual : PaginaDerecha.HOME;
         setPaginaDerecha(paginaAMostrar);
@@ -731,10 +721,64 @@ public class VentanaPrincipal extends JFrame {
         return b;
     }
 
+    private void prepararContenedoresPaginasDerechas() {
+        for (PaginaDerecha pagina : PaginaDerecha.values()) {
+            if (pagina == PaginaDerecha.INFO) {
+                continue;
+            }
+            JPanel contenedor = new JPanel(new BorderLayout());
+            contenedor.setOpaque(false);
+            contenedoresPaginasDerechas.put(pagina, contenedor);
+            panelDerechoCards.add(contenedor, pagina.name());
+        }
+    }
+
+    private void cargarPaginaDerechaSiNecesario(PaginaDerecha pagina) {
+        if (pagina == null || pagina == PaginaDerecha.INFO) {
+            pagina = PaginaDerecha.HOME;
+        }
+        JPanel contenedor = contenedoresPaginasDerechas.get(pagina);
+        if (contenedor == null || contenidoDerechoActual == null || contenedor.getComponentCount() > 0) {
+            return;
+        }
+
+        JPanel contenido = switch (pagina) {
+            case HOME -> contenidoDerechoActual.homePanel();
+            case MUNDO -> contenidoDerechoActual.mundoPanel();
+            case CONFIG -> contenidoDerechoActual.configPanel();
+            case STATS -> contenidoDerechoActual.statsPanel();
+            case EXTENSIONES -> contenidoDerechoActual.extensionesPanel();
+            case INFO -> contenidoDerechoActual.homePanel();
+        };
+
+        contenedor.add(contenido, BorderLayout.CENTER);
+
+        if (pagina == PaginaDerecha.HOME) {
+            splitHome = contenidoDerechoActual.splitHome();
+            jugadoresCard = contenidoDerechoActual.jugadoresCard();
+            consolaCard = contenidoDerechoActual.consolaCard();
+            setBordeRedondoGestionado(consolaCard, false);
+            configurarSplitPane(splitHome, 8);
+
+            PanelConsola panelConsola = contenidoDerechoActual.panelConsola();
+            panelConsola.actualizarConsola();
+            consoleListenerActual = panelConsola::escribirLinea;
+            if (serverMostrado != null) {
+                serverMostrado.addConsoleListener(consoleListenerActual);
+            }
+        } else if (pagina == PaginaDerecha.CONFIG) {
+            panelConfigServidor = contenidoDerechoActual.panelConfigServidor();
+        }
+
+        contenedor.revalidate();
+        contenedor.repaint();
+    }
+
     private void setPaginaDerecha(PaginaDerecha pagina){
         if(pagina == null) pagina = PaginaDerecha.HOME;
         if(pagina == PaginaDerecha.INFO) pagina = PaginaDerecha.HOME;
         paginaDerechaActual = pagina;
+        cargarPaginaDerechaSiNecesario(pagina);
         cardDerecho.show(panelDerechoCards, pagina.name());
 
         for(Map.Entry<PaginaDerecha, JButton> e : navButtons.entrySet()){

@@ -59,10 +59,7 @@ final class WorldRecentConnectionsPanel {
 
         AppTheme.configureDebugIconButton(btnDebugAddConnection, "Añadir conexión falsa", "easymcicons/plus.svg", this::addFakeConnection);
         AppTheme.configureDebugIconButton(btnDebugRemoveConnection, "Eliminar conexión falsa", "easymcicons/minus.svg", this::removeFakeConnection);
-        debugModeListener = evt -> {
-            if (!DebugMode.PROPERTY_ENABLED.equals(evt.getPropertyName())) return;
-            SwingUtilities.invokeLater(this::actualizarModoDebugConexiones);
-        };
+        debugModeListener = DebugModeUiBinder.createUiListener(this::actualizarModoDebugConexiones);
     }
 
     JPanel crearTarjeta() {
@@ -90,14 +87,11 @@ final class WorldRecentConnectionsPanel {
     }
 
     private void actualizarAccionesDebugConexiones() {
-        if (headerActionsPanel == null) return;
-        headerActionsPanel.removeAll();
-        if (DebugMode.isEnabled()) {
-            headerActionsPanel.add(btnDebugAddConnection);
-            headerActionsPanel.add(btnDebugRemoveConnection);
-        }
-        headerActionsPanel.revalidate();
-        headerActionsPanel.repaint();
+        DebugModeUiBinder.rebuildHeaderActions(
+                headerActionsPanel,
+                List.of(btnDebugAddConnection, btnDebugRemoveConnection),
+                List.of()
+        );
     }
 
     private void actualizarModoDebugConexiones() {

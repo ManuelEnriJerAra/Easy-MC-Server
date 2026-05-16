@@ -64,6 +64,8 @@ Importing an existing server should:
 - Preserve user data.
 - Add the server to the managed list only after validation succeeds.
 
+Server conversion preservation now routes through `controlador.ConversionPreservationHelper`. Keep backup/snapshot/restore behavior there unless a broader service split is being made, so `GestorServidores` does not absorb more filesystem-preservation detail.
+
 ## Delete/Remove Pipeline
 
 There is a distinction between removing a server from the app and deleting files from disk. Keep UI copy clear and do not delete folders unless the flow explicitly asks for that destructive operation.

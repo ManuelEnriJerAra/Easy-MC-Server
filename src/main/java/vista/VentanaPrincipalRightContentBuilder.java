@@ -9,18 +9,125 @@ import java.awt.*;
 import java.util.function.Consumer;
 
 final class VentanaPrincipalRightContentBuilder {
-    record Result(
-            JPanel homePanel,
-            JPanel mundoPanel,
-            JPanel configPanel,
-            JPanel extensionesPanel,
-            JPanel statsPanel,
-            JSplitPane splitHome,
-            CardPanel jugadoresCard,
-            JPanel consolaCard,
-            PanelConsola panelConsola,
-            PanelConfigServidor panelConfigServidor
-    ) {
+    static final class Result {
+        private final Server server;
+        private final GestorServidores gestorServidores;
+        private final Consumer<Server> onServerConverted;
+
+        private JPanel homePanel;
+        private JPanel mundoPanel;
+        private PanelConfigServidor panelConfigServidor;
+        private JPanel extensionesPanel;
+        private JPanel statsPanel;
+        private JSplitPane splitHome;
+        private CardPanel jugadoresCard;
+        private JPanel consolaCard;
+        private PanelConsola panelConsola;
+
+        private Result(Server server,
+                       GestorServidores gestorServidores,
+                       Consumer<Server> onServerConverted) {
+            this.server = server;
+            this.gestorServidores = gestorServidores;
+            this.onServerConverted = onServerConverted;
+        }
+
+        JPanel homePanel() {
+            if (homePanel == null) {
+                homePanel = crearHomePanel();
+            }
+            return homePanel;
+        }
+
+        JPanel mundoPanel() {
+            if (mundoPanel == null) {
+                mundoPanel = new PanelMundo(gestorServidores, () -> panelConfigServidor().reload());
+            }
+            return mundoPanel;
+        }
+
+        JPanel configPanel() {
+            return panelConfigServidor();
+        }
+
+        JPanel extensionesPanel() {
+            if (extensionesPanel == null) {
+                extensionesPanel = new PanelExtensiones(gestorServidores, server);
+            }
+            return extensionesPanel;
+        }
+
+        JPanel statsPanel() {
+            if (statsPanel == null) {
+                statsPanel = new PanelEstadisticas(gestorServidores, server);
+            }
+            return statsPanel;
+        }
+
+        JSplitPane splitHome() {
+            homePanel();
+            return splitHome;
+        }
+
+        CardPanel jugadoresCard() {
+            homePanel();
+            return jugadoresCard;
+        }
+
+        JPanel consolaCard() {
+            homePanel();
+            return consolaCard;
+        }
+
+        PanelConsola panelConsola() {
+            homePanel();
+            return panelConsola;
+        }
+
+        PanelConfigServidor panelConfigServidor() {
+            if (panelConfigServidor == null) {
+                panelConfigServidor = new PanelConfigServidor(gestorServidores);
+            }
+            return panelConfigServidor;
+        }
+
+        private JPanel crearHomePanel() {
+            JPanel home = new JPanel(new BorderLayout(0, 8));
+            home.setOpaque(false);
+
+            PanelTotalServidor panelTotalServidor = new PanelTotalServidor(gestorServidores);
+            PanelJugadores panelJugadores = new PanelJugadores(gestorServidores, false);
+            panelConsola = new PanelConsola(gestorServidores);
+            panelConsola.setPreferredSize(new Dimension(0, 100));
+
+            CardPanel headerCard = new CardPanel("Servidor seleccionado");
+            headerCard.setBorder(BorderFactory.createEmptyBorder());
+            JButton conversionButton = crearBotonConversion(server, gestorServidores, onServerConverted);
+            if (conversionButton != null) {
+                headerCard.getHeaderActionsPanel().add(conversionButton);
+            }
+            headerCard.getContentPanel().add(panelTotalServidor, BorderLayout.CENTER);
+            headerCard.setFullHeightSideComponent(new PanelControlServidor(gestorServidores));
+            home.add(headerCard, BorderLayout.NORTH);
+
+            jugadoresCard = new CardPanel("Jugadores");
+            jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
+            panelJugadores.configureHeaderActions(jugadoresCard.getHeaderActionsPanel());
+            jugadoresCard.getContentPanel().add(panelJugadores, BorderLayout.CENTER);
+
+            consolaCard = new JPanel(new BorderLayout());
+            consolaCard.setOpaque(false);
+            consolaCard.setBorder(null);
+            consolaCard.add(panelConsola, BorderLayout.CENTER);
+
+            splitHome = new com.formdev.flatlaf.extras.components.FlatSplitPane();
+            splitHome.setOrientation(JSplitPane.VERTICAL_SPLIT);
+            splitHome.setTopComponent(jugadoresCard);
+            splitHome.setBottomComponent(consolaCard);
+            splitHome.setResizeWeight(0.7);
+            home.add(splitHome, BorderLayout.CENTER);
+            return home;
+        }
     }
 
     Result build(
@@ -28,61 +135,10 @@ final class VentanaPrincipalRightContentBuilder {
             GestorServidores gestorServidores,
             Consumer<Server> onServerConverted
     ) {
-        JPanel home = new JPanel(new BorderLayout(0, 8));
-        home.setOpaque(false);
-
-        PanelTotalServidor panelTotalServidor = new PanelTotalServidor(gestorServidores);
-        PanelJugadores panelJugadores = new PanelJugadores(gestorServidores, false);
-        PanelConsola panelConsola = new PanelConsola(gestorServidores);
-        panelConsola.setPreferredSize(new Dimension(0, 100));
-
-        CardPanel headerCard = new CardPanel("Servidor seleccionado");
-        headerCard.setBorder(BorderFactory.createEmptyBorder());
-        JButton conversionButton = crearBotonConversion(server, gestorServidores, onServerConverted);
-        if (conversionButton != null) {
-            headerCard.getHeaderActionsPanel().add(conversionButton);
-        }
-        headerCard.getContentPanel().add(panelTotalServidor, BorderLayout.CENTER);
-        headerCard.setFullHeightSideComponent(new PanelControlServidor(gestorServidores));
-        home.add(headerCard, BorderLayout.NORTH);
-
-        CardPanel jugadoresCard = new CardPanel("Jugadores");
-        jugadoresCard.setBorder(BorderFactory.createEmptyBorder());
-        panelJugadores.configureHeaderActions(jugadoresCard.getHeaderActionsPanel());
-        jugadoresCard.getContentPanel().add(panelJugadores, BorderLayout.CENTER);
-
-        JPanel consolaCard = new JPanel(new BorderLayout());
-        consolaCard.setOpaque(false);
-        consolaCard.setBorder(null);
-        consolaCard.add(panelConsola, BorderLayout.CENTER);
-
-        JSplitPane splitHome = new com.formdev.flatlaf.extras.components.FlatSplitPane();
-        splitHome.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitHome.setTopComponent(jugadoresCard);
-        splitHome.setBottomComponent(consolaCard);
-        splitHome.setResizeWeight(0.7);
-        home.add(splitHome, BorderLayout.CENTER);
-
-        PanelConfigServidor panelConfigServidor = new PanelConfigServidor(gestorServidores);
-        JPanel mundo = new PanelMundo(gestorServidores, panelConfigServidor::reload);
-        JPanel extensiones = new PanelExtensiones(gestorServidores, server);
-        JPanel stats = new PanelEstadisticas(gestorServidores, server);
-
-        return new Result(
-                home,
-                mundo,
-                panelConfigServidor,
-                extensiones,
-                stats,
-                splitHome,
-                jugadoresCard,
-                consolaCard,
-                panelConsola,
-                panelConfigServidor
-        );
+        return new Result(server, gestorServidores, onServerConverted);
     }
 
-    private JButton crearBotonConversion(
+    private static JButton crearBotonConversion(
             Server server,
             GestorServidores gestorServidores,
             Consumer<Server> onServerConverted

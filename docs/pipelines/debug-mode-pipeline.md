@@ -15,6 +15,8 @@ Panels that expose debug-only controls should:
 3. Show or hide debug controls when Debug mode changes.
 4. Remove the listener when the component becomes undisplayable.
 
+`vista.DebugModeUiBinder` is the shared helper for this pattern. Use it to build the filtered EDT listener and to rebuild header action rows that mix always-visible and debug-only buttons. Keep fake-state ownership and clearing logic inside each panel.
+
 ## Fake State Rules
 
 Debug mode fake state should be in-memory only.
@@ -32,12 +34,11 @@ Debug mode fake state should be in-memory only.
 - Maintains `jugadoresDebug`.
 - Merges fake players into the rendered player list.
 
-`PanelMundo`
+`WorldRecentConnectionsPanel`
 
 - Adds plus/minus header buttons in "Ultimas conexiones".
 - Maintains `conexionesDebug`.
 - Merges fake recent connections ahead of real/fallback entries.
-- Caps displayed recent connections at the same limit used by real data.
 
 ## Button Style
 

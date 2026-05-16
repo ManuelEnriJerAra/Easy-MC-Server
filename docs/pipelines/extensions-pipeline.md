@@ -97,6 +97,8 @@ Dependency prompts and queue logic live mostly in `ExtensionMarketplaceDialog`, 
 
 Keep UI dependency decisions and service-level validation consistent. Service validation is the safety net.
 
+Marketplace dialog option records, queue/dependency helper models, and related view-state types may live beside the dialog in package-scoped helper files when extracted for size control. Keep the dialog focused on orchestration and rendering, and keep extracted types behavior-neutral unless a broader redesign is intentional.
+
 ## Modpack Import/Export
 
 `ModrinthModpackService` is the practical modpack path for mod servers. It writes and reads Modrinth `.mrpack` archives with `modrinth.index.json`, validates ZIP/index paths defensively, verifies downloads against indexed hashes, installs indexed jars through `ServerExtensionsService`, and extracts path-validated overrides. Current import override policy still permits top-level `mods/*.jar` overrides and is tracked in `docs/pending-fixes/extensions-modrinth-import-mod-jar-overrides.md`. Modrinth-origin installed mods are exported as indexed files when their persisted `projectId` and `versionId` resolve and local hashes match. Manual/local installed jars may be exported as indexed Modrinth files only when Modrinth `/version_file/{hash}` resolves an exact version file and the returned hashes match the local jar; the recovered Modrinth source metadata should be persisted afterward. Non-Modrinth/local jars that cannot be resolved this way must be skipped instead of exported as overrides. Hashes should be calculated once per local jar during an export and reused for all SHA-1/SHA-512 checks.
