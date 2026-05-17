@@ -51,7 +51,7 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 
 public class VentanaPrincipal extends JFrame {
-    private static final String BASE_TITLE = "Dora";
+    private static final String BASE_TITLE = "Dora - Minecraft Server Manager";
     private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
     private static final int SERVER_LIST_INITIAL_WIDTH = PanelIndicadoresRecursos.READABLE_SINGLE_ROW_WIDTH;
     private static final int SERVER_LIST_MIN_WIDTH = 240;
@@ -82,6 +82,8 @@ public class VentanaPrincipal extends JFrame {
     private JSplitPane splitHome;
     private PanelConfigServidor panelConfigServidor;
     private boolean divisorPrincipalInicializado;
+    private boolean listaServidoresOcultaPorInfo;
+    private int divisorPrincipalAntesInfo = -1;
 
     enum PaginaDerecha { HOME, MUNDO, CONFIG, STATS, AUTOMATION, EXTENSIONES, INFO }
     private record TemaInfo(String name, String className){}
@@ -723,9 +725,6 @@ public class VentanaPrincipal extends JFrame {
 
     private void prepararContenedoresPaginasDerechas() {
         for (PaginaDerecha pagina : PaginaDerecha.values()) {
-            if (pagina == PaginaDerecha.INFO) {
-                continue;
-            }
             JPanel contenedor = new JPanel(new BorderLayout());
             contenedor.setOpaque(false);
             contenedoresPaginasDerechas.put(pagina, contenedor);
@@ -734,7 +733,7 @@ public class VentanaPrincipal extends JFrame {
     }
 
     private void cargarPaginaDerechaSiNecesario(PaginaDerecha pagina) {
-        if (pagina == null || pagina == PaginaDerecha.INFO) {
+        if (pagina == null) {
             pagina = PaginaDerecha.HOME;
         }
         JPanel contenedor = contenedoresPaginasDerechas.get(pagina);
@@ -749,7 +748,7 @@ public class VentanaPrincipal extends JFrame {
             case STATS -> contenidoDerechoActual.statsPanel();
             case AUTOMATION -> contenidoDerechoActual.automationPanel();
             case EXTENSIONES -> contenidoDerechoActual.extensionesPanel();
-            case INFO -> contenidoDerechoActual.homePanel();
+            case INFO -> contenidoDerechoActual.infoPanel();
         };
 
         contenedor.add(contenido, BorderLayout.CENTER);
@@ -777,10 +776,10 @@ public class VentanaPrincipal extends JFrame {
 
     private void setPaginaDerecha(PaginaDerecha pagina){
         if(pagina == null) pagina = PaginaDerecha.HOME;
-        if(pagina == PaginaDerecha.INFO) pagina = PaginaDerecha.HOME;
         paginaDerechaActual = pagina;
         cargarPaginaDerechaSiNecesario(pagina);
         cardDerecho.show(panelDerechoCards, pagina.name());
+        actualizarVisibilidadListaServidores(pagina == PaginaDerecha.INFO);
 
         for(Map.Entry<PaginaDerecha, JButton> e : navButtons.entrySet()){
             JButton b = e.getValue();
@@ -792,6 +791,41 @@ public class VentanaPrincipal extends JFrame {
     // Calcula el mismo color de selección usado en PanelServidores (tinte del acento sobre el fondo)
     private Color colorSeleccionPanelServidores(){
         return AppTheme.getSelectionBackground();
+    }
+
+    private void actualizarVisibilidadListaServidores(boolean ocultar) {
+        if (splitPrincipal == null || wrapperIzquierdo == null || wrapperDerecho == null) {
+            return;
+        }
+        if (ocultar == listaServidoresOcultaPorInfo) {
+            return;
+        }
+
+        listaServidoresOcultaPorInfo = ocultar;
+        if (ocultar) {
+            if (splitPrincipal.getWidth() > 0) {
+                divisorPrincipalAntesInfo = splitPrincipal.getDividerLocation();
+            }
+            wrapperIzquierdo.setVisible(false);
+            wrapperIzquierdo.setMinimumSize(new Dimension(0, 0));
+            wrapperIzquierdo.setPreferredSize(new Dimension(0, 0));
+            wrapperDerecho.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+            splitPrincipal.setDividerSize(0);
+            splitPrincipal.setDividerLocation(0);
+        } else {
+            wrapperIzquierdo.setVisible(true);
+            wrapperIzquierdo.setMinimumSize(new Dimension(SERVER_LIST_MIN_WIDTH, 0));
+            wrapperIzquierdo.setPreferredSize(new Dimension(SERVER_LIST_INITIAL_WIDTH, 0));
+            wrapperDerecho.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 8));
+            configurarSplitPane(splitPrincipal, 8);
+            int restoredDivider = divisorPrincipalAntesInfo > 0
+                    ? divisorPrincipalAntesInfo
+                    : Math.max(SERVER_LIST_MIN_WIDTH, Math.min(SERVER_LIST_INITIAL_WIDTH, splitPrincipal.getWidth() / 3));
+            SwingUtilities.invokeLater(() -> splitPrincipal.setDividerLocation(restoredDivider));
+        }
+
+        splitPrincipal.revalidate();
+        splitPrincipal.repaint();
     }
 
     private void abrirSelectorTema(){
@@ -1388,10 +1422,6 @@ public class VentanaPrincipal extends JFrame {
     private void navegarAPaginaDerecha(PaginaDerecha pagina){
         if(pagina == null) pagina = PaginaDerecha.HOME;
         registrarClickInfoDebug(pagina);
-        if(pagina == PaginaDerecha.INFO){
-            setPaginaDerecha(paginaDerechaActual == PaginaDerecha.INFO ? PaginaDerecha.HOME : paginaDerechaActual);
-            return;
-        }
         if(pagina == paginaDerechaActual){
             setPaginaDerecha(pagina);
             return;

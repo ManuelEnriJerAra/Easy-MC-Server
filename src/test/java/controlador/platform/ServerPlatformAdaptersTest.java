@@ -419,6 +419,30 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
+    void detect_debeInferirVersionSemanticaDesdeJarLauncherDeFabric() throws Exception {
+        Path fabricDir = tempDir.resolve("fabric-launcher-jar-version");
+        Files.createDirectories(fabricDir.resolve("mods"));
+        TestWorldFixtures.createJar(
+                fabricDir.resolve("fabric-server-mc.26.1.2-loader.0.19.2-launcher.1.1.1.jar"),
+                Map.of(
+                        "META-INF/MANIFEST.MF",
+                        """
+                        Manifest-Version: 1.0
+                        Implementation-Title: FabricInstaller
+                        Main-Class: net.fabricmc.installer.ServerLauncher
+                        """
+                ),
+                "net/fabricmc/installer/ServerLauncher.class"
+        );
+
+        ServerPlatformProfile profile = ServerPlatformAdapters.detect(fabricDir);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.platform()).isEqualTo(ServerPlatform.FABRIC);
+        assertThat(profile.minecraftVersion()).isEqualTo("26.1.2");
+    }
+
+    @Test
     void detect_debeInferirVersionDesdeJarInternoAunqueNoSeaElEjecutableElegido() throws Exception {
         Path paperDir = tempDir.resolve("paper-multi-jar");
         TestWorldFixtures.createJar(

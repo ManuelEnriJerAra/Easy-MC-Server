@@ -93,6 +93,8 @@ Providers:
 
 Marketplace search is provider-scoped from the UI. The provider selector does not offer an "all providers" mode because cross-provider aggregation can show the same plugin twice and can mix dependency identities from different catalogs. Hangar is the default provider when available because its plugin dependency metadata is usually better; users can switch to Modrinth for its broader catalog.
 
+Search-row compatibility can be deliberately incomplete. Modrinth project search rows may omit full platform/version compatibility sets, but filtered searches should preserve the platform and Minecraft version that matched the active query so rows do not degrade into blanket warning or blank states. Default marketplace lists should hide only clearly incompatible rows; do not hide warning rows solely because details have not been fetched yet, or valid mod lists can appear empty after provider-side filters already matched the server. Reserve warning styling and "Revisar" copy for real compatibility caveats, while details/install resolution still verify the exact downloadable build.
+
 ## Dependency Resolution
 
 Dependency prompts and queue logic live mostly in `ExtensionMarketplaceDialog`, while installation compatibility is enforced by `ServerExtensionsService`.

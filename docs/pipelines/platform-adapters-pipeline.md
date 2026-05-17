@@ -95,6 +95,8 @@ Version detection and persistence must accept modern semantic snapshot IDs such 
 
 Metadata version hints and jar `version.json` values should share the same Minecraft-version normalization rules. Known platform-suffixed values such as `1.20.1-forge-47.4.0`, `1.20.1-neoforge-47.4.0`, or `1.20.1-fabric-0.15.11` should normalize to `1.20.1`, while unrelated hyphenated text should still be rejected by the strict generic matcher.
 
+Fabric server launcher jars from Fabric Meta can be installer-style jars with no `version.json` and no Fabric Loader runtime classes before first run. Treat `net/fabricmc/installer/ServerLauncher.class` as a Fabric marker, and allow the Fabric adapter to recover the Minecraft version from Dora/Fabric launcher artifact names shaped like `fabric-server-mc.<minecraft>-loader.<loader>-launcher.<launcher>.jar`. Keep this scoped to Fabric launcher artifacts instead of using arbitrary jar or folder names as generic version evidence.
+
 Forge runtime jars can report the Forge loader version, for example `41.1.0`, in their own `version.json`. Do not use that value as `Server.version`. Forge detection should prefer explicit Minecraft metadata from run scripts, Forge args, library coordinates, modpack manifests, or real Minecraft server classes, and skip Forge-marked top-level jars as generic Minecraft-version sources.
 
 Forge Maven artifact parsing should identify the Minecraft version from the artifact prefix. Older official artifacts can append an extra Minecraft branch suffix after the Forge build, for example `1.10-12.18.0.2000-1.10.0`; those suffixes are part of the Forge artifact coordinate and must not create pseudo Minecraft-version rows.

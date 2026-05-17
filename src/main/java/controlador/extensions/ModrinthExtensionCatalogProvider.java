@@ -286,9 +286,12 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
         if (!matchesProjectPlatform(query, projectPlatforms)) {
             return null;
         }
-        if (!matchesProjectMinecraftVersion(query, setOfStrings(hit.path("versions")))) {
+        Set<String> projectVersions = setOfStrings(hit.path("versions"));
+        if (!matchesProjectMinecraftVersion(query, projectVersions)) {
             return null;
         }
+        Set<ServerPlatform> matchedPlatforms = queryMatchedPlatforms(query, projectPlatforms);
+        Set<String> matchedVersions = queryMatchedVersions(query, projectVersions);
         String projectId = firstNonBlank(text(hit, "project_id"), text(hit, "slug"));
         String projectUrl = text(hit, "slug") == null ? null : "https://modrinth.com/" + toProjectType(extensionType) + "/" + text(hit, "slug");
         return new ExtensionCatalogEntry(
@@ -301,8 +304,8 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
                 text(hit, "description"),
                 getSourceType(),
                 extensionType,
-                Set.of(),
-                Set.of(),
+                matchedPlatforms,
+                matchedVersions,
                 text(hit, "icon_url"),
                 projectUrl,
                 null,
@@ -310,6 +313,35 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
                 text(hit, "client_side"),
                 text(hit, "server_side")
         );
+    }
+
+    private Set<ServerPlatform> queryMatchedPlatforms(ExtensionCatalogQuery query, Set<ServerPlatform> projectPlatforms) {
+        if (query == null || query.platform() == null || query.platform() == ServerPlatform.UNKNOWN) {
+            return Set.of();
+        }
+        ServerPlatform requested = canonicalizePlatform(query.platform());
+        if (requested == ServerPlatform.UNKNOWN) {
+            return Set.of();
+        }
+        if (projectPlatforms == null || projectPlatforms.isEmpty()) {
+            return Set.of(requested);
+        }
+        boolean matched = projectPlatforms.stream()
+                .filter(platform -> platform != null && platform != ServerPlatform.UNKNOWN)
+                .map(this::canonicalizePlatform)
+                .anyMatch(platform -> platform == requested);
+        return matched ? Set.of(requested) : Set.of();
+    }
+
+    private Set<String> queryMatchedVersions(ExtensionCatalogQuery query, Set<String> projectVersions) {
+        if (query == null || query.minecraftVersion() == null || query.minecraftVersion().isBlank()) {
+            return Set.of();
+        }
+        String requested = query.minecraftVersion().trim();
+        if (projectVersions == null || projectVersions.isEmpty() || projectVersions.contains(requested)) {
+            return Set.of(requested);
+        }
+        return Set.of();
     }
 
     private String searchResultIdentity(ExtensionCatalogEntry entry) {

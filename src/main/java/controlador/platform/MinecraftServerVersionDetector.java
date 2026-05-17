@@ -28,6 +28,9 @@ final class MinecraftServerVersionDetector {
     private static final Pattern NEOFORGE_COORDINATE_PATTERN = Pattern.compile(
             "(?i)(?:net/neoforged/neoforge/|--fml\\.neoforgeversion\\s+)(\\d+(?:\\.\\d+)+(?:[-+][a-z0-9.+-]+)?)(?=/|\\s|$)"
     );
+    private static final Pattern FABRIC_SERVER_LAUNCHER_JAR_VERSION_PATTERN = Pattern.compile(
+            "(?i)^fabric-server-mc\\.(" + MinecraftVersionPatterns.VERSION_PATTERN_BODY + ")-loader\\.[^-]+-launcher\\.[^-]+\\.jar$"
+    );
     private static final List<String> VERSION_HINT_FILES = List.of(
             "version_history.json",
             "versions.json",
@@ -73,6 +76,17 @@ final class MinecraftServerVersionDetector {
         return version == null ? null : version.trim();
     }
 
+    static String detectFabric(Path serverDir, Path executableJar) {
+        String version = firstNonBlank(
+                MinecraftServerJarInspector.readMinecraftVersion(executableJar),
+                detectFromMetadataFiles(serverDir),
+                detectFabricLauncherJarVersion(executableJar),
+                detectFromFabricLauncherJarNames(serverDir),
+                detectFromAllTopLevelJars(serverDir)
+        );
+        return version == null ? null : version.trim();
+    }
+
     static String detectForge(Path serverDir, Path executableJar) {
         String version = firstNonBlank(
                 MinecraftServerJarInspector.readMinecraftVersionFromServerClass(executableJar),
@@ -80,6 +94,31 @@ final class MinecraftServerVersionDetector {
                 detectFromAllTopLevelNonForgeJars(serverDir)
         );
         return version == null ? null : version.trim();
+    }
+
+    private static String detectFromFabricLauncherJarNames(Path serverDir) {
+        if (serverDir == null || !Files.isDirectory(serverDir)) {
+            return null;
+        }
+        try (var stream = Files.list(serverDir)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(MinecraftServerVersionDetector::detectFabricLauncherJarVersion)
+                    .filter(value -> value != null && !value.isBlank())
+                    .sorted(VersionStringComparator.minecraftVersionsDescending())
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static String detectFabricLauncherJarVersion(Path path) {
+        if (path == null || path.getFileName() == null) {
+            return null;
+        }
+        Matcher matcher = FABRIC_SERVER_LAUNCHER_JAR_VERSION_PATTERN.matcher(path.getFileName().toString());
+        return matcher.matches() ? matcher.group(1) : null;
     }
 
     private static String detectFromAllTopLevelJars(Path serverDir) {

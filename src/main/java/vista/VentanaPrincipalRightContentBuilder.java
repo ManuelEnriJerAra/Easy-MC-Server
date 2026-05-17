@@ -20,6 +20,7 @@ final class VentanaPrincipalRightContentBuilder {
         private JPanel extensionesPanel;
         private JPanel statsPanel;
         private JPanel automationPanel;
+        private JPanel infoPanel;
         private JSplitPane splitHome;
         private CardPanel jugadoresCard;
         private JPanel consolaCard;
@@ -70,6 +71,13 @@ final class VentanaPrincipalRightContentBuilder {
                 automationPanel = new PanelAutomatizacion(gestorServidores, server);
             }
             return automationPanel;
+        }
+
+        JPanel infoPanel() {
+            if (infoPanel == null) {
+                infoPanel = new PanelInformacion();
+            }
+            return infoPanel;
         }
 
         JSplitPane splitHome() {

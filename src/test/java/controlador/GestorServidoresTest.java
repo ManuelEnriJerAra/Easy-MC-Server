@@ -1738,6 +1738,31 @@ class GestorServidoresTest {
     }
 
     @Test
+    void importarServidorDebeAceptarVersionSemanticaFuturaDesdeJarLauncherFabric() throws Exception {
+        GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
+        Path serverDir = tempDir.resolve("future-fabric");
+        Files.createDirectories(serverDir.resolve("mods"));
+        TestWorldFixtures.createJar(
+                serverDir.resolve("fabric-server-mc.26.1.2-loader.0.19.2-launcher.1.1.1.jar"),
+                Map.of(
+                        "META-INF/MANIFEST.MF",
+                        """
+                        Manifest-Version: 1.0
+                        Implementation-Title: FabricInstaller
+                        Main-Class: net.fabricmc.installer.ServerLauncher
+                        """
+                ),
+                "net/fabricmc/installer/ServerLauncher.class"
+        );
+
+        Server imported = gestor.importarServidorDesdeDirectorio(serverDir);
+
+        assertThat(imported).isNotNull();
+        assertThat(imported.getPlatform()).isEqualTo(modelo.extensions.ServerPlatform.FABRIC);
+        assertThat(imported.getVersion()).isEqualTo("26.1.2");
+    }
+
+    @Test
     void importarServidorDebeAceptarSnapshotSemanticoFuturoDesdeVersionJson() throws Exception {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("dora-server-list.json").toFile());
         Path serverDir = tempDir.resolve("future-snapshot-vanilla");

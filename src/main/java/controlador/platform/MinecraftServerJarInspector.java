@@ -27,6 +27,8 @@ final class MinecraftServerJarInspector {
     };
     private static final String[] FABRIC_ENTRY_MARKERS = {
             "fabric-server-launch.properties",
+            "net/fabricmc/installer/ServerLauncher.class",
+            "net/fabricmc/installer/server/ServerInstaller.class",
             "net/fabricmc/loader/",
             "net/fabricmc/loader/impl/launch/server/FabricServerLauncher.class",
             "net/fabricmc/loader/launch/knot/KnotServer.class"

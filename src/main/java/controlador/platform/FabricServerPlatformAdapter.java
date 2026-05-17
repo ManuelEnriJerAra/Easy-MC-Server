@@ -42,7 +42,7 @@ public final class FabricServerPlatformAdapter extends AbstractServerPlatformAda
             return null;
         }
         ServerValidationResult validation = validate(serverDir);
-        return validation.valid() ? buildProfileAllowingMissingJar(serverDir, null) : null;
+        return validation.valid() ? buildFabricProfileAllowingMissingJar(serverDir) : null;
     }
 
     @Override
@@ -137,5 +137,20 @@ public final class FabricServerPlatformAdapter extends AbstractServerPlatformAda
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private ServerPlatformProfile buildFabricProfileAllowingMissingJar(Path serverDir) {
+        Path executableJar = resolveJarSilently(serverDir);
+        String minecraftVersion = MinecraftServerVersionDetector.detectFabric(serverDir, executableJar);
+        return new ServerPlatformProfile(
+                getPlatform(),
+                getLoader(),
+                null,
+                minecraftVersion,
+                getEcosystemType(),
+                getCapabilities(),
+                getExtensionDirectories(serverDir),
+                executableJar
+        );
     }
 }

@@ -1014,8 +1014,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         loaderModel.addElement(new PlatformFilterOption("Segun servidor (" + labelForPlatform(serverPlatform) + ")", serverPlatform, true));
         loaderModel.addElement(new PlatformFilterOption("Cualquiera", ServerPlatform.UNKNOWN, false));
 
-        List<ServerPlatform> options = switch (server == null || server.getEcosystemType() == null
-                ? ServerEcosystemType.UNKNOWN : server.getEcosystemType()) {
+        List<ServerPlatform> options = switch (serverEcosystem()) {
             case PLUGINS -> List.of(ServerPlatform.PAPER, ServerPlatform.SPIGOT, ServerPlatform.BUKKIT, ServerPlatform.PURPUR, ServerPlatform.PUFFERFISH);
             case MODS -> List.of(ServerPlatform.FORGE, ServerPlatform.NEOFORGE, ServerPlatform.FABRIC, ServerPlatform.QUILT);
             default -> List.of();
@@ -3915,17 +3914,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
     }
 
     private ServerExtensionType resolveServerExtensionType() {
-        return switch (serverEcosystem()) {
-            case MODS -> ServerExtensionType.MOD;
-            case PLUGINS -> ServerExtensionType.PLUGIN;
-            default -> ServerExtensionType.UNKNOWN;
-        };
+        return extensionTypeFor(server);
     }
 
     private ServerEcosystemType serverEcosystem() {
-        return server == null || server.getEcosystemType() == null
-                ? ServerEcosystemType.UNKNOWN
-                : server.getEcosystemType();
+        return ecosystemOf(server);
     }
 
     private boolean hasExtensionEcosystem() {
@@ -3933,11 +3926,30 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return ecosystem == ServerEcosystemType.MODS || ecosystem == ServerEcosystemType.PLUGINS;
     }
 
+    static ServerEcosystemType ecosystemOf(Server server) {
+        if (server == null) {
+            return ServerEcosystemType.UNKNOWN;
+        }
+        if (server.getEcosystemType() != null && server.getEcosystemType() != ServerEcosystemType.UNKNOWN) {
+            return server.getEcosystemType();
+        }
+        ServerPlatform platform = server.getPlatform();
+        if (platform != null && platform != ServerPlatform.UNKNOWN) {
+            return platform.getDefaultEcosystemType();
+        }
+        return ServerEcosystemType.UNKNOWN;
+    }
+
+    static ServerExtensionType extensionTypeFor(Server server) {
+        return switch (ecosystemOf(server)) {
+            case MODS -> ServerExtensionType.MOD;
+            case PLUGINS -> ServerExtensionType.PLUGIN;
+            default -> ServerExtensionType.UNKNOWN;
+        };
+    }
+
     private static String marketplaceTitle(Server server) {
-        ServerEcosystemType ecosystem = server == null || server.getEcosystemType() == null
-                ? ServerEcosystemType.UNKNOWN
-                : server.getEcosystemType();
-        return switch (ecosystem) {
+        return switch (ecosystemOf(server)) {
             case MODS -> "Catálogo de mods";
             case PLUGINS -> "Catálogo de plugins";
             default -> "Catálogo de extensiones";
@@ -4023,7 +4035,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 + "|" + metadataKey(entry.compatibleMinecraftVersions())
                 + "|" + defaultString(server == null ? null : server.getVersion(), "")
                 + "|" + defaultString(server == null || server.getPlatform() == null ? null : server.getPlatform().name(), "")
-                + "|" + defaultString(server == null || server.getEcosystemType() == null ? null : server.getEcosystemType().name(), "");
+                + "|" + defaultString(serverEcosystem().name(), "");
         MarketplaceCompatibilityAssessment cached = compatibilityCache.get(key);
         if (cached != null) {
             return cached;
@@ -4066,17 +4078,15 @@ final class ExtensionMarketplaceDialog extends JDialog {
         List<String> blockers = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
-        ServerEcosystemType serverEcosystem = server == null || server.getEcosystemType() == null
-                ? ServerEcosystemType.UNKNOWN
-                : server.getEcosystemType();
+        ServerEcosystemType resolvedEcosystem = serverEcosystem();
         ServerPlatform serverPlatform = server == null || server.getPlatform() == null
                 ? ServerPlatform.UNKNOWN
                 : canonicalizePlatform(server.getPlatform());
         String serverVersion = normalized(server == null ? null : server.getVersion());
 
-        if (serverEcosystem == ServerEcosystemType.MODS && extensionType == ServerExtensionType.PLUGIN) {
+        if (resolvedEcosystem == ServerEcosystemType.MODS && extensionType == ServerExtensionType.PLUGIN) {
             blockers.add("Esta extensión es un plugin y el servidor actual acepta mods.");
-        } else if (serverEcosystem == ServerEcosystemType.PLUGINS && extensionType == ServerExtensionType.MOD) {
+        } else if (resolvedEcosystem == ServerEcosystemType.PLUGINS && extensionType == ServerExtensionType.MOD) {
             blockers.add("Esta extensión es un mod y el servidor actual acepta plugins.");
         } else if (extensionType == null || extensionType == ServerExtensionType.UNKNOWN) {
             warnings.add("El proveedor no declara el tipo de extensión.");
@@ -4145,9 +4155,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         if (provider.capabilities() == null || !provider.capabilities().contains(ExtensionCatalogCapability.SEARCH)) {
             return false;
         }
-        ServerEcosystemType ecosystem = server == null || server.getEcosystemType() == null
-                ? ServerEcosystemType.UNKNOWN
-                : server.getEcosystemType();
+        ServerEcosystemType ecosystem = serverEcosystem();
         ServerExtensionType serverExtensionType = switch (ecosystem) {
             case MODS -> ServerExtensionType.MOD;
             case PLUGINS -> ServerExtensionType.PLUGIN;
@@ -4546,17 +4554,19 @@ final class ExtensionMarketplaceDialog extends JDialog {
             iconLabel.setPreferredSize(new Dimension(52, 52));
             iconLabel.setIcon(ExtensionIconLoader.getIcon(entry.iconUrl(), 52, list::repaint));
             int rowWidth = Math.max(320, list.getWidth() - 24);
-            String compatibilityText = compatibilityBadgeText(new MarketplaceCompatibilityAssessment(
+            MarketplaceCompatibilityAssessment compatibilityAssessment = new MarketplaceCompatibilityAssessment(
                     value.compatibilityStatus(),
                     value.compatibilitySummary(),
                     value.compatibilityReasons()
-            ));
+            );
+            boolean showCompatibilityBadge = shouldShowCompatibilityBadge(compatibilityAssessment);
+            String compatibilityText = showCompatibilityBadge ? compatibilityBadgeText(compatibilityAssessment) : "";
             String resolvedCompatibilityText = compatibilityText;
             String sideText = sideText(entry);
             int compatibilityWidth = compatibilityLabel.getFontMetrics(compatibilityLabel.getFont()).stringWidth(resolvedCompatibilityText) + 18;
             int sideWidth = sideLabel.getFontMetrics(sideLabel.getFont()).stringWidth(sideText) + 18;
-            int badgeWidth = Math.min(190, Math.max(92, Math.max(compatibilityWidth, sideWidth)));
-            int statusHeight = 52;
+            int badgeWidth = Math.min(190, Math.max(92, showCompatibilityBadge ? Math.max(compatibilityWidth, sideWidth) : sideWidth));
+            int statusHeight = showCompatibilityBadge && isMeaningfulValue(sideText) ? 52 : 26;
             statusPanel.setLayout(new GridLayout(2, 1, 0, 0));
             statusPanel.setPreferredSize(new Dimension(badgeWidth, statusHeight));
             statusPanel.setMinimumSize(new Dimension(badgeWidth, statusHeight));
@@ -4577,10 +4587,11 @@ final class ExtensionMarketplaceDialog extends JDialog {
             authorLabel.setText("|  " + ellipsize(providerAndType, authorLabel.getFont(), authorTarget));
             authorLabel.setToolTipText(providerAndType);
             downloadsLabel.setText("|  " + ellipsize(compactNumber(entry.downloads()), downloadsLabel.getFont(), downloadsTarget));
+            compatibilityLabel.setVisible(showCompatibilityBadge);
             compatibilityLabel.setText(ellipsize(resolvedCompatibilityText, compatibilityLabel.getFont(), badgeWidth - 18));
             compatibilityLabel.setToolTipText(resolvedCompatibilityText);
-            Color compatibilityBackground = compatibilityBadgeBackground(value.compatibilityStatus());
-            Color compatibilityForeground = ExtensionStatusPresentation.foregroundFor(compatibilityBackground);
+            Color compatibilityBackground = compatibilityBadgeBackground(compatibilityAssessment);
+            Color compatibilityForeground = compatibilityBadgeForeground(compatibilityAssessment);
             compatibilityLabel.setForeground(compatibilityForeground);
             compatibilityLabel.setBackground(compatibilityBackground);
             compatibilityLabel.setBorder(BorderFactory.createCompoundBorder(
@@ -4909,15 +4920,18 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 AppTheme.withAlpha(AppTheme.getForeground(), 16),
                 AppTheme.withAlpha(AppTheme.getForeground(), 210)
         ));
-        badges.add(createBadge(
-                compatibilityBadgeText(new MarketplaceCompatibilityAssessment(
-                        viewModel.compatibilityStatus(),
-                        viewModel.compatibilitySummary(),
-                        viewModel.compatibilityReasons()
-                )),
-                compatibilityBadgeBackground(viewModel.compatibilityStatus()),
-                compatibilityBadgeForeground(viewModel.compatibilityStatus())
-        ));
+        MarketplaceCompatibilityAssessment compatibilityAssessment = new MarketplaceCompatibilityAssessment(
+                viewModel.compatibilityStatus(),
+                viewModel.compatibilitySummary(),
+                viewModel.compatibilityReasons()
+        );
+        if (shouldShowCompatibilityBadge(compatibilityAssessment)) {
+            badges.add(createBadge(
+                    compatibilityBadgeText(compatibilityAssessment),
+                    compatibilityBadgeBackground(compatibilityAssessment),
+                    compatibilityBadgeForeground(compatibilityAssessment)
+            ));
+        }
     }
 
     private boolean hasDeclaredSideMetadata(ExtensionCatalogEntry entry) {
@@ -4996,7 +5010,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return TextEllipsizer.rightStrict(value, getFontMetrics(font == null ? getFont() : font), maxWidth);
     }
 
-    private String compatibilityBadgeText(MarketplaceCompatibilityAssessment assessment) {
+    static String compatibilityBadgeText(MarketplaceCompatibilityAssessment assessment) {
         if (assessment == null || assessment.status() == null) {
             return "Compatibilidad sin validar";
         }
@@ -5017,12 +5031,37 @@ final class ExtensionMarketplaceDialog extends JDialog {
         return assessment.summary() + "  |  " + trimToLength(assessment.reasons().getFirst(), 72);
     }
 
-    private Color compatibilityBadgeForeground(ExtensionCompatibilityStatus status) {
-        return ExtensionStatusPresentation.foreground(status);
+    static boolean isMetadataPendingWarning(MarketplaceCompatibilityAssessment assessment) {
+        if (assessment == null || assessment.status() != ExtensionCompatibilityStatus.WARNING) {
+            return false;
+        }
+        List<String> reasons = assessment.reasons() == null ? List.of() : assessment.reasons();
+        if (reasons.isEmpty()) {
+            return false;
+        }
+        return reasons.stream()
+                .filter(Objects::nonNull)
+                .map(reason -> reason.trim().toLowerCase(Locale.ROOT))
+                .allMatch(reason -> reason.startsWith("el proveedor no declara loaders")
+                        || reason.startsWith("el proveedor no declara versiones de minecraft"));
     }
 
-    private Color compatibilityBadgeBackground(ExtensionCompatibilityStatus status) {
-        return ExtensionStatusPresentation.background(status);
+    static boolean shouldShowCompatibilityBadge(MarketplaceCompatibilityAssessment assessment) {
+        return assessment != null
+                && assessment.status() != null
+                && !isMetadataPendingWarning(assessment);
+    }
+
+    private Color compatibilityBadgeForeground(MarketplaceCompatibilityAssessment assessment) {
+        return isMetadataPendingWarning(assessment)
+                ? ExtensionStatusPresentation.foregroundFor(ExtensionStatusPresentation.neutralBadgeBackground())
+                : ExtensionStatusPresentation.foreground(assessment == null ? null : assessment.status());
+    }
+
+    private Color compatibilityBadgeBackground(MarketplaceCompatibilityAssessment assessment) {
+        return isMetadataPendingWarning(assessment)
+                ? ExtensionStatusPresentation.neutralBadgeBackground()
+                : ExtensionStatusPresentation.background(assessment == null ? null : assessment.status());
     }
 
     private Color readableWarningColor() {
@@ -5236,10 +5275,7 @@ final class ExtensionMarketplaceDialog extends JDialog {
                     .filter(entry -> matchesProviderFilter(entry, searchSpec.provider()))
                     .filter(entry -> matchesSideFilter(entry, searchSpec.sideFilter()))
                     .map(entry -> buildEntryViewModel(entry, queueStateSnapshot))
-                    .filter(viewModel -> viewModel != null
-                            && (!searchSpec.compatibilityOnly()
-                            || searchSpec.hasSearchText()
-                            || viewModel.compatibilityStatus() == ExtensionCompatibilityStatus.COMPATIBLE))
+                    .filter(viewModel -> shouldDisplaySearchResult(searchSpec, viewModel))
                     .toList();
         }
 
@@ -5297,6 +5333,16 @@ final class ExtensionMarketplaceDialog extends JDialog {
                 }
             }
         }
+    }
+
+    static boolean shouldDisplaySearchResult(MarketplaceSearchSpec searchSpec, MarketplaceEntryViewModel viewModel) {
+        if (viewModel == null) {
+            return false;
+        }
+        if (searchSpec == null || !searchSpec.compatibilityOnly() || searchSpec.hasSearchText()) {
+            return true;
+        }
+        return viewModel.compatibilityStatus() != ExtensionCompatibilityStatus.INCOMPATIBLE;
     }
 
     private final class MarketplaceDetailsWorker extends SwingWorker<Optional<ExtensionCatalogDetails>, Void> {

@@ -19,6 +19,11 @@ public final class SvgIconFactory {
         return create(resourcePath, width, height, AppTheme::getForeground);
     }
 
+    public static FlatSVGIcon createOriginal(String resourcePath, int width, int height) {
+        String key = resourcePath + "|" + width + "|" + height + "|original";
+        return ICON_CACHE.computeIfAbsent(key, ignored -> new FlatSVGIcon(resourcePath, width, height));
+    }
+
     public static Icon createWithOpacity(String resourcePath, int width, int height, float opacity) {
         return createWithOpacity(resourcePath, width, height, AppTheme::getForeground, opacity);
     }

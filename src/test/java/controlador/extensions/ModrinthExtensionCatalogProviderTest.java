@@ -61,8 +61,8 @@ class ModrinthExtensionCatalogProviderTest {
             assertThat(entry.versionId()).isNull();
             assertThat(entry.version()).isNull();
             assertThat(entry.sourceType()).isEqualTo(ExtensionSourceType.MODRINTH);
-            assertThat(entry.compatiblePlatforms()).isEmpty();
-            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
+            assertThat(entry.compatiblePlatforms()).containsExactly(ServerPlatform.FABRIC);
+            assertThat(entry.compatibleMinecraftVersions()).containsExactly("1.21.1");
         });
     }
 
@@ -155,7 +155,7 @@ class ModrinthExtensionCatalogProviderTest {
     }
 
     @Test
-    void shouldNotAdvertiseProjectWideMetadataAsCompatibilityForFilteredSearches() throws IOException {
+    void shouldPreserveQueryMatchedCompatibilityForFilteredSearches() throws IOException {
         ModrinthExtensionCatalogProvider provider = new ModrinthExtensionCatalogProvider(new FakeHttpClient(Map.of(
                 modrinthSearchUrl("tacz", 10, 0, "downloads", "[[\"project_type:mod\"],[\"categories:forge\"],[\"versions:1.21.1\"]]"),
                 """
@@ -186,8 +186,8 @@ class ModrinthExtensionCatalogProviderTest {
             assertThat(entry.projectId()).isEqualTo("SzzJttH8");
             assertThat(entry.versionId()).isNull();
             assertThat(entry.version()).isNull();
-            assertThat(entry.compatiblePlatforms()).isEmpty();
-            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
+            assertThat(entry.compatiblePlatforms()).containsExactly(ServerPlatform.FORGE);
+            assertThat(entry.compatibleMinecraftVersions()).containsExactly("1.21.1");
         });
     }
 
@@ -313,8 +313,8 @@ class ModrinthExtensionCatalogProviderTest {
         assertThat(results).anySatisfy(entry -> {
             assertThat(entry.projectId()).isEqualTo("P1");
             assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.PLUGIN);
-            assertThat(entry.compatiblePlatforms()).isEmpty();
-            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
+            assertThat(entry.compatiblePlatforms()).containsExactly(ServerPlatform.PAPER);
+            assertThat(entry.compatibleMinecraftVersions()).containsExactly("1.21.1");
             assertThat(entry.serverSide()).isEqualTo("required");
         });
         assertThat(results).anySatisfy(entry -> {
@@ -327,8 +327,8 @@ class ModrinthExtensionCatalogProviderTest {
             assertThat(entry.projectId()).isEqualTo("GEYSER");
             assertThat(entry.displayName()).isEqualTo("Geyser");
             assertThat(entry.extensionType()).isEqualTo(ServerExtensionType.PLUGIN);
-            assertThat(entry.compatiblePlatforms()).isEmpty();
-            assertThat(entry.compatibleMinecraftVersions()).isEmpty();
+            assertThat(entry.compatiblePlatforms()).containsExactly(ServerPlatform.PAPER);
+            assertThat(entry.compatibleMinecraftVersions()).containsExactly("1.21.1");
             assertThat(entry.projectUrl()).contains("/plugin/geyser");
         });
     }
