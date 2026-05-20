@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.example</groupId>
-    <artifactId>dora_0.7</artifactId>
-    <version>beta</version>
+    <artifactId>dora</artifactId>
+    <version>0.7.1-beta</version>
     <name>Dora</name>
     <description>Desktop Minecraft server manager.</description>
 
@@ -107,6 +107,7 @@
         </dependency>
     </dependencies>
     <build>
+        <finalName>dora_0.7.1-beta</finalName>
         <plugins>
             <!-- Compilación -->
             <plugin>

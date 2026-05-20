@@ -46,7 +46,7 @@ final class PanelInformacion extends JPanel {
     private static final int MERCEDARIAS_IMAGE_HEIGHT = 90;
     private static final int SIDE_COLUMN_WIDTH = 280;
     private static final int LINK_BUTTON_HEIGHT = 34;
-    private static final String APP_VERSION = "0.7-beta";
+    private static final String APP_VERSION = "0.7.1-beta";
 
     PanelInformacion() {
         super(new BorderLayout());

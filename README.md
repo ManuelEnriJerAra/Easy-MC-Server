@@ -91,7 +91,7 @@ If a prebuilt Dora `.jar` is available:
 3. Run the downloaded file:
 
 ```bash
-java -jar dora_0.7-beta.jar
+java -jar dora_0.7.1-beta.jar
 ```
 
 > [!NOTE]
@@ -210,13 +210,13 @@ mvn clean package
 The executable jar is generated in `target/`:
 
 ```bash
-java -jar target/dora_0.7-beta.jar
+java -jar target/dora_0.7.1-beta.jar
 ```
 
 ### Run From Source
 
 ```bash
-java -jar target/dora_0.7-beta.jar
+java -jar target/dora_0.7.1-beta.jar
 ```
 
 You can also run the app from your IDE using:
