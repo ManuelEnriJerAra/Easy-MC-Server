@@ -69,6 +69,7 @@ import controlador.AppErrorReporter;
 import modelo.Server;
 import modelo.extensions.ServerPlatform;
 
+@SuppressWarnings("unused")
 public class PanelServidores extends FlatScrollPane {
     private static final Dimension MIN_SIZE = new Dimension(240, 240); // ancho justo para que no tape el estado "Inactivo"
     private static final int FAVORITE_CORNER_GAP = 6;
@@ -320,7 +321,7 @@ public class PanelServidores extends FlatScrollPane {
     }
 
     private String construirTextoVersionPlataforma(Server servidor, String version){
-        String versionTexto = (version == null || version.isBlank()) ? "(sin version)" : version.trim();
+        String versionTexto = (version == null || version.isBlank()) ? "(sin versión)" : version.trim();
         String plataforma = obtenerNombrePlataforma(servidor);
         return plataforma == null ? versionTexto : versionTexto + " - " + plataforma;
     }

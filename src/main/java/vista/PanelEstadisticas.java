@@ -5,7 +5,6 @@ import com.formdev.flatlaf.extras.components.FlatComboBox;
 import com.formdev.flatlaf.extras.components.FlatScrollPane;
 import com.formdev.flatlaf.extras.components.FlatSlider;
 import controlador.AppPaths;
-import controlador.GestorConfiguracion;
 import controlador.GestorServidores;
 import controlador.Utilidades;
 import modelo.Server;
@@ -51,6 +50,7 @@ import java.util.regex.Pattern;
 
 import tools.jackson.databind.ObjectMapper;
 
+@SuppressWarnings("unused")
 public class PanelEstadisticas extends JPanel {
     private static final int SAMPLE_INTERVAL_MS = 1000;
     private static final int CHART_LEFT_PADDING = 52;

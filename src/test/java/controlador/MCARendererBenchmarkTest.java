@@ -30,23 +30,23 @@ class MCARendererBenchmarkTest {
         List<Path> regions = createBenchmarkRegions(tempDir.resolve("bench"));
         MCARenderer renderer = new MCARenderer();
 
-        Map<String, MCARenderer.RenderOptions> scenarios = new LinkedHashMap<>();
-        scenarios.put("baseline_original", originalBaselineOptions());
-        scenarios.put("baseline_degradado", degradedBaselineOptions());
-        scenarios.put("final_quality", qualityOptions());
-        scenarios.put("final_balanced", balancedOptions());
-        scenarios.put("final_performance", performanceOptions());
-        scenarios.put("final_ultra_performance", ultraPerformanceOptions());
-        scenarios.put("coste_base_pipeline", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false));
-        scenarios.put("coste_basic_shading", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true));
-        scenarios.put("coste_water_fast", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true));
-        scenarios.put("coste_water_advanced", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true));
-        scenarios.put("coste_material_shading", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true).withAdvancedMaterialShading(true));
-        scenarios.put("coste_biome_fast", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true).withBiomeColoring(true));
-        scenarios.put("coste_biome_advanced", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true).withAdvancedMaterialShading(true).withBiomeColoring(true).withAdvancedBiomeColoring(true));
+        Map<String, MCARenderer.RenderOptions> scenaríos = new LinkedHashMap<>();
+        scenaríos.put("baseline_original", originalBaselineOptions());
+        scenaríos.put("baseline_degradado", degradedBaselineOptions());
+        scenaríos.put("final_quality", qualityOptions());
+        scenaríos.put("final_balanced", balancedOptions());
+        scenaríos.put("final_performance", performanceOptions());
+        scenaríos.put("final_ultra_performance", ultraPerformanceOptions());
+        scenaríos.put("coste_base_pipeline", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false));
+        scenaríos.put("coste_basic_shading", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true));
+        scenaríos.put("coste_water_fast", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true));
+        scenaríos.put("coste_water_advanced", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true));
+        scenaríos.put("coste_material_shading", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true).withAdvancedMaterialShading(true));
+        scenaríos.put("coste_biome_fast", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true).withBiomeColoring(true));
+        scenaríos.put("coste_biome_advanced", MCARenderer.RenderOptions.ultraPerformance().withPreferSquareCrop(false).withShadeByHeight(true).withWaterSubsurfaceShading(true).withAdvancedWaterColoring(true).withAdvancedMaterialShading(true).withBiomeColoring(true).withAdvancedBiomeColoring(true));
 
         Map<String, BenchmarkResult> results = new LinkedHashMap<>();
-        for(Map.Entry<String, MCARenderer.RenderOptions> entry : scenarios.entrySet()) {
+        for(Map.Entry<String, MCARenderer.RenderOptions> entry : scenaríos.entrySet()) {
             results.put(entry.getKey(), runScenario(renderer, regions, entry.getValue()));
         }
 

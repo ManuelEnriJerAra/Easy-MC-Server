@@ -31,7 +31,7 @@ public final class ExtensionArtifactDownloader implements FileDownloader {
     @Override
     public void download(String url, File destination) throws IOException {
         if (url == null || url.isBlank()) {
-            throw new IOException("La URL de descarga de la extension esta vacia.");
+            throw new IOException("La URL de descarga de la extensión está vacía.");
         }
         if (destination == null) {
             throw new IOException("No se ha indicado el destino de la descarga.");
@@ -40,7 +40,7 @@ public final class ExtensionArtifactDownloader implements FileDownloader {
         try {
             uri = URI.create(url.trim());
         } catch (IllegalArgumentException ex) {
-            throw new IOException("La URL de descarga de la extension no es valida.", ex);
+            throw new IOException("La URL de descarga de la extensión no es válida.", ex);
         }
 
         HttpRequest request = HttpRequest.newBuilder(uri)
@@ -55,14 +55,14 @@ public final class ExtensionArtifactDownloader implements FileDownloader {
             response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IOException("La descarga de la extension ha sido interrumpida.", ex);
+            throw new IOException("La descarga de la extensión ha sido interrumpida.", ex);
         } catch (IllegalArgumentException ex) {
             throw new IOException("No se ha podido construir la peticion de descarga.", ex);
         }
 
         int statusCode = response.statusCode();
         if (statusCode < 200 || statusCode >= 300) {
-            throw new IOException("La descarga de la extension ha devuelto HTTP " + statusCode + ".");
+            throw new IOException("La descarga de la extensión ha devuelto HTTP " + statusCode + ".");
         }
         byte[] body = response.body() == null ? new byte[0] : response.body();
         rejectTextualErrorBody(response, body);

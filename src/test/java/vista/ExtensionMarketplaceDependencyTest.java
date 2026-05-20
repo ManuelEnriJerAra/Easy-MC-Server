@@ -258,7 +258,7 @@ class ExtensionMarketplaceDependencyTest {
 
         assertThat(warning)
                 .contains("Aviso")
-                .contains("se intentara instalar de todos modos");
+                .contains("se intentará instalar de todos modos");
     }
 
     @Test
@@ -354,7 +354,6 @@ class ExtensionMarketplaceDependencyTest {
         method.invoke(dialog, entry, details);
     }
 
-    @SuppressWarnings("unchecked")
     private static List<?> invokeList(Object target, String methodName) throws Exception {
         Method method = target.getClass().getDeclaredMethod(methodName);
         method.setAccessible(true);

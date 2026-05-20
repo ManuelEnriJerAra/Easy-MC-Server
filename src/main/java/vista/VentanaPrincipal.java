@@ -50,6 +50,7 @@ import java.util.function.Consumer;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 
+@SuppressWarnings("unused")
 public class VentanaPrincipal extends JFrame {
     private static final String BASE_TITLE = "Dora - Minecraft Server Manager";
     private static final int DEBUG_TOGGLE_INFO_CLICKS = 9;
@@ -354,7 +355,7 @@ public class VentanaPrincipal extends JFrame {
         });
 
         new Timer(1000, e -> {
-            // actualizar estado cada 1 segundo
+            // actualizar estado cada 1 segúndo
             listaServidoresPanel.actualizarEstados();
         }).start();
 
@@ -1288,7 +1289,7 @@ public class VentanaPrincipal extends JFrame {
             avisoBandejaMostrado = true;
             trayIcon.displayMessage(
                     BASE_TITLE,
-                    "Dora sigue ejecutandose en segundo plano.",
+                    "Dora sigue ejecutandose en segúndo plano.",
                     TrayIcon.MessageType.INFO
             );
         }

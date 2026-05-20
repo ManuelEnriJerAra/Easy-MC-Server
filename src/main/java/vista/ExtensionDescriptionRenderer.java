@@ -46,7 +46,7 @@ final class ExtensionDescriptionRenderer {
     static List<Block> parse(String rawText) {
         String text = removeUnsafeRichContent(decodeBasicHtmlEntities(rawText));
         if (text.isBlank()) {
-            return List.of(new TextBlock("Sin descripcion disponible."));
+            return List.of(new TextBlock("Sin descripción disponible."));
         }
 
         List<Block> blocks = new ArrayList<>();
@@ -64,7 +64,7 @@ final class ExtensionDescriptionRenderer {
             cursor = next.end();
         }
         if (blocks.isEmpty()) {
-            blocks.add(new TextBlock("Sin descripcion disponible."));
+            blocks.add(new TextBlock("Sin descripción disponible."));
         }
         return blocks;
     }

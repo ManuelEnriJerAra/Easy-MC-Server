@@ -152,7 +152,7 @@ final class PanelAutomatizacion extends JPanel {
     }
 
     private CardPanel createLifecycleCard() {
-        CardPanel card = new CardPanel("Automatizacion de servidor");
+        CardPanel card = new CardPanel("Automatización de servidor");
         card.setBorder(BorderFactory.createEmptyBorder());
 
         JPanel columns = new JPanel(new GridLayout(1, 3, 10, 0));
@@ -206,10 +206,10 @@ final class PanelAutomatizacion extends JPanel {
     }
 
     private CardPanel createCommandsCard() {
-        CardPanel card = new CardPanel("Automatizacion de comandos");
+        CardPanel card = new CardPanel("Automatización de comandos");
         card.setBorder(BorderFactory.createEmptyBorder());
 
-        configureHeaderButton(addCommandButton, "Anadir comando", "doraicons/plus.svg");
+        configureHeaderButton(addCommandButton, "Añadir comando", "doraicons/plus.svg");
         configureHeaderButton(editCommandButton, "Editar comando", "doraicons/settings.svg");
         configureHeaderButton(removeCommandButton, "Eliminar comando", "doraicons/trash-unselected.svg");
         addCommandButton.addActionListener(e -> openRuleEditor(null, AutomationActionType.COMMAND));
@@ -653,8 +653,8 @@ final class PanelAutomatizacion extends JPanel {
         }
         int result = JOptionPane.showConfirmDialog(
                 this,
-                "Eliminar esta automatizacion?",
-                "Eliminar automatizacion",
+                "¿Eliminar esta automatización?",
+                "Eliminar automatización",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE
         );
@@ -692,7 +692,7 @@ final class PanelAutomatizacion extends JPanel {
     }
 
     private String editorTitle(ServerAutomationRule source, AutomationActionType actionType) {
-        String prefix = source == null ? "Nueva" : "Editar";
+        String prefix = source == null ? "Nuevo" : "Editar";
         return prefix + " " + actionLabel(actionType).toLowerCase();
     }
 

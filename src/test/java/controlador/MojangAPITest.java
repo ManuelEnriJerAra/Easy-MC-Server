@@ -3,7 +3,6 @@ package controlador;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketTimeoutException;
@@ -55,7 +54,7 @@ class MojangAPITest {
                 new SocketTimeoutException("Read timed out"));
 
         assertThat(GestorServidores.mensajeErrorDescarga(exception))
-                .isEqualTo("La descarga ha tardado demasiado. Comprueba tu conexion e intentalo de nuevo.");
+                .isEqualTo("La descarga ha tardado demasiado. Comprueba tu conexión e inténtalo de nuevo.");
     }
 
     private static final class FakeMojangApi extends MojangAPI {

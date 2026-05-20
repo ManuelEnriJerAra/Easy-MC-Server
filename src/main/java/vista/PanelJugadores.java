@@ -93,6 +93,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
+@SuppressWarnings("unused")
 public class PanelJugadores extends JPanel {
     private static final Pattern JOIN = Pattern.compile("([^\\s]+) joined the game");
     private static final Pattern LEFT = Pattern.compile("([^\\s]+) left the game");
@@ -165,7 +166,7 @@ public class PanelJugadores extends JPanel {
         scrollJugadores.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         AppTheme.applyStandardScrollSpeed(scrollJugadores);
 
-        JLabel labelSinJugadores = new JLabel("No hay ningun jugador conectado.");
+        JLabel labelSinJugadores = new JLabel("No hay ningún jugador conectado.");
         labelSinJugadores.setFont(labelSinJugadores.getFont().deriveFont(Font.PLAIN, 15f));
         labelSinJugadores.setForeground(AppTheme.getMutedForeground());
         panelSinJugadores.setOpaque(true);
@@ -808,13 +809,13 @@ public class PanelJugadores extends JPanel {
     private void actualizarEstadoWhitelistLabel(JLabel label, boolean enabled) {
         if (label == null) return;
         if (enabled) {
-            label.setText("La whitelist esta activada.");
+            label.setText("La whitelist está activada.");
             label.setFont(label.getFont().deriveFont(Font.PLAIN));
             label.setForeground(AppTheme.getMutedForeground());
             return;
         }
 
-        label.setText("<html><b>La whitelist esta desactivada.</b></html>");
+        label.setText("<html><b>La whitelist está desactivada.</b></html>");
         label.setFont(label.getFont().deriveFont(Font.PLAIN));
         label.setForeground(AppTheme.getForeground());
     }
@@ -993,9 +994,9 @@ public class PanelJugadores extends JPanel {
     private String formatearContadorLista(TipoLista tipo, int count) {
         if (count <= 0) {
             return switch (tipo) {
-                case WHITELIST -> "No hay ningun jugador en la whitelist.";
-                case OPS -> "No hay ningun operador.";
-                case BANNED_PLAYERS -> "No hay ningun jugador baneado.";
+                case WHITELIST -> "No hay ningún jugador en la whitelist.";
+                case OPS -> "No hay ningún operador.";
+                case BANNED_PLAYERS -> "No hay ningún jugador baneado.";
                 case BANNED_IPS -> "No hay ninguna IP baneada.";
             };
         }
@@ -1222,7 +1223,7 @@ public class PanelJugadores extends JPanel {
             suggestionPanel.revalidate();
             suggestionPanel.repaint();
 
-            mojangAPI.runBackgroundRequest(() -> {
+            MojangAPI.runBackgroundRequest(() -> {
                 MojangAPI.PlayerProfile remoteProfile = buscarSugerenciaExactaRemotaJugador(query, tipo);
                 SwingUtilities.invokeLater(() -> {
                     if (requestVersion != suggestionRequestVersion[0]) return;

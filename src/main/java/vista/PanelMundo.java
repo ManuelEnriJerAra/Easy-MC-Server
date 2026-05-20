@@ -26,7 +26,6 @@ import modelo.World;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import javax.swing.filechooser.FileSystemView;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
@@ -73,6 +72,7 @@ import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+@SuppressWarnings("unused")
 public class PanelMundo extends JPanel {
     private static final String[] REGION_FILE_COMPRESSION_OPTIONS = {"deflate", "lz4", "none"};
     private static final int PREVIEW_PLAYER_HEAD_SIZE = 24;
@@ -806,7 +806,7 @@ public class PanelMundo extends JPanel {
     private void reconstruirMetadataMundo(WorldDataReader.WorldMetadata metadata) {
         metadataReadPanel.removeAll();
         agregarSeccionMetadata("Identidad");
-        metadataReadPanel.add(crearInfoRow("Data version:", dataVersionValueLabel));
+        metadataReadPanel.add(crearInfoRow("Versión de datos:", dataVersionValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(4));
         metadataReadPanel.add(crearInfoRow("Tipo:", tipoMundoValueLabel));
         metadataReadPanel.add(Box.createVerticalStrut(10));

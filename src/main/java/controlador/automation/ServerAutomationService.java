@@ -104,10 +104,10 @@ public final class ServerAutomationService implements AutoCloseable {
 
     public AutomationRuleValidation validateRule(ServerAutomationRule rule) {
         if (rule == null) {
-            return AutomationRuleValidation.error("La automatizacion no existe.");
+            return AutomationRuleValidation.error("La automatización no existe.");
         }
         if (rule.getActionType() == null) {
-            return AutomationRuleValidation.error("Selecciona una accion.");
+            return AutomationRuleValidation.error("Selecciona una acción.");
         }
         if (rule.getTriggerType() == null) {
             return AutomationRuleValidation.error("Selecciona cuando se ejecuta.");
@@ -116,26 +116,26 @@ public final class ServerAutomationService implements AutoCloseable {
             return AutomationRuleValidation.error("Indica el comando que se debe enviar.");
         }
         if (rule.getTriggerType() == AutomationTriggerType.DAILY_TIME && parseTime(rule.getTimeOfDay()) == null) {
-            return AutomationRuleValidation.error("Indica una hora valida con formato HH:mm.");
+            return AutomationRuleValidation.error("Indica una hora válida con formato HH:mm.");
         }
         if (rule.getTriggerType() == AutomationTriggerType.INTERVAL && resolveIntervalDuration(rule) == null) {
-            return AutomationRuleValidation.error("Indica un intervalo valido.");
+            return AutomationRuleValidation.error("Indica un intervalo válido.");
         }
         if (rule.getActionType() == AutomationActionType.START
                 && rule.getTriggerType() == AutomationTriggerType.INTERVAL) {
-            return AutomationRuleValidation.error("El encendido por intervalo no esta disponible.");
+            return AutomationRuleValidation.error("El encendido por intervalo no está disponible.");
         }
         if (isRelativeTrigger(rule.getTriggerType())) {
             if (rule.getActionType() != AutomationActionType.COMMAND) {
-                return AutomationRuleValidation.error("Los disparadores relativos solo estan disponibles para comandos.");
+                return AutomationRuleValidation.error("Los disparadores relativos solo están disponibles para comandos.");
             }
             if (resolveIntervalDuration(rule) == null) {
-                return AutomationRuleValidation.error("Indica un margen valido.");
+                return AutomationRuleValidation.error("Indica un margen válido.");
             }
             if (rule.getTriggerType() == AutomationTriggerType.AFTER_START
                     && rule.getIntervalUnit() != AutomationIntervalUnit.SECONDS
                     && rule.getIntervalUnit() != AutomationIntervalUnit.MINUTES) {
-                return AutomationRuleValidation.error("El margen despues del encendido se mide en segundos o minutos.");
+                return AutomationRuleValidation.error("El margen después del encendido se mide en segundos o minutos.");
             }
         }
         return AutomationRuleValidation.ok();
@@ -158,7 +158,7 @@ public final class ServerAutomationService implements AutoCloseable {
             }
             Duration anchorInterval = resolveIntervalDuration(anchorRule);
             if (anchorInterval != null && offset != null && !offset.minus(anchorInterval).isNegative()) {
-                return AutomationRuleValidation.error("El margen debe ser menor que el intervalo de la automatizacion relacionada.");
+                return AutomationRuleValidation.error("El margen debe ser menor que el intervalo de la automatización relacionada.");
             }
         }
         return validation;
@@ -447,7 +447,7 @@ public final class ServerAutomationService implements AutoCloseable {
         }
         AutomationRuleValidation validation = validateRule(server, rule);
         if (!validation.valid()) {
-            server.appendConsoleLinea("[WARN] Automatizacion omitida: " + validation.message());
+            server.appendConsoleLinea("[WARN] Automatización omitida: " + validation.message());
             return;
         }
         if (shouldSkipForRuntimeState(server, rule.getActionType())) {
@@ -455,7 +455,7 @@ public final class ServerAutomationService implements AutoCloseable {
         }
 
         String name = firstNonBlank(rule.getDisplayName(), rule.getActionType().name());
-        server.appendConsoleLinea("[INFO] Ejecutando automatizacion: " + name + ".");
+        server.appendConsoleLinea("[INFO] Ejecutando automatización: " + name + ".");
         try {
             switch (rule.getActionType()) {
                 case START -> gestorServidores.iniciarServidor(server);
@@ -464,11 +464,11 @@ public final class ServerAutomationService implements AutoCloseable {
                 case COMMAND -> gestorServidores.mandarComando(server, rule.getCommand(), false);
             }
         } catch (IOException ex) {
-            server.appendConsoleLinea("[ERROR] No se ha podido ejecutar la automatizacion: " + ex.getMessage());
-            AppErrorReporter.report("No se ha podido ejecutar una automatizacion.", ex);
+            server.appendConsoleLinea("[ERROR] No se ha podido ejecutar la automatización: " + ex.getMessage());
+            AppErrorReporter.report("No se ha podido ejecutar una automatización.", ex);
         } catch (RuntimeException ex) {
-            server.appendConsoleLinea("[ERROR] Error en la automatizacion: " + ex.getMessage());
-            AppErrorReporter.report("Error en una automatizacion.", ex);
+            server.appendConsoleLinea("[ERROR] Error en la automatización: " + ex.getMessage());
+            AppErrorReporter.report("Error en una automatización.", ex);
         }
     }
 

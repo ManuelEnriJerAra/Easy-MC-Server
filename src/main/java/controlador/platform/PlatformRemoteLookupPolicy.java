@@ -16,7 +16,7 @@ final class PlatformRemoteLookupPolicy {
     private static final Duration SUCCESS_TTL = Duration.ofMinutes(10);
     private static final Duration FAILURE_TTL = Duration.ofSeconds(30);
     private static final String REMOTE_FAILURE_MESSAGE = "No se ha podido consultar el servicio remoto de plataformas. "
-            + "Revisa la conexion e intentalo de nuevo.";
+            + "Revisa la conexión e inténtalo de nuevo.";
 
     private static final ConcurrentMap<String, JsonCacheEntry> JSON_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, BytesCacheEntry> BYTES_CACHE = new ConcurrentHashMap<>();

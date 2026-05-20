@@ -44,7 +44,7 @@ public final class BukkitServerPlatformAdapter extends AbstractServerPlatformAda
 
     @Override
     public String getCreationUnavailableReason() {
-        return "Bukkit/CraftBukkit no ofrece una descarga oficial directa y segura; se puede importar y detectar una instalacion existente.";
+        return "Bukkit/CraftBukkit no ofrece una descarga oficial directa y segura; se puede importar y detectar una instalación existente.";
     }
 
     private Path resolveJarSilently(Path serverDir) {

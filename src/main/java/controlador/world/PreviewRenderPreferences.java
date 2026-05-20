@@ -352,18 +352,18 @@ public final class PreviewRenderPreferences {
     public enum RenderToggle {
         SHADE_BY_HEIGHT(
                 "shadeByHeight",
-                "Shaders basicos por altura",
-                "<html><b>Que hace:</b> calcula la pendiente local con las alturas oeste/este/norte/sur y ajusta el brillo final por pixel.<br>"
-                        + "<b>Rendimiento:</b> aumenta trabajo de CPU en el pintado; no usa GPU. Es bastante mas barato que el sombreado avanzado.<br>"
+                "Shaders básicos por altura",
+                "<html><b>Qué hace:</b> calcula la pendiente local con las alturas oeste/este/norte/sur y ajusta el brillo final por píxel.<br>"
+                        + "<b>Rendimiento:</b> aumenta trabajo de CPU en el pintado; no usa GPU. Es bastante más barato que el sombreado avanzado.<br>"
                         + "<b>Visual:</b> mejora la lectura del relieve y evita mapas planos.<br>"
                         + "<b>Efectos secundarios:</b> puede exagerar ruido fino o escalones en terreno abrupto.<br>"
-                        + "<b>Conviene:</b> activarlo salvo que busques el maximo rendimiento absoluto.</html>"
+                        + "<b>Conviene:</b> activarlo salvo que busques el máximo rendimiento absoluto.</html>"
         ),
         WATER_SUBSURFACE_SHADING(
                 "waterSubsurfaceShading",
-                "Transparencia basica del agua",
-                "<html><b>Que hace:</b> cuando la superficie es agua, busca el primer bloque solido bajo ella y mezcla color de fondo y profundidad.<br>"
-                        + "<b>Rendimiento:</b> añade lecturas verticales extra en columnas con agua; coste de CPU moderado en oceanos y rios.<br>"
+                "Transparencia básica del agua",
+                "<html><b>Qué hace:</b> cuando la superficie es agua, busca el primer bloque sólido bajo ella y mezcla color de fondo y profundidad.<br>"
+                        + "<b>Rendimiento:</b> añade lecturas verticales extra en columnas con agua; coste de CPU moderado en océanos y ríos.<br>"
                         + "<b>Visual:</b> distingue agua somera/profunda y mejora costas y cauces.<br>"
                         + "<b>Efectos secundarios:</b> desactivarlo vuelve el agua plana y pierde transparencia aparente.<br>"
                         + "<b>Conviene:</b> activarlo en calidad y equilibrado; desactivarlo si el mundo tiene mucha agua y prima velocidad.</html>"
@@ -371,38 +371,38 @@ public final class PreviewRenderPreferences {
         BIOME_COLORING(
                 "biomeColoring",
                 "Tintado por bioma",
-                "<html><b>Que hace:</b> consulta el bioma por columna y tine hierba, follaje, agua, hielo y nieve segun ese bioma.<br>"
-                        + "<b>Rendimiento:</b> suma busquedas de bioma y mezclas de color cacheadas; coste de CPU moderado.<br>"
-                        + "<b>Visual:</b> separa mejor pantanos, taigas, junglas, rios y otras zonas.<br>"
-                        + "<b>Efectos secundarios:</b> al desactivarlo vegetacion y agua se uniformizan y el mapa pierde contexto ambiental.<br>"
-                        + "<b>Conviene:</b> activarlo salvo cuando el objetivo sea reducir tiempo de render al minimo.</html>"
+                "<html><b>Qué hace:</b> consulta el bioma por columna y tiñe hierba, follaje, agua, hielo y nieve según ese bioma.<br>"
+                        + "<b>Rendimiento:</b> suma búsquedas de bioma y mezclas de color cacheadas; coste de CPU moderado.<br>"
+                        + "<b>Visual:</b> separa mejor pantanos, taigas, junglas, ríos y otras zonas.<br>"
+                        + "<b>Efectos secundarios:</b> al desactivarlo vegetación y agua se uniformizan y el mapa pierde contexto ambiental.<br>"
+                        + "<b>Conviene:</b> activarlo salvo cuando el objetivo sea reducir tiempo de render al mínimo.</html>"
         ),
         ADVANCED_MATERIAL_SHADING(
                 "advancedMaterialShading",
                 "Sombreado avanzado por material",
-                "<html><b>Que hace:</b> ajusta el sombreado basico segun familia de bloque para que agua, nieve, arena, piedra, madera y vegetacion reaccionen distinto a la pendiente.<br>"
-                        + "<b>Rendimiento:</b> anade branching y calculo extra por pixel; coste de CPU medio.<br>"
+                "<html><b>Qué hace:</b> ajusta el sombreado básico según familia de bloque para que agua, nieve, arena, piedra, madera y vegetación reaccionen distinto a la pendiente.<br>"
+                        + "<b>Rendimiento:</b> añade branching y cálculo extra por píxel; coste de CPU medio.<br>"
                         + "<b>Visual:</b> el relieve se lee mejor y algunos materiales quedan menos planos o menos agresivos.<br>"
-                        + "<b>Efectos secundarios:</b> puede cambiar el contraste material a material y producir diferencias mas marcadas en zonas mixtas.<br>"
-                        + "<b>Conviene:</b> activarlo cuando buscas la mejor lectura visual y puedes asumir algo mas de coste.</html>"
+                        + "<b>Efectos secundarios:</b> puede cambiar el contraste material a material y producir diferencias más marcadas en zonas mixtas.<br>"
+                        + "<b>Conviene:</b> activarlo cuando buscas la mejor lectura visual y puedes asumir algo más de coste.</html>"
         ),
         ADVANCED_WATER_COLORING(
                 "advancedWaterColoring",
                 "Agua avanzada",
-                "<html><b>Que hace:</b> usa una mezcla mas rica de profundidad, tipo de fondo y factor costero para colorear la superficie del agua.<br>"
-                        + "<b>Rendimiento:</b> mas mezcla de color y mas ramificaciones que la transparencia basica; coste de CPU medio.<br>"
-                        + "<b>Visual:</b> mejora orillas, fondos claros, agua organica y diferencia entre somero y profundo.<br>"
+                "<html><b>Qué hace:</b> usa una mezcla más rica de profundidad, tipo de fondo y factor costero para colorear la superficie del agua.<br>"
+                        + "<b>Rendimiento:</b> más mezcla de color y más ramificaciones que la transparencia básica; coste de CPU medio.<br>"
+                        + "<b>Visual:</b> mejora orillas, fondos claros, agua orgánica y diferencia entre somero y profundo.<br>"
                         + "<b>Efectos secundarios:</b> si el agua domina el mapa, su coste se nota; desactivarlo simplifica mucho el resultado.<br>"
                         + "<b>Conviene:</b> activarlo en calidad; normalmente no compensa en modos orientados a velocidad.</html>"
         ),
         ADVANCED_BIOME_COLORING(
                 "advancedBiomeColoring",
                 "Biomas avanzados",
-                "<html><b>Que hace:</b> aplica reglas adicionales de tintado, por ejemplo para follaje de cherry grove y variantes mas finas de vegetacion/agua.<br>"
-                        + "<b>Rendimiento:</b> aumenta el trabajo de CPU sobre la ruta de colorimetria; suele ser el refinamiento de bioma mas caro.<br>"
+                "<html><b>Qué hace:</b> aplica reglas adicionales de tintado, por ejemplo para follaje de cherry grove y variantes más finas de vegetación/agua.<br>"
+                        + "<b>Rendimiento:</b> aumenta el trabajo de CPU sobre la ruta de colorimetría; suele ser el refinamiento de bioma más caro.<br>"
                         + "<b>Visual:</b> mejora matices finos entre biomas y especies concretas.<br>"
                         + "<b>Efectos secundarios:</b> la ganancia visual es sutil en muchos mapas comparada con su coste.<br>"
-                        + "<b>Conviene:</b> reservarlo para calidad o inspeccion visual detallada.</html>"
+                        + "<b>Conviene:</b> reservarlo para calidad o inspección visual detallada.</html>"
         );
 
         private final String propertySuffix;

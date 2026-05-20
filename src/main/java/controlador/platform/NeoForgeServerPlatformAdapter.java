@@ -93,7 +93,7 @@ public final class NeoForgeServerPlatformAdapter extends AbstractServerPlatformA
                 || existsDirectory(serverDir, "libraries");
         return (hasServerJar || hasRuntime)
                 ? ServerValidationResult.ok()
-                : ServerValidationResult.error("No se ha encontrado una instalacion valida de NeoForge.");
+                : ServerValidationResult.error("No se ha encontrado una instalación válida de NeoForge.");
     }
 
     @Override

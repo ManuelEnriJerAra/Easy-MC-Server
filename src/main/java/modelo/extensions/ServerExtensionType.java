@@ -9,7 +9,7 @@ public enum ServerExtensionType {
         return switch (this) {
             case MOD -> "Mod";
             case PLUGIN -> "Plugin";
-            case UNKNOWN -> "Extension";
+            case UNKNOWN -> "Extensión";
         };
     }
 

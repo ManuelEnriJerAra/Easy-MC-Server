@@ -177,13 +177,13 @@ public class Main {
 
         try {
             UIManager.setLookAndFeel(temaClassName);
-        } catch (Exception e) {
+        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {
             System.err.println("No se pudo aplicar el tema guardado, se usara el tema por defecto: " + e.getMessage());
             UIManager.put("ClassLoader", Main.class.getClassLoader());
             try {
                 UIManager.setLookAndFeel(GestorConfiguracion.getTemaPorDefecto());
                 GestorConfiguracion.guardarTema(GestorConfiguracion.getTemaPorDefecto());
-            } catch (Exception ex) {
+            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException ex) {
                 throw new RuntimeException("No se pudo aplicar el tema por defecto.", ex);
             }
         }

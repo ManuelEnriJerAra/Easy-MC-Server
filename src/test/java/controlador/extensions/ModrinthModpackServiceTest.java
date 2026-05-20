@@ -1,5 +1,6 @@
 package controlador.extensions;
 
+import static controlador.JsonNodeText.text;
 import modelo.Server;
 import modelo.extensions.ExtensionLocalMetadata;
 import modelo.extensions.ExtensionSource;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -363,13 +363,13 @@ class ModrinthModpackServiceTest {
             assertThat(zipFile.getEntry("server-overrides/config/example.json")).isNotNull();
             assertThat(zipFile.getEntry("server-overrides/mods/curseforge-example.jar")).isNull();
             JsonNode root = OBJECT_MAPPER.readTree(zipFile.getInputStream(zipFile.getEntry("modrinth.index.json")));
-            assertThat(root.path("name").asText()).isEqualTo("Servidor de prueba");
-            assertThat(root.path("dependencies").path("minecraft").asText()).isEqualTo("1.21.1");
-            assertThat(root.path("dependencies").path("fabric-loader").asText()).isEqualTo("0.16.10");
+            assertThat(text(root.path("name"))).isEqualTo("Servidor de prueba");
+            assertThat(text(root.path("dependencies").path("minecraft"))).isEqualTo("1.21.1");
+            assertThat(text(root.path("dependencies").path("fabric-loader"))).isEqualTo("0.16.10");
             JsonNode file = root.path("files").get(0);
-            assertThat(file.path("path").asText()).isEqualTo("mods/example.jar");
-            assertThat(file.path("hashes").path("sha512").asText()).isEqualTo(sha512);
-            assertThat(file.path("downloads").get(0).asText()).contains("cdn.modrinth.com");
+            assertThat(text(file.path("path"))).isEqualTo("mods/example.jar");
+            assertThat(text(file.path("hashes").path("sha512"))).isEqualTo(sha512);
+            assertThat(text(file.path("downloads").get(0))).contains("cdn.modrinth.com");
         }
     }
 
@@ -525,9 +525,9 @@ class ModrinthModpackServiceTest {
         try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(target.toFile(), StandardCharsets.UTF_8)) {
             JsonNode root = OBJECT_MAPPER.readTree(zipFile.getInputStream(zipFile.getEntry("modrinth.index.json")));
             JsonNode file = root.path("files").get(0);
-            assertThat(file.path("path").asText()).isEqualTo("mods/fallingtree.jar");
-            assertThat(file.path("hashes").path("sha512").asText()).isEqualTo(sha512);
-            assertThat(file.path("downloads").get(0).asText()).contains("cdn.modrinth.com");
+            assertThat(text(file.path("path"))).isEqualTo("mods/fallingtree.jar");
+            assertThat(text(file.path("hashes").path("sha512"))).isEqualTo(sha512);
+            assertThat(text(file.path("downloads").get(0))).contains("cdn.modrinth.com");
         }
     }
 

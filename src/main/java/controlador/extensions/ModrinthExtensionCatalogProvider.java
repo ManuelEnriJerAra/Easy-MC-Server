@@ -1,5 +1,6 @@
 package controlador.extensions;
 
+import controlador.JsonNodeText;
 import modelo.Server;
 import modelo.extensions.ExtensionSourceType;
 import modelo.extensions.ServerExtension;
@@ -249,8 +250,8 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
                     latest,
                     remoteVersion != null && !remoteVersion.equals(localVersion),
                     remoteVersion != null && !remoteVersion.equals(localVersion)
-                            ? "Hay una version compatible mas reciente en Modrinth."
-                            : "La extension coincide con la ultima version compatible encontrada en Modrinth."
+                            ? "Hay una versión compatible más reciente en Modrinth."
+                            : "La extensión coincide con la última versión compatible encontrada en Modrinth."
             ));
         }
         return updates;
@@ -546,10 +547,6 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
         }
     }
 
-    private String buildSearchQueryString(ExtensionCatalogQuery query) {
-        return buildSearchQueryString(query, query.limit(), 0);
-    }
-
     private String buildSearchQueryString(ExtensionCatalogQuery query, int limit, int offset) {
         List<String> params = new ArrayList<>();
         if (query.queryText() != null && !query.queryText().isBlank()) {
@@ -782,7 +779,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
             return platforms;
         }
         for (JsonNode node : valuesNode) {
-            String value = node == null ? null : node.asText(null);
+            String value = node == null ? null : JsonNodeText.text(node, null);
             if (value == null || value.isBlank()) {
                 continue;
             }
@@ -800,7 +797,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
             return values;
         }
         for (JsonNode node : arrayNode) {
-            String value = node == null ? null : node.asText(null);
+            String value = node == null ? null : JsonNodeText.text(node, null);
             if (value != null && !value.isBlank()) {
                 values.add(value.trim());
             }
@@ -868,7 +865,7 @@ final class ModrinthExtensionCatalogProvider implements ExtensionCatalogProvider
         if (value.isMissingNode() || value.isNull()) {
             return null;
         }
-        String text = value.asText(null);
+        String text = JsonNodeText.text(value, null);
         return text == null || text.isBlank() ? null : text.trim();
     }
 

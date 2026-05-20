@@ -63,6 +63,7 @@ import java.util.stream.IntStream;
  * - detectar si una region contiene superficie visible,
  * - guardar el resultado directamente como PNG.
  */
+@SuppressWarnings("unused")
 public final class MCARenderer {
     private static final Pattern REGION_FILE_PATTERN = Pattern.compile("^r\\.(-?\\d+)\\.(-?\\d+)\\.mca$", Pattern.CASE_INSENSITIVE);
     // Numero de chunks por lado dentro de una region MCA.
@@ -76,7 +77,7 @@ public final class MCARenderer {
     private static final int DEFAULT_ARGB = 0xFF1E1E1E;
     // Flag de Querz para leer chunks en modo "raw" y acceder al NBT moderno sin forzar el esquema legacy "Level".
     private static final long RAW_DATA_FLAG = 65_536L;
-    // Logging de depuracion del renderer. Se puede desactivar con -Ddora.mca.debug=false.
+    // Logging de depuración del renderer. Se puede desactivar con -Ddora.mca.debug=false.
     private static final boolean DEBUG_LOGGING = Boolean.parseBoolean(
             System.getProperty("dora.mca.debug", "false")
     );
@@ -121,7 +122,7 @@ public final class MCARenderer {
      * Renderiza una sola region MCA y devuelve la imagen resultante.
      *
      * Flujo:
-     * 1. Valida la ruta y la extension.
+     * 1. Valida la ruta y la extensión.
      * 2. Normaliza las opciones.
      * 3. Extrae las coordenadas regionales del nombre del archivo (r.x.z.mca).
      * 4. Lee el archivo con Querz en modo raw.
@@ -174,9 +175,9 @@ public final class MCARenderer {
      * Renderiza varias regiones en un mismo lienzo.
      *
      * Ojo con esto:
-     * - aqui no se asume que las regiones sean contiguas,
+     * - aquí no se asume que las regiones sean contiguas,
      * - se calculan min/max de coordenadas regionales,
-     * - y cada region se dibuja en la posicion que le corresponde dentro del mosaico.
+     * - y cada region se dibuja en la posición que le corresponde dentro del mosaico.
      *
      * Despues se recorta el resultado para quitar los bordes de fondo sobrantes.
      */
@@ -192,7 +193,7 @@ public final class MCARenderer {
      * Variante de mosaico que permite marcar un punto especial del mundo, como el spawn.
      *
      * La marca se pinta antes del recorte final para que:
-     * - quede en la posicion correcta del mundo,
+     * - quede en la posición correcta del mundo,
      * - siga visible en el PNG final,
      * - y no haya que recalcular coordenadas en la UI.
      */
@@ -238,7 +239,6 @@ public final class MCARenderer {
                 normalizedOptions.pixelsPerBlock());
 
         int pixelsPerBlock = normalizedOptions.pixelsPerBlock();
-        int pixelsPerRegion = REGION_BLOCK_SIDE * pixelsPerBlock;
         int availableMinBlockX = minRegionX * REGION_BLOCK_SIDE;
         int availableMaxBlockX = ((maxRegionX + 1) * REGION_BLOCK_SIDE) - 1;
         int availableMinBlockZ = minRegionZ * REGION_BLOCK_SIDE;
@@ -620,7 +620,7 @@ public final class MCARenderer {
     }
 
     /**
-     * Recorta automaticamente una imagen al rectangulo minimo que contiene pixeles
+     * Recorta automaticamente una imagen al rectángulo mínimo que contiene pixeles
      * distintos del color de fondo.
      *
      * Esto es importante porque en muchos mundos la region completa tiene muchisimo
@@ -676,10 +676,10 @@ public final class MCARenderer {
     }
 
     /**
-     * Busca el rectangulo minimo que contiene informacion real del mapa.
+     * Busca el rectángulo mínimo que contiene información real del mapa.
      *
-     * Se separa de cropToVisibleArea para poder reutilizar la deteccion si en el futuro
-     * necesitamos mas overlays o depuracion visual sobre los bordes del render.
+     * Se separa de cropToVisibleArea para poder reutilizar la detección si en el futuro
+     * necesitamos más overlays o depuración visual sobre los bordes del render.
      */
     private Rectangle findVisibleBounds(BufferedImage image, int backgroundArgb) {
         int minX = image.getWidth();
@@ -884,13 +884,13 @@ public final class MCARenderer {
     /**
      * Pinta un chunk completo.
      *
-     * Coordenadas usadas aqui:
-     * - localChunkX/localChunkZ: posicion del chunk dentro del archivo region (0..31).
-     * - worldChunkX/worldChunkZ: posicion global del chunk en el mundo.
-     * - localX/localZ: posicion del bloque dentro del chunk (0..15).
-     * - worldBlockX/worldBlockZ: posicion global del bloque en el mundo.
+     * Coordenadas usadas aquí:
+     * - localChunkX/localChunkZ: posición del chunk dentro del archivo region (0..31).
+     * - worldChunkX/worldChunkZ: posición global del chunk en el mundo.
+     * - localX/localZ: posición del bloque dentro del chunk (0..15).
+     * - worldBlockX/worldBlockZ: posición global del bloque en el mundo.
      *
-     * Ese paso de local a global es fundamental porque el sombreado y algunos calculos
+     * Ese paso de local a global es fundamental porque el sombreado y algunos cálculos
      * posteriores usan coordenadas globales reales.
      */
     private void sampleChunk(
@@ -1317,7 +1317,7 @@ public final class MCARenderer {
      * Camino legacy para versiones antiguas.
      *
      * Lee {@code Level -> Sections -> Blocks/Data/Add}. Aqui no existe palette moderna,
-     * asi que hay que recomponer el ID numerico del bloque y su metadata.
+     * así que hay que recomponer el ID numérico del bloque y su metadata.
      */
     private TopBlockSample findTopBlockLegacy(
             CompoundTag level,
@@ -2359,10 +2359,10 @@ public final class MCARenderer {
      * - si marcas demasiado como transparente, apareceran huecos,
      * - si marcas demasiado poco, sobresaldran antorchas, flores, railes, etc.
      *
-     * Importante: las hojas NO se consideran transparentes aqui.
+     * Importante: las hojas NO se consideran transparentes aquí.
      * Aunque visualmente puedan generar mucho verde, desde una vista cenital normalmente
      * deben tapar al tronco. Si las marcamos como transparentes el render baja hasta la
-     * madera y aparecen muchos puntos marrones donde deberia verse la copa del arbol.
+     * madera y aparecen muchos puntos marrones donde debería verse la copa del árbol.
      */
     private boolean isTransparentBlock(String blockName) {
         if(blockName == null || blockName.isBlank()) {
@@ -2497,7 +2497,7 @@ public final class MCARenderer {
     /**
      * Rellena el area de un chunk completo con el color de fondo.
      *
-     * Se usa cuando en esa posicion no existe chunk en el MCA.
+     * Se usa cuando en esa posición no existe chunk en el MCA.
      */
     private void fillChunkBackground(BufferedImage image, int localChunkX, int localChunkZ, int argb, int pixelsPerBlock) {
         int chunkPixelSide = CHUNK_BLOCK_SIDE * pixelsPerBlock;
@@ -2549,7 +2549,7 @@ public final class MCARenderer {
             return;
         }
 
-        // La marca del spawn se dibuja con una estetica mas "mapa del tesoro":
+        // La marca del spawn se dibuja con una estética más "mapa del tesoro":
         // - base roja oscura para darle cuerpo,
         // - rojo principal por encima.
         //
@@ -2605,18 +2605,18 @@ public final class MCARenderer {
             throw new IllegalArgumentException("No existe el archivo .mca: " + normalizedPath);
         }
         // Algunos mundos dejan ficheros region de 0 bytes como huecos o restos.
-        // Querz no los puede deserializar como una region valida, asi que los filtramos
-        // aqui con un mensaje explicito en lugar de dejar que mas tarde falle con errores
+        // Querz no los puede deserializar como una region válida, así que los filtramos
+        // aquí con un mensaje explícito en lugar de dejar que más tarde falle con errores
         // poco claros o incluso con mensaje null.
         try {
             if(Files.size(normalizedPath) <= 0L) {
-                throw new IllegalArgumentException("El archivo .mca esta vacio: " + normalizedPath.getFileName());
+                throw new IllegalArgumentException("El archivo .mca está vacío: " + normalizedPath.getFileName());
             }
         } catch (IOException ex) {
             throw new IllegalArgumentException("No se ha podido comprobar el tamaño del .mca: " + normalizedPath.getFileName(), ex);
         }
         if(!normalizedPath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mca")) {
-            throw new IllegalArgumentException("El archivo no tiene extension .mca: " + normalizedPath);
+            throw new IllegalArgumentException("El archivo no tiene extensión .mca: " + normalizedPath);
         }
         return normalizedPath;
     }
@@ -2628,11 +2628,11 @@ public final class MCARenderer {
     private RegionCoordinates parseRegionCoordinates(Path mcaPath) {
         String fileName = mcaPath == null || mcaPath.getFileName() == null ? null : mcaPath.getFileName().toString();
         if(fileName == null || fileName.isBlank()) {
-            throw new IllegalArgumentException("Nombre de region invalido: " + mcaPath.getFileName());
+            throw new IllegalArgumentException("Nombre de región inválido: " + mcaPath.getFileName());
         }
         Matcher matcher = REGION_FILE_PATTERN.matcher(fileName);
         if(!matcher.matches()) {
-            throw new IllegalArgumentException("Nombre de region invalido: " + fileName + ". Se esperaba el formato r.<x>.<z>.mca");
+            throw new IllegalArgumentException("Nombre de región inválido: " + fileName + ". Se esperaba el formato r.<x>.<z>.mca");
         }
         try {
             return new RegionCoordinates(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
@@ -2851,14 +2851,14 @@ public final class MCARenderer {
     public record WorldPoint(int x, int z) {}
 
     /**
-     * Resultado de la busqueda del bloque superior de una columna.
+     * Resultado de la búsqueda del bloque superior de una columna.
      *
      * Guardamos:
      * - el nombre del bloque,
      * - la altura Y,
      * - las coordenadas globales X/Z,
      *
-     * porque mas tarde el renderer puede necesitar contexto adicional al colorear
+     * porque más tarde el renderer puede necesitar contexto adicional al colorear
      * o depurar una columna concreta del mundo.
      */
     private record ChunkData(
@@ -3017,7 +3017,7 @@ public final class MCARenderer {
     private record TopBlockSample(String blockName, int y, int worldBlockX, int worldBlockZ, String waterFloorBlockName, int waterDepth) {
         private static final TopBlockSample EMPTY = new TopBlockSample(null, 0, 0, 0, null, 0);
 
-        // Conveniencia: una muestra vacia significa "no se encontro bloque visible".
+        // Conveniencia: una muestra vacía significa "no se encontró bloque visible".
         private boolean isEmpty() {
             return blockName == null || blockName.isBlank();
         }

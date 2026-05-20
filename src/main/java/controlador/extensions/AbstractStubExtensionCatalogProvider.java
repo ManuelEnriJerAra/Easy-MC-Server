@@ -112,7 +112,7 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
 
         String message = "Descarga preparada para integrar el proveedor " + displayName + " cuando se active la API real.";
         if (server != null && server.getEcosystemType() == ServerEcosystemType.NONE) {
-            message = "El servidor actual no admite mods ni plugins, pero el contrato de descarga ya esta resuelto.";
+            message = "El servidor actual no admite mods ni plugins, pero el contrato de descarga ya está resuelto.";
         }
 
         return Optional.of(new ExtensionDownloadPlan(
@@ -195,8 +195,8 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
                     latest,
                     updateAvailable,
                     updateAvailable
-                            ? "Hay una version remota mas reciente disponible."
-                            : "La extension ya coincide con la ultima version conocida del catalogo."
+                            ? "Hay una versión remota más reciente disponible."
+                            : "La extensión ya coincide con la última versión conocida del catálogo."
             ));
         }
         return updates;
@@ -244,7 +244,7 @@ abstract class AbstractStubExtensionCatalogProvider implements ExtensionCatalogP
                 version,
                 platforms,
                 minecraftVersions,
-                "Version de ejemplo preparada para el futuro cliente HTTP de " + displayName + ".",
+                "Versión de ejemplo preparada para el futuro cliente HTTP de " + displayName + ".",
                 fileName,
                 entry.downloadUrl(),
                 System.currentTimeMillis(),

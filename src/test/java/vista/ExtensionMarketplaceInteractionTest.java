@@ -94,8 +94,8 @@ class ExtensionMarketplaceInteractionTest {
     void actualWarningsStillAskForReview() {
         MarketplaceCompatibilityAssessment assessment = new MarketplaceCompatibilityAssessment(
                 ExtensionCompatibilityStatus.WARNING,
-                "La compatibilidad solo coincide por familia de version (26.1).",
-                List.of("La compatibilidad solo coincide por familia de version (26.1).")
+                "La compatibilidad solo coincide por familia de versión (26.1).",
+                List.of("La compatibilidad solo coincide por familia de versión (26.1).")
         );
 
         assertThat(ExtensionMarketplaceDialog.isMetadataPendingWarning(assessment)).isFalse();

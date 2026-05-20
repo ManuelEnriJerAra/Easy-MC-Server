@@ -83,7 +83,7 @@ public class MotdRenderUtil {
                         st.obfuscated = false;
                     }
                     default -> {
-                        // 'k' ofuscado: no intentamos emularlo aqui.
+                        // 'k' ofuscado: no intentamos emularlo aquí.
                     }
                 }
                 i++;

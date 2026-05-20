@@ -140,7 +140,7 @@ final class ExtensionDetailsLayout extends JPanel {
         JPanel panel = new JPanel(new BorderLayout(0, 6));
         panel.setOpaque(false);
         configureFullWidth(panel);
-        JLabel title = new JLabel("Descripcion");
+        JLabel title = new JLabel("Descripción");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
         title.setForeground(AppTheme.withAlpha(AppTheme.getForeground(), 225));
         panel.add(title, BorderLayout.NORTH);

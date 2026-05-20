@@ -262,7 +262,7 @@ public class MojangAPI {
 
     private static String downloadFailureMessage(IOException failure) {
         if (failure instanceof SocketTimeoutException) {
-            return "La descarga desde Mojang ha tardado demasiado. Comprueba la conexion e intentalo de nuevo.";
+            return "La descarga desde Mojang ha tardado demasiado. Comprueba la conexión e inténtalo de nuevo.";
         }
         String detail = failure == null ? null : failure.getMessage();
         if (detail == null || detail.isBlank()) {

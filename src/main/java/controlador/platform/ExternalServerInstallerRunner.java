@@ -40,11 +40,11 @@ final class JavaProcessServerInstallerRunner implements ExternalServerInstallerR
         try {
             int exitCode = process.waitFor();
             if (exitCode != 0) {
-                throw new IOException("El instalador ha finalizado con codigo " + exitCode + ".\n" + output);
+                throw new IOException("El instalador ha finalizado con código " + exitCode + ".\n" + output);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("La instalacion fue interrumpida.", e);
+            throw new IOException("La instalación fue interrumpida.", e);
         }
     }
 }

@@ -67,10 +67,10 @@ public class Server {
     private ServerConfig serverConfig; // contiene XMS RAM, XMX RAM y el puerto
     private Integer ordenLista; // orden manual/base de la lista, preparado para drag and drop futuro
     private Boolean favorito; // indica si el servidor se muestra en el bloque superior de favoritos
-    private Integer ordenFavorito; // orden estable entre favoritos, segun cuando se marcaron por primera vez
+    private Integer ordenFavorito; // orden estable entre favoritos, según cuando se marcaron por primera vez
     private Integer estadisticasRangoSegundos; // rango visible preferido en el panel de estadísticas
     private Boolean estadisticasPersistenciaActiva; // si el histórico se guarda en disco para este servidor
-    private Integer estadisticasVentanaRecienteSegundos; // muestras recientes conservadas a resolución de 1 segundo
+    private Integer estadisticasVentanaRecienteSegundos; // muestras recientes conservadas a resolución de 1 segúndo
     private Integer estadisticasResolucionHistoricaSegundos; // bucket para compactar histórico antiguo
     private Boolean estadisticasCpuActiva;
     private Boolean estadisticasCpuHistorial;

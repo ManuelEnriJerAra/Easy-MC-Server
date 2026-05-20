@@ -16,7 +16,7 @@ class WorldStorageAnalyzerTest {
 
     @Test
     @Tag("smoke")
-    void analyze_debeSepararMundoYPlayerDataCuandoExistenDirectoriosConocidos() throws Exception {
+    void analyze_debeSepararMundoYPlayerDataCuandoExistenDirectoríosConocidos() throws Exception {
         Path worldDir = tempDir.resolve("world");
         Files.createDirectories(worldDir.resolve("region"));
         Files.createDirectories(worldDir.resolve("playerdata"));
@@ -33,7 +33,7 @@ class WorldStorageAnalyzerTest {
     }
 
     @Test
-    void analyze_debeUsarFallbackCuandoNoHayDirectoriosDeRegionClasicos() throws Exception {
+    void analyze_debeUsarFallbackCuandoNoHayDirectoríosDeRegionClasicos() throws Exception {
         Path worldDir = tempDir.resolve("world-fallback");
         Files.createDirectories(worldDir.resolve("custom"));
         Files.createDirectories(worldDir.resolve("playerdata"));

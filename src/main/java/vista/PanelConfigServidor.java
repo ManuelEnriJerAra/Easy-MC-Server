@@ -15,7 +15,6 @@ import modelo.MinecraftConstants;
 
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
-import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
@@ -30,6 +29,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
+@SuppressWarnings("unused")
 public class PanelConfigServidor extends JPanel {
     private static final String[] DIFFICULTY_OPTIONS = MinecraftConstants.DIFFICULTIES.toArray(String[]::new);
     private static final String[] GAMEMODE_OPTIONS = MinecraftConstants.GAMEMODES.toArray(String[]::new);
@@ -704,7 +704,7 @@ public class PanelConfigServidor extends JPanel {
     }
 
     private static String tr(String key, String fallback){
-        // Punto unico para futuras traducciones: aqui podra consultarse un ResourceBundle o servicio i18n.
+        // Punto unico para futuras traducciones: aquí podra consultarse un ResourceBundle o servicio i18n.
         return fallback;
     }
 
@@ -780,7 +780,7 @@ public class PanelConfigServidor extends JPanel {
         descriptions.put("simulation-distance", "Distancia de chunks donde se actualizan entidades y mecánicas.");
         descriptions.put("network-compression-threshold", "Tamaño mínimo a partir del que la red comprime paquetes.");
         descriptions.put("max-tick-time", "Tiempo máximo de un tick antes de considerar que el servidor se ha colgado.");
-        descriptions.put("rate-limit", "Límite de paquetes por segundo por conexión. 0 desactiva el límite.");
+        descriptions.put("rate-limit", "Límite de paquetes por segúndo por conexión. 0 desactiva el límite.");
         descriptions.put("use-native-transport", "Permite usar las optimizaciones nativas de red de Java cuando están disponibles.");
         descriptions.put("sync-chunk-writes", "Fuerza escrituras síncronas de chunks. Más seguro, pero puede ser más lento.");
         descriptions.put("entity-broadcast-range-percentage", "Ajusta el alcance al que se envían entidades a los clientes.");

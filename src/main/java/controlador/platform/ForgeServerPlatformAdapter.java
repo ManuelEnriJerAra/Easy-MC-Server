@@ -112,16 +112,16 @@ public final class ForgeServerPlatformAdapter extends AbstractServerPlatformAdap
                 || existsDirectory(serverDir, "libraries");
         return (hasServerJar || hasForgeRuntime)
                 ? ServerValidationResult.ok()
-                : ServerValidationResult.error("No se ha encontrado una instalacion valida de Forge.");
+                : ServerValidationResult.error("No se ha encontrado una instalación válida de Forge.");
     }
 
     @Override
     public void install(modelo.Server server, ServerInstallationRequest request) throws IOException {
         if (server == null) {
-            throw new IOException("El servidor no es valido.");
+            throw new IOException("El servidor no es válido.");
         }
         if (request == null || request.targetDirectory() == null) {
-            throw new IOException("No se ha indicado la carpeta de instalacion.");
+            throw new IOException("No se ha indicado la carpeta de instalación.");
         }
         if (request.minecraftVersion() == null || request.minecraftVersion().isBlank()) {
             throw new IOException("No se ha indicado la versión de Minecraft.");

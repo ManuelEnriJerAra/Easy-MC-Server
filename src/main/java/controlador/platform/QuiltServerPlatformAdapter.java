@@ -65,7 +65,7 @@ public final class QuiltServerPlatformAdapter extends AbstractServerPlatformAdap
                 || existsQuiltNamedFile(serverDir);
         return (hasServerJar || hasQuiltRuntime)
                 ? ServerValidationResult.ok()
-                : ServerValidationResult.error("No se ha encontrado una instalacion valida de Quilt.");
+                : ServerValidationResult.error("No se ha encontrado una instalación válida de Quilt.");
     }
 
     @Override

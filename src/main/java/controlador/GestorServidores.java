@@ -84,12 +84,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static controlador.Utilidades.copiarArchivo;
-import static controlador.Utilidades.rellenaEULA;
 
 @Getter
 @Setter
 
+@SuppressWarnings("unused")
 public class GestorServidores {
     public enum ModpackImportConflictPolicy {
         KEEP_EXISTING,
@@ -512,7 +511,7 @@ public class GestorServidores {
         return serverExtensionsService.supportsManagedExtensions(server);
     }
 
-    public List<Path> obtenerDirectoriosExtensiones(Server server) {
+    public List<Path> obtenerDirectoríosExtensiones(Server server) {
         return serverExtensionsService.getManagedExtensionDirectories(server);
     }
 
@@ -569,7 +568,7 @@ public class GestorServidores {
             serverExtensionsService.persistInstalledExtensionCache(server);
             guardarServidor(server);
         } catch (IOException ex) {
-            System.err.println("Error al guardar metadatos de extension: " + ex.getMessage());
+            System.err.println("Error al guardar metadatos de extensión: " + ex.getMessage());
         }
     }
 
@@ -583,7 +582,7 @@ public class GestorServidores {
         return removed;
     }
 
-    public List<ExtensionCatalogProviderDescriptor> obtenerRepositoriosExtensiones() {
+    public List<ExtensionCatalogProviderDescriptor> obtenerRepositoríosExtensiones() {
         return extensionCatalogService.getAvailableProviders();
     }
 
@@ -636,7 +635,7 @@ public class GestorServidores {
         }
         ExtensionDownloadPlan downloadPlan = prepararDescargaExtensionExterna(providerId, projectId, versionId, server);
         if (downloadPlan == null || !downloadPlan.ready()) {
-            throw new IOException("No se ha podido resolver una descarga compatible para la extension externa.");
+            throw new IOException("No se ha podido resolver una descarga compatible para la extensión externa.");
         }
         ServerExtension installed = serverExtensionsService.installCatalogDownload(server, downloadPlan, extensionDownloader);
         serverExtensionsService.persistInstalledExtensionCache(server);
@@ -650,7 +649,7 @@ public class GestorServidores {
             throw new IOException("No se ha indicado el servidor.");
         }
         if (downloadPlan == null || !downloadPlan.ready()) {
-            throw new IOException("No se ha podido resolver una descarga compatible para la extension externa.");
+            throw new IOException("No se ha podido resolver una descarga compatible para la extensión externa.");
         }
         ServerExtension installed = serverExtensionsService.installCatalogDownload(server, downloadPlan, extensionDownloader);
         serverExtensionsService.persistInstalledExtensionCache(server);
@@ -826,7 +825,7 @@ public class GestorServidores {
                 ExtensionDownloadPlan plan = modrinthModpackService.resolveImportDownloadPlan(file, server);
                 if (plan.projectId() == null || plan.versionId() == null) {
                     if (warnings != null) {
-                        warnings.add(file.path() + ": instalado con identidad Modrinth incompleta porque no se pudo resolver el proyecto/version.");
+                        warnings.add(file.path() + ": instalado con identidad Modrinth incompleta porque no se pudo resolver el proyecto/versión.");
                     }
                 }
                 if (debeOmitirsePlanModpack(server, plan, conflictPolicy, warnings)) {
@@ -1101,7 +1100,7 @@ public class GestorServidores {
         StringBuilder sb = new StringBuilder();
         sb.append("No se han podido cargar ")
                 .append(noCargables.size())
-                .append(" servidores guardados (carpeta inexistente o servidor invalido).")
+                .append(" servidores guardados (carpeta inexistente o servidor inválido).")
                 .append("\nNo se mostraran y se han eliminado de " + JSON_FILE + ".");
 
         // mostramos un máximo de 8 servidores que no se han podido cargar
@@ -1116,7 +1115,7 @@ public class GestorServidores {
             mostrados++;
         }
         if (noCargables.size() > maxDetalles) {
-            sb.append("\n... y ").append(noCargables.size() - maxDetalles).append(" mas.");
+            sb.append("\n... y ").append(noCargables.size() - maxDetalles).append(" más.");
         }
 
         avisoServidoresNoCargados = sb.toString();
@@ -1397,7 +1396,7 @@ public class GestorServidores {
         if (server.getServerProcess() != null && server.getServerProcess().isAlive()) {
             JOptionPane.showMessageDialog(
                     null,
-                    "Deten el servidor antes de iniciar una conversion de plataforma.",
+                    "Detén el servidor antes de iniciar una conversión de plataforma.",
                     "Convertir servidor",
                     JOptionPane.WARNING_MESSAGE
             );
@@ -1540,7 +1539,7 @@ public class GestorServidores {
         backupCheck.addActionListener(e -> state.createBackup = backupCheck.isSelected());
         JLabel conversionWarningLabel = new JLabel();
         conversionWarningLabel.setVerticalAlignment(SwingConstants.TOP);
-        JLabel backupDetailLabel = new JLabel("<html>Los mundos, server.properties, EULA, icono y carpetas de extensiones existentes se conservaran cuando sea posible.</html>");
+        JLabel backupDetailLabel = new JLabel("<html>Los mundos, server.properties, EULA, icono y carpetas de extensiones existentes se conservarán cuando sea posible.</html>");
         backupDetailLabel.setForeground(AppTheme.getMutedForeground());
         JPanel backupPanel = new JPanel(new BorderLayout(0, 10));
         backupPanel.add(conversionWarningLabel, BorderLayout.NORTH);
@@ -1585,19 +1584,19 @@ public class GestorServidores {
                             }
                             ConversionTargetAvailability availability = conversionAvailabilityFor(targetAvailability, state.adapter);
                             return availability == null || !availability.available()
-                                    ? firstNonBlank(availability == null ? null : availability.unavailableReason(), "La plataforma seleccionada no esta disponible.")
+                                    ? firstNonBlank(availability == null ? null : availability.unavailableReason(), "La plataforma seleccionada no está disponible.")
                                     : null;
                         }
                 ),
                 new ProcessWizardDialog.Step(
                         "version",
-                        "Version compatible",
+                        "Versión compatible",
                         versionPanel,
                         () -> state.option != null,
                         ignored -> {
                             state.option = (ServerCreationOption) versionBox.getSelectedItem();
                             if (state.option == null) {
-                                return "Selecciona una version compatible.";
+                                return "Selecciona una versión compatible.";
                             }
                             state.createBackup = backupCheck.isSelected();
                             ConversionWarning warning = construirAvisoConversion(source, state.option.platform());
@@ -2169,13 +2168,13 @@ public class GestorServidores {
 
     static String validarNombreCarpetaServidor(String nombre) {
         if (nombre == null || nombre.isBlank()) {
-            return "El nombre de la carpeta no puede estar vacio.";
+            return "El nombre de la carpeta no puede estar vacío.";
         }
         if (!Objects.equals(nombre, nombre.trim())) {
             return "El nombre no puede empezar ni terminar con espacios.";
         }
         if (nombre.equals(".") || nombre.equals("..")) {
-            return "Ese nombre esta reservado.";
+            return "Ese nombre está reservado.";
         }
         if (nombre.endsWith(".")) {
             return "El nombre no puede terminar en punto.";
@@ -2189,7 +2188,7 @@ public class GestorServidores {
                 return "El nombre no puede contener caracteres de control.";
             }
             if ("<>:\"/\\|?*".indexOf(c) >= 0) {
-                return "El nombre contiene caracteres no validos para una carpeta.";
+                return "El nombre contiene caracteres no válidos para una carpeta.";
             }
         }
         String baseName = nombre;
@@ -2204,7 +2203,7 @@ public class GestorServidores {
                 "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
         );
         if (reservedWindowsNames.contains(upperBaseName)) {
-            return "Ese nombre esta reservado por Windows.";
+            return "Ese nombre está reservado por Windows.";
         }
         return null;
     }
@@ -2243,7 +2242,7 @@ public class GestorServidores {
             JOptionPane.showMessageDialog(
                     null,
                     "No se ha podido crear la carpeta del servidor: " + e.getMessage(),
-                    "Instalacion",
+                    "Instalación",
                     JOptionPane.ERROR_MESSAGE
             );
             return null;
@@ -2271,7 +2270,7 @@ public class GestorServidores {
             JOptionPane.showMessageDialog(
                     null,
                     "No se ha podido instalar el servidor: " + mensajeErrorDescarga(e),
-                    "Instalacion",
+                    "Instalación",
                     JOptionPane.ERROR_MESSAGE
             );
             return null;
@@ -2500,7 +2499,7 @@ public class GestorServidores {
 
         Path directorioNormalizadoPath = normalizarDirectorioServidor(directorio);
         if (directorioNormalizadoPath == null || !Files.isDirectory(directorioNormalizadoPath)) {
-            System.out.println("El directorio seleccionado no existe o no es una carpeta valida.");
+            System.out.println("El directorio seleccionado no existe o no es una carpeta válida.");
             return null;
         }
 
@@ -2521,7 +2520,7 @@ public class GestorServidores {
 
         ServerPlatformProfile profile = inspeccionarServidor(directorioNormalizadoPath);
         if (profile == null) {
-            System.out.println("No se ha podido detectar una plataforma valida para el servidor importado.");
+            System.out.println("No se ha podido detectar una plataforma válida para el servidor importado.");
             return null;
         }
 
@@ -2792,7 +2791,7 @@ public class GestorServidores {
         sincronizarPuertoConfigDesdeProperties(server);
         Integer puertoSeleccionado = resolverPuertoParaInicio(server, serverConfig);
         if (puertoSeleccionado == null) {
-            server.appendConsoleLinea("[INFO] Inicio cancelado por seleccion de puerto.");
+            server.appendConsoleLinea("[INFO] Inicio cancelado por selección de puerto.");
             return;
         }
         int puerto = puertoSeleccionado;
@@ -3175,7 +3174,7 @@ public class GestorServidores {
         AtomicInteger versionDownloadCheckGeneration = new AtomicInteger();
         Runnable[] refreshNextState = new Runnable[1];
         Runnable[] checkSelectedVersionDownload = new Runnable[1];
-        java.util.function.Consumer<AbstractButton>[] refreshVersionFilters = new java.util.function.Consumer[1];
+        AtomicReference<java.util.function.Consumer<AbstractButton>> refreshVersionFilters = new AtomicReference<>();
         Runnable refreshEulaState = () -> {
             boolean accepted = eulaCheck.isSelected();
             eulaLabel.setFont(eulaFont.deriveFont(accepted ? Font.PLAIN : Font.BOLD));
@@ -3273,7 +3272,7 @@ public class GestorServidores {
             }
             refreshNextState[0].run();
         });
-        refreshVersionFilters[0] = changedCheck -> {
+        refreshVersionFilters.set(changedCheck -> {
             if (state.updatingVersionFilters) {
                 return;
             }
@@ -3290,9 +3289,9 @@ public class GestorServidores {
             }
             refreshNextState[0].run();
             SwingUtilities.invokeLater(checkSelectedVersionDownload[0]);
-        };
-        includeSnapshotsCheck.addActionListener(e -> refreshVersionFilters[0].accept(includeSnapshotsCheck));
-        includeReleasesCheck.addActionListener(e -> refreshVersionFilters[0].accept(includeReleasesCheck));
+        });
+        includeSnapshotsCheck.addActionListener(e -> refreshVersionFilters.get().accept(includeSnapshotsCheck));
+        includeReleasesCheck.addActionListener(e -> refreshVersionFilters.get().accept(includeReleasesCheck));
         parentField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
@@ -3398,7 +3397,7 @@ public class GestorServidores {
                 ),
                 new ProcessWizardDialog.Step(
                         "version",
-                        "Version",
+                        "Versión",
                         versionStep,
                         () -> puedeAvanzarPasoCreacionServidor(1, state, platformSelector, versionList, parentField, folderNameField, eulaCheck),
                         ignored -> {
@@ -3496,7 +3495,7 @@ public class GestorServidores {
 
     static String mensajeErrorDescarga(Throwable throwable) {
         if (hasCause(throwable, SocketTimeoutException.class)) {
-            return "La descarga ha tardado demasiado. Comprueba tu conexion e intentalo de nuevo.";
+            return "La descarga ha tardado demasiado. Comprueba tu conexión e inténtalo de nuevo.";
         }
         Throwable root = rootCause(throwable);
         String message = root == null ? null : root.getMessage();
@@ -3613,7 +3612,7 @@ public class GestorServidores {
                                                     DefaultListModel<ServerCreationOption> versionListModel,
                                                     JList<ServerCreationOption> versionList) {
         if (state == null || state.option == null || state.adapter == null) {
-            return "Selecciona una version.";
+            return "Selecciona una versión.";
         }
         if (state.adapter.getPlatform() != modelo.extensions.ServerPlatform.VANILLA) {
             return null;
@@ -3639,7 +3638,7 @@ public class GestorServidores {
         }
         state.option = null;
         actualizarListadoVersiones(state, versionListModel, versionList);
-        return "Esa version no tiene descarga de servidor disponible. Se ha retirado de la lista.";
+        return "Esa versión no tiene descarga de servidor disponible. Se ha retirado de la lista.";
     }
 
     private boolean puedeAvanzarPasoCreacionServidor(int stepIndex,
@@ -3722,7 +3721,7 @@ public class GestorServidores {
                                                JTextField folderNameField,
                                                JCheckBox eulaCheck) {
         if (state == null) {
-            return "No se ha podido preparar la creacion.";
+            return "No se ha podido preparar la creación.";
         }
         return switch (stepIndex) {
             case 0 -> {
@@ -3731,14 +3730,14 @@ public class GestorServidores {
             }
             case 1 -> {
                 if (!state.includeSnapshots && !state.includeReleases) {
-                    yield "Selecciona al menos un tipo de version.";
+                    yield "Selecciona al menos un tipo de versión.";
                 }
                 if (versionList.getModel().getSize() <= 0) {
                     yield "No hay versiones disponibles con los filtros seleccionados.";
                 }
                 state.option = versionList.getSelectedValue();
                 if (state.option == null) {
-                    yield "Selecciona una version.";
+                    yield "Selecciona una versión.";
                 }
                 state.eulaAccepted = eulaCheck.isSelected();
                 yield state.eulaAccepted ? null : "Debes aceptar el EULA para crear el servidor.";
@@ -4136,7 +4135,7 @@ public class GestorServidores {
                 }
                 defaultRadio.setEnabled(false);
                 recommendedRadio.setSelected(true);
-                statusLabel.setText("El puerto por defecto ya no esta disponible.");
+                statusLabel.setText("El puerto por defecto ya no está disponible.");
                 return;
             }
             if (recommendedRadio.isSelected()) {
@@ -4159,7 +4158,7 @@ public class GestorServidores {
 
             Integer customPort = parsePort(customPortField.getText());
             if (customPort == null) {
-                statusLabel.setText("Introduce un puerto valido entre 1 y " + PUERTO_MAXIMO + ".");
+                statusLabel.setText("Introduce un puerto válido entre 1 y " + PUERTO_MAXIMO + ".");
                 customRadio.setSelected(true);
                 customPortField.setEnabled(true);
                 customPortField.requestFocusInWindow();
@@ -4167,7 +4166,7 @@ public class GestorServidores {
                 return;
             }
             if (!isPortAvailable(bindHost, customPort)) {
-                statusLabel.setText("El puerto " + customPort + " ya esta ocupado por otro proceso.");
+                statusLabel.setText("El puerto " + customPort + " ya está ocupado por otro proceso.");
                 customRadio.setSelected(true);
                 customPortField.setEnabled(true);
                 customPortField.requestFocusInWindow();

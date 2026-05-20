@@ -42,7 +42,7 @@ public record InstalledExtensionStatus(
             return "Archivo no encontrado";
         }
         if (installState == ExtensionInstallState.FAILED) {
-            return "Instalacion fallida";
+            return "Instalación fallida";
         }
         if (!problems.isEmpty()) {
             return problems.getFirst();

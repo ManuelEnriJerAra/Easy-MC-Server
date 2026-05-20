@@ -312,7 +312,7 @@ public class Utilidades {
 
     public static void guardarPropertiesUtf8(Path propertiesPath, Properties properties, String comments) throws IOException {
         if(propertiesPath == null) {
-            throw new IOException("La ruta de properties no es valida.");
+            throw new IOException("La ruta de properties no es válida.");
         }
         if(propertiesPath.getParent() != null) {
             Files.createDirectories(propertiesPath.getParent());

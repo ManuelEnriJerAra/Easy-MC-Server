@@ -113,7 +113,7 @@ class QuiltMetaClient {
     private QuiltInstaller latestInstaller() throws IOException {
         JsonArray installers = httpClient.getJson(BASE_URL + "/installer").getAsJsonArray();
         if (installers.isEmpty()) {
-            throw new IOException("No se ha encontrado ningun instalador de Quilt.");
+            throw new IOException("No se ha encontrado ningún instalador de Quilt.");
         }
         JsonObject object = installers.get(0).getAsJsonObject();
         return new QuiltInstaller(stringValue(object, "version"), stringValue(object, "url"));

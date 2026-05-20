@@ -271,7 +271,6 @@ final class MinecraftServerVersionDetector {
             return null;
         }
         String normalizedKey = normalizeKey(key);
-        String normalizedPath = normalizeKey(path);
         if (!VERSION_KEYS.contains(normalizedKey)) {
             return null;
         }

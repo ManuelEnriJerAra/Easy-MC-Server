@@ -1,5 +1,7 @@
 package controlador.extensions;
 
+import controlador.JsonNodeText;
+import static controlador.JsonNodeText.isScalarText;
 import modelo.Server;
 import modelo.extensions.ExtensionSourceType;
 import modelo.extensions.ServerExtension;
@@ -268,8 +270,8 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
                     latest,
                     hasUpdate,
                     hasUpdate
-                            ? "Hay una version compatible mas reciente en Hangar."
-                            : "La extension coincide con la ultima version compatible encontrada en Hangar."
+                            ? "Hay una versión compatible más reciente en Hangar."
+                            : "La extensión coincide con la última versión compatible encontrada en Hangar."
             ));
         }
         return updates;
@@ -667,10 +669,6 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         }
     }
 
-    private String buildSearchQueryString(ExtensionCatalogQuery query) {
-        return buildSearchQueryString(query, query.limit(), 0);
-    }
-
     private String buildSearchQueryString(ExtensionCatalogQuery query, int limit, int offset) {
         List<String> params = new ArrayList<>();
         if (query.queryText() != null && !query.queryText().isBlank()) {
@@ -807,8 +805,8 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         String displayName;
         String dependencyType = fallbackType;
         boolean required = fallbackRequired;
-        if (dependencyNode.isTextual()) {
-            projectId = dependencyNode.asText(null);
+        if (dependencyNode.getNodeType() == tools.jackson.databind.node.JsonNodeType.STRING) {
+            projectId = JsonNodeText.text(dependencyNode, null);
             displayName = projectId;
         } else {
             projectId = firstNonBlank(
@@ -904,7 +902,7 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
             return versions;
         }
         for (JsonNode versionNode : versionsNode) {
-            String value = versionNode == null ? null : versionNode.asText(null);
+            String value = versionNode == null ? null : JsonNodeText.text(versionNode, null);
             if (value != null && !value.isBlank()) {
                 versions.add(value.trim());
             }
@@ -960,7 +958,7 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
             return values;
         }
         for (JsonNode item : arrayNode) {
-            String value = item == null ? null : item.asText(null);
+            String value = item == null ? null : JsonNodeText.text(item, null);
             if (value != null && !value.isBlank()) {
                 values.add(value.trim());
             }
@@ -1009,7 +1007,7 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
         if (value.isMissingNode() || value.isNull()) {
             return null;
         }
-        String text = value.asText(null);
+        String text = JsonNodeText.text(value, null);
         return text == null || text.isBlank() ? null : text.trim();
     }
 
@@ -1030,7 +1028,7 @@ final class HangarExtensionCatalogProvider implements ExtensionCatalogProvider {
                 if (value == null || value.isMissingNode() || value.isNull()) {
                     continue;
                 }
-                if (value.isNumber() || value.isTextual()) {
+                if (isScalarText(value)) {
                     long parsed = value.asLong(0L);
                     if (parsed > 0L) {
                         return parsed;

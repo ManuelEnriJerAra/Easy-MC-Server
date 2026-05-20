@@ -70,6 +70,7 @@ import controlador.world.WorldPreviewCatalogService;
 import controlador.world.WorldPreviewOption;
 import modelo.Server;
 
+@SuppressWarnings("unused")
 public class PanelPrevisualizacion extends JPanel {
     private static final String[] DORA_IMAGE_RESOURCES = {
             "doraimages/default_image.png",
@@ -286,7 +287,7 @@ public class PanelPrevisualizacion extends JPanel {
         ipServidor.setForeground(AppTheme.getLinkForeground());
         ipServidor.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        JLabel versionLabel = new JLabel((version == null || version.isBlank()) ? "(sin version)" : version);
+        JLabel versionLabel = new JLabel((version == null || version.isBlank()) ? "(sin versión)" : version);
         versionLabel.setFont(versionLabel.getFont().deriveFont(Font.PLAIN, 15f));
         versionLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
         versionLabel.setHorizontalAlignment(SwingConstants.LEFT);
@@ -313,7 +314,7 @@ public class PanelPrevisualizacion extends JPanel {
         Runnable actualizarTextoIp = () -> {
             String ip = (String) ipServidor.getClientProperty("ipPublica");
             if(ip == null || ip.isBlank()){
-                ipServidor.putClientProperty("fullText", "(sin conexion)");
+                ipServidor.putClientProperty("fullText", "(sin conexión)");
                 ipServidor.putClientProperty("copyText", null);
                 SwingUtilities.invokeLater(ajustarInfoServidor);
                 return;
@@ -931,7 +932,7 @@ public class PanelPrevisualizacion extends JPanel {
                             imageLabel.setText(null);
                             imageLabel.setIcon(icon);
                         } else {
-                            imageLabel.setText("Preview no valida");
+                            imageLabel.setText("Preview no válida");
                         }
                     } catch (Exception ex){
                         imageLabel.setText("No disponible");
@@ -1033,7 +1034,7 @@ public class PanelPrevisualizacion extends JPanel {
         }
 
         private static void mostrarError(Component parent, String message) {
-            JOptionPane.showMessageDialog(parent, message, "Imagen no valida", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(parent, message, "Imagen no válida", JOptionPane.ERROR_MESSAGE);
         }
     }
 

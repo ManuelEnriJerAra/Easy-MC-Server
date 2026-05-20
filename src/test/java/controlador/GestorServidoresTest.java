@@ -41,7 +41,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 import java.util.Comparator;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -851,10 +850,10 @@ class GestorServidoresTest {
     }
 
     @Test
-    void obtenerRepositoriosExtensiones_debeActivarModrinthYDejarCurseForgeOpcional() {
+    void obtenerRepositoríosExtensiones_debeActivarModrinthYDejarCurseForgeOpcional() {
         GestorServidores gestor = new GestorServidores(tempDir.resolve("ServerList.json").toFile());
 
-        List<ExtensionCatalogProviderDescriptor> providers = gestor.obtenerRepositoriosExtensiones();
+        List<ExtensionCatalogProviderDescriptor> providers = gestor.obtenerRepositoríosExtensiones();
 
         assertThat(providers).extracting(ExtensionCatalogProviderDescriptor::providerId)
                 .contains("modrinth", "curseforge", "hangar");

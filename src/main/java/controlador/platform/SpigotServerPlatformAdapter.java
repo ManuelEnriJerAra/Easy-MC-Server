@@ -42,7 +42,7 @@ public final class SpigotServerPlatformAdapter extends AbstractServerPlatformAda
 
     @Override
     public String getCreationUnavailableReason() {
-        return "Spigot requiere BuildTools y no ofrece una descarga oficial directa de servidor; se puede importar y detectar una instalacion existente.";
+        return "Spigot requiere BuildTools y no ofrece una descarga oficial directa de servidor; se puede importar y detectar una instalación existente.";
     }
 
     private Path resolveJarSilently(Path serverDir) {

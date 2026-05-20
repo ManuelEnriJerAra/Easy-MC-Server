@@ -10,11 +10,9 @@ import controlador.extensions.CurseForgeModpackService;
 import controlador.extensions.ModrinthModpackService;
 import controlador.extensions.InstalledExtensionStatus;
 import modelo.Server;
-import modelo.extensions.ExtensionInstallState;
 import modelo.extensions.ExtensionLocalMetadata;
 import modelo.extensions.ExtensionRemoteDependency;
 import modelo.extensions.ExtensionSource;
-import modelo.extensions.ExtensionSourceType;
 import modelo.extensions.ExtensionUpdateState;
 import modelo.extensions.ServerEcosystemType;
 import modelo.extensions.ServerExtension;
@@ -48,7 +46,7 @@ final class PanelExtensiones extends JPanel {
     private final JLabel directoriesLabel = new JLabel();
     private final JLabel detailsTitleLabel = new JLabel("Ninguna extensión seleccionada");
     private final JLabel detailsVersionLabel = new JLabel("-");
-    private final JLabel detailsStatusBadgeLabel = new ExtensionDetailsLayout.StatusBadgeLabel("Sin seleccion");
+    private final JLabel detailsStatusBadgeLabel = new ExtensionDetailsLayout.StatusBadgeLabel("Sin selección");
     private final JLabel detailsSideLabel = new JLabel("-");
     private final JLabel detailsInstalledVersionLabel = new JLabel("-");
     private final JLabel detailsUpdateLabel = new JLabel("-");
@@ -133,7 +131,7 @@ final class PanelExtensiones extends JPanel {
     private void recargarExtensiones(boolean showLoadingState) {
         listCard.setTitle(getSectionLabel());
 
-        List<Path> directories = gestorServidores.obtenerDirectoriosExtensiones(server);
+        List<Path> directories = gestorServidores.obtenerDirectoríosExtensiones(server);
         boolean supported = gestorServidores.admiteGestionDeExtensiones(server) && !directories.isEmpty();
         String selectedRelativePath = selectedRelativePath();
         statusCache.clear();
@@ -174,7 +172,7 @@ final class PanelExtensiones extends JPanel {
         AppTheme.configureRowIconActionButton(installButton, "Instalar " + extensionSingularLower() + " .jar", "doraicons/file.svg", 22, AppTheme::getForeground, false);
         installButton.addActionListener(e -> instalarExtensionManual());
 
-        AppTheme.configureRowIconActionButton(browseCatalogButton, "Explorar catalogo de " + extensionPluralLower(), "doraicons/shop.svg", 44, AppTheme::getMainAccent, true);
+        AppTheme.configureRowIconActionButton(browseCatalogButton, "Explorar catálogo de " + extensionPluralLower(), "doraicons/shop.svg", 44, AppTheme::getMainAccent, true);
         browseCatalogButton.addActionListener(e -> abrirMarketplaceExtensiones());
 
         AppTheme.configureRowIconActionButton(importPackButton, "Importar pack", "doraicons/download.svg", 22, AppTheme::getForeground, false);
@@ -672,7 +670,7 @@ final class PanelExtensiones extends JPanel {
     }
 
     private void abrirCarpetaExtensiones() {
-        List<Path> directories = gestorServidores.obtenerDirectoriosExtensiones(server);
+        List<Path> directories = gestorServidores.obtenerDirectoríosExtensiones(server);
         if (directories.isEmpty()) {
             return;
         }
@@ -971,7 +969,7 @@ final class PanelExtensiones extends JPanel {
         if (!gestorServidores.admiteGestionDeExtensiones(server)) {
             JOptionPane.showMessageDialog(
                     this,
-                    "Este servidor no admite una experiencia de catalogo para " + extensionPluralLower() + ".",
+                    "Este servidor no admite una experiencia de catálogo para " + extensionPluralLower() + ".",
                     getSectionLabel(),
                     JOptionPane.WARNING_MESSAGE
             );
@@ -982,7 +980,7 @@ final class PanelExtensiones extends JPanel {
 
     private void exportarModpack() {
         if (!supportsModpackActions(currentEcosystem())) {
-            JOptionPane.showMessageDialog(this, "La exportacion de modpacks solo esta disponible para servidores de mods.", "Mods", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "La exportación de modpacks solo está disponible para servidores de mods.", "Mods", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -1332,13 +1330,13 @@ final class PanelExtensiones extends JPanel {
     }
 
     private void updateActionState() {
-        List<Path> directories = gestorServidores.obtenerDirectoriosExtensiones(server);
+        List<Path> directories = gestorServidores.obtenerDirectoríosExtensiones(server);
         boolean supported = gestorServidores.admiteGestionDeExtensiones(server) && !directories.isEmpty();
         boolean busy = loadingExtensions || mutatingExtensions;
         boolean modsServer = supportsModpackActions(currentEcosystem());
         refreshButton.setToolTipText("Refrescar " + extensionPluralLower());
         installButton.setToolTipText("Instalar " + extensionSingularLower() + " .jar");
-        browseCatalogButton.setToolTipText("Explorar catalogo de " + extensionPluralLower());
+        browseCatalogButton.setToolTipText("Explorar catálogo de " + extensionPluralLower());
         openDirectoryButton.setToolTipText("Abrir carpeta de " + extensionPluralLower());
         detailsActionButton.setToolTipText("Eliminar " + extensionSingularLower());
         installButton.setEnabled(supported && !busy);

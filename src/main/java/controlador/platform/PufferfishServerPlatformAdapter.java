@@ -43,7 +43,7 @@ public final class PufferfishServerPlatformAdapter extends AbstractServerPlatfor
 
     @Override
     public String getCreationUnavailableReason() {
-        return "Pufferfish no mantiene un endpoint publico estable equivalente a Paper/Purpur para instalaciones automatizadas; se puede importar y detectar una instalacion existente.";
+        return "Pufferfish no mantiene un endpoint público estable equivalente a Paper/Purpur para instalaciones automatizadas; se puede importar y detectar una instalación existente.";
     }
 
     private Path resolveJarSilently(Path serverDir) {

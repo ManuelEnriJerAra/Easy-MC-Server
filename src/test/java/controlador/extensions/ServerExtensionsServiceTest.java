@@ -146,7 +146,7 @@ class ServerExtensionsServiceTest {
                 installed,
                 latest,
                 true,
-                "Hay una version compatible mas reciente en Hangar."
+                "Hay una versión compatible más reciente en Hangar."
         )));
 
         assertThat(changed).isTrue();
@@ -154,7 +154,7 @@ class ServerExtensionsServiceTest {
         assertThat(installed.getLocalMetadata().getKnownRemoteVersion()).isEqualTo("5.9.0-SNAPSHOT+976");
         assertThat(installed.getLocalMetadata().getKnownRemoteVersionId()).isEqualTo("24490");
         assertThat(installed.getLocalMetadata().getUpdateState()).isEqualTo(ExtensionUpdateState.UPDATE_AVAILABLE);
-        assertThat(installed.getLocalMetadata().getUpdateMessage()).contains("mas reciente");
+        assertThat(installed.getLocalMetadata().getUpdateMessage()).contains("más reciente");
         assertThat(installed.getLocalMetadata().getLastCheckedForUpdatesAtEpochMillis()).isNotNull();
     }
 

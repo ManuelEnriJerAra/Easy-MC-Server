@@ -1,5 +1,6 @@
 package controlador.extensions;
 
+import controlador.JsonNodeText;
 import controlador.FileSystemSafety;
 import controlador.platform.FileDownloader;
 import modelo.Server;
@@ -96,7 +97,7 @@ public class ModrinthModpackService {
                 continue;
             }
             if (!shouldIncludeInExport(extension, resolvedMode)) {
-                skipped.add(displayName(extension) + ": omitido por la seleccion de lado del modpack.");
+                skipped.add(displayName(extension) + ": omitido por la selección de lado del modpack.");
                 continue;
             }
 
@@ -107,7 +108,7 @@ public class ModrinthModpackService {
             }
             String indexedPath = indexedPathFor(serverDir, localJar, extension);
             if (!isSafeRelativePath(indexedPath) || !indexedPath.toLowerCase(Locale.ROOT).endsWith(".jar")) {
-                skipped.add(displayName(extension) + ": la ruta local no es segura para el indice Modrinth.");
+                skipped.add(displayName(extension) + ": la ruta local no es segura para el índice Modrinth.");
                 continue;
             }
 
@@ -140,7 +141,7 @@ public class ModrinthModpackService {
                 try {
                     fileMetadata = resolveVersionFileMetadata(versionId, source.getUrl(), localJar.getFileName().toString());
                 } catch (IOException ex) {
-                    skipped.add(displayName(extension) + ": no se ha podido resolver la version Modrinth (" + ex.getMessage() + ").");
+                    skipped.add(displayName(extension) + ": no se ha podido resolver la versión Modrinth (" + ex.getMessage() + ").");
                     continue;
                 }
             }
@@ -154,7 +155,7 @@ public class ModrinthModpackService {
             Map<String, String> hashes = new LinkedHashMap<>(fileMetadata.hashes());
             ensureLocalHashes(hashes, localHashes);
             if (!hasRequiredModrinthHashes(hashes)) {
-                skipped.add(displayName(extension) + ": faltan hashes SHA-1/SHA-512 para el indice Modrinth.");
+                skipped.add(displayName(extension) + ": faltan hashes SHA-1/SHA-512 para el índice Modrinth.");
                 continue;
             }
             if (!hashMatches(localHashes.sha1(), hashes.get("sha1"))
@@ -288,7 +289,7 @@ public class ModrinthModpackService {
 
     public ExtensionDownloadPlan resolveImportDownloadPlan(IndexedFile file, Server server) throws IOException {
         if (file == null) {
-            throw new IOException("El archivo del modpack no es valido.");
+            throw new IOException("El archivo del modpack no es válido.");
         }
         if (!file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) {
             throw new IOException("El archivo indexado no es un .jar instalable por el gestor de extensiones.");
@@ -343,7 +344,7 @@ public class ModrinthModpackService {
                                   File destination,
                                   FileDownloader downloader) throws IOException {
         if (file == null) {
-            throw new IOException("El archivo del modpack no es valido.");
+            throw new IOException("El archivo del modpack no es válido.");
         }
         if (destination == null) {
             throw new IOException("No se ha indicado el destino temporal de descarga.");
@@ -527,7 +528,7 @@ public class ModrinthModpackService {
         metadata.setLastCheckedForUpdatesAtEpochMillis(System.currentTimeMillis());
         metadata.setLastMetadataSyncAtEpochMillis(System.currentTimeMillis());
         metadata.setUpdateState(ExtensionUpdateState.UNKNOWN);
-        metadata.setUpdateMessage("Identidad Modrinth resuelta por hash durante la exportacion.");
+        metadata.setUpdateMessage("Identidad Modrinth resuelta por hash durante la exportación.");
     }
 
     private VersionMetadata resolveVersionMetadata(IndexedFile file) {
@@ -635,7 +636,7 @@ public class ModrinthModpackService {
         for (JsonNode fileNode : filesNode) {
             String path = text(fileNode, "path");
             if (!isSafeRelativePath(path)) {
-                throw new IOException("El indice contiene una ruta insegura: " + defaultString(path, "(vacia)"));
+                throw new IOException("El índice contiene una ruta insegura: " + defaultString(path, "(vacía)"));
             }
             Map<String, String> hashes = readHashes(fileNode.path("hashes"));
             if (hashes.isEmpty()) {
@@ -663,7 +664,7 @@ public class ModrinthModpackService {
         }
         for (Map.Entry<String, JsonNode> entry : hashesNode.properties()) {
             String key = normalize(entry.getKey());
-            String value = entry.getValue() == null ? null : normalize(entry.getValue().asText(null));
+            String value = entry.getValue() == null ? null : normalize(JsonNodeText.text(entry.getValue(), null));
             if (key != null && value != null) {
                 hashes.put(key, value);
             }
@@ -678,7 +679,7 @@ public class ModrinthModpackService {
         }
         for (Map.Entry<String, JsonNode> entry : dependenciesNode.properties()) {
             String key = normalize(entry.getKey());
-            String value = entry.getValue() == null ? null : entry.getValue().asText(null);
+            String value = entry.getValue() == null ? null : JsonNodeText.text(entry.getValue(), null);
             if (key != null && value != null && !value.isBlank()) {
                 dependencies.put(key, value.trim());
             }
@@ -704,7 +705,7 @@ public class ModrinthModpackService {
         }
         List<String> values = new ArrayList<>();
         for (JsonNode node : arrayNode) {
-            String value = node == null ? null : node.asText(null);
+            String value = node == null ? null : JsonNodeText.text(node, null);
             if (value != null && !value.isBlank()) {
                 values.add(value.trim());
             }
@@ -852,7 +853,7 @@ public class ModrinthModpackService {
 
     private void verifyDownloadedFile(IndexedFile file, Path downloaded) throws IOException {
         if (downloaded == null || !Files.isRegularFile(downloaded)) {
-            throw new IOException("La descarga del modpack no ha generado un archivo valido.");
+            throw new IOException("La descarga del modpack no ha generado un archivo válido.");
         }
         String sha512 = file.hashes().get("sha512");
         if (sha512 != null && !hashMatches(downloaded, sha512, "SHA-512")) {
@@ -1138,7 +1139,7 @@ public class ModrinthModpackService {
     }
 
     private String displayName(ServerExtension extension) {
-        return firstNonBlank(extension == null ? null : extension.getDisplayName(), "Extension");
+        return firstNonBlank(extension == null ? null : extension.getDisplayName(), "Extensión");
     }
 
     private String safePackName(Server server) {
@@ -1153,7 +1154,7 @@ public class ModrinthModpackService {
         if (value == null || value.isMissingNode() || value.isNull()) {
             return null;
         }
-        String text = value.asText(null);
+        String text = JsonNodeText.text(value, null);
         return text == null || text.isBlank() ? null : text.trim();
     }
 

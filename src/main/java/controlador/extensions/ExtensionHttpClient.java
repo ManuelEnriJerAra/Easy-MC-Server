@@ -85,7 +85,7 @@ class ExtensionHttpClient {
                         }
                         throw new IOException("La consulta HTTP ha sido interrumpida.", ex);
                     } catch (IllegalArgumentException ex) {
-                        LOGGER.log(Level.WARNING, "Peticion HTTP invalida para " + uri, ex);
+                        LOGGER.log(Level.WARNING, "Peticion HTTP inválida para " + uri, ex);
                         throw new IOException("No se ha podido construir la peticion HTTP.", ex);
                     } catch (IOException ex) {
                         lastError = ex;
@@ -100,7 +100,7 @@ class ExtensionHttpClient {
                     }
                 }
                 if (cacheEntry != null && cacheEntry.body() != null) {
-                    LOGGER.log(Level.INFO, "Usando cache caducada para " + uri + " tras fallo remoto.");
+                    LOGGER.log(Level.INFO, "Usando caché caducada para " + uri + " tras fallo remoto.");
                     return cacheEntry.body();
                 }
                 throw lastError == null ? new IOException("No se ha podido completar la consulta HTTP.") : lastError;

@@ -4,8 +4,8 @@
  * Autor: Manuel Enrique Jeronimo Aragon
  *
  * Descripcion:
- * Esta clase se encarga de la gestion de mundos del servidor, incluyendo su sincronizacion,
- * importacion, exportacion, cambio y preparacion de nuevos mundos.
+ * Esta clase se encarga de la gestion de mundos del servidor, incluyendo su sincronización,
+ * importacion, exportación, cambio y preparación de nuevos mundos.
  * */
 
 package controlador;
@@ -150,7 +150,7 @@ public final class GestorMundos {
         Path origen = chooser.getSelectedFile().toPath();
         if(!esMundoValido(origen)) {
             JOptionPane.showMessageDialog(parent,
-                    "La carpeta seleccionada no parece ser un mundo valido de Minecraft. Debe contener level.dat.",
+                    "La carpeta seleccionada no parece ser un mundo válido de Minecraft. Debe contener level.dat.",
                     "Importar mundo",
                     JOptionPane.ERROR_MESSAGE);
             return false;
@@ -234,7 +234,7 @@ public final class GestorMundos {
     public static boolean cambiarMundo(Server server, World mundo, Component parent) {
         if(server == null || mundo == null || mundo.getWorldName() == null || mundo.getWorldName().isBlank()) {
             JOptionPane.showMessageDialog(parent,
-                    "Selecciona un mundo valido.",
+                    "Selecciona un mundo válido.",
                     "Cambiar mundo",
                     JOptionPane.WARNING_MESSAGE);
             return false;
@@ -280,7 +280,7 @@ public final class GestorMundos {
         String nombre = sanitizarNombreMundo(settings.getNombre());
         if(nombre.isBlank()) {
             JOptionPane.showMessageDialog(parent,
-                    "El nombre del mundo no puede estar vacio.",
+                    "El nombre del mundo no puede estar vacío.",
                     "Generar mundo",
                     JOptionPane.WARNING_MESSAGE);
             return false;
@@ -330,14 +330,14 @@ public final class GestorMundos {
     private static boolean puedeModificarMundos(Server server, Component parent) {
         if(server == null || server.getServerDir() == null || server.getServerDir().isBlank()) {
             JOptionPane.showMessageDialog(parent,
-                    "No hay un servidor seleccionado valido.",
+                    "No hay un servidor seleccionado válido.",
                     "Mundos",
                     JOptionPane.WARNING_MESSAGE);
             return false;
         }
         if(server.getServerProcess() != null && server.getServerProcess().isAlive()) {
             JOptionPane.showMessageDialog(parent,
-                    "Deten el servidor antes de importar, exportar, generar o cambiar mundos.",
+                    "Detén el servidor antes de importar, exportar, generar o cambiar mundos.",
                     "Mundos",
                     JOptionPane.WARNING_MESSAGE);
             return false;
@@ -367,7 +367,7 @@ public final class GestorMundos {
             candidato = sanitizarNombreMundo(nuevoNombre);
             if(candidato.isBlank()) {
                 JOptionPane.showMessageDialog(parent,
-                        "El nombre indicado no es valido.",
+                        "El nombre indicado no es válido.",
                         "Importar mundo",
                         JOptionPane.WARNING_MESSAGE);
                 candidato = nombreBase;
@@ -490,13 +490,6 @@ public final class GestorMundos {
                 ? mundoDir.getFileName().toString()
                 : MinecraftConstants.DEFAULT_WORLD_NAME;
         return new World(mundoDir == null ? "" : mundoDir.toString(), nombreMundo);
-    }
-
-    // Lee una propiedad booleana con valor por defecto si no existe o esta vacia.
-    private static boolean leerBoolean(Properties props, String key, boolean defaultValue) {
-        String value = props.getProperty(key);
-        if(value == null || value.isBlank()) return defaultValue;
-        return Boolean.parseBoolean(value);
     }
 
     // Crea un objeto World a partir del servidor y del nombre de carpeta del mundo.

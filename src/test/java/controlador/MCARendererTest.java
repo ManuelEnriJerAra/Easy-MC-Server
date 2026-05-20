@@ -25,7 +25,7 @@ class MCARendererTest {
 
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> renderer.renderRegion(emptyRegion))
-                .withMessageContaining("esta vacio");
+                .withMessageContaining("está vacío");
     }
 
     @Test

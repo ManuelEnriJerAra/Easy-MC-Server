@@ -63,7 +63,7 @@ class ServerPlatformAdaptersTest {
         assertThat(ServerPlatformAdapters.forPlatform(ServerPlatform.SPIGOT).getCreationUnavailableReason())
                 .contains("BuildTools");
         assertThat(ServerPlatformAdapters.forPlatform(ServerPlatform.PUFFERFISH).getCreationUnavailableReason())
-                .contains("endpoint publico estable");
+                .contains("endpoint público estable");
     }
 
     @Test
@@ -827,7 +827,7 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
-    void creationClients_debenParsearOpcionesYDirectorios() throws Exception {
+    void creationClients_debenParsearOpcionesYDirectoríos() throws Exception {
         PlatformRemoteLookupPolicy.clearForTests();
         PaperDownloadsClient paperClient = new PaperDownloadsClient(new FakePlatformHttpClient(Map.of(
                 "https://fill.papermc.io/v3/projects/paper",
@@ -1048,7 +1048,7 @@ class ServerPlatformAdaptersTest {
     }
 
     @Test
-    void creationClients_noDebenAplicarCapsArbitrariosAOpcionesRemotas() throws Exception {
+    void creationClients_noDebenAplicarCapsArbitraríosAOpcionesRemotas() throws Exception {
         PlatformRemoteLookupPolicy.clearForTests();
         CountingPlatformHttpClient paperHttpClient = new CountingPlatformHttpClient(Map.of(
                 "https://fill.papermc.io/v3/projects/paper",

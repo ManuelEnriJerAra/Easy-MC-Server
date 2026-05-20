@@ -35,7 +35,7 @@ public final class WorldFilesService {
     public static void writeWorldMetadata(World world, Properties metadata) throws IOException {
         Path metadataPath = getWorldMetadataPath(world);
         if (metadataPath == null) {
-            throw new IOException("La ruta de metadata del mundo no es valida.");
+            throw new IOException("La ruta de metadata del mundo no es válida.");
         }
         if (metadataPath.getParent() != null) {
             Files.createDirectories(metadataPath.getParent());
@@ -62,7 +62,7 @@ public final class WorldFilesService {
     public static void writeServerProperties(Server server, Properties properties) throws IOException {
         Path propertiesPath = getServerPropertiesPath(server);
         if (propertiesPath == null) {
-            throw new IOException("La ruta de server.properties no es valida.");
+            throw new IOException("La ruta de server.properties no es válida.");
         }
         if (propertiesPath.getParent() != null) {
             Files.createDirectories(propertiesPath.getParent());

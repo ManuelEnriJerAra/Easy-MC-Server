@@ -47,7 +47,7 @@ public interface ServerPlatformAdapter {
     default String getCreationUnavailableReason() {
         return supportsAutomatedCreation()
                 ? ""
-                : "La instalacion automatica para esta plataforma no esta disponible.";
+                : "La instalación automática para esta plataforma no está disponible.";
     }
 
     default List<ServerCreationOption> listCreationOptions() throws IOException {

@@ -1,5 +1,6 @@
 package controlador;
 
+import static controlador.JsonNodeText.text;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -9,7 +10,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -154,22 +154,22 @@ public final class GestorUsuariosConocidos {
                 if (node == null || !node.isObject()) {
                     continue;
                 }
-                String name = Utilidades.limpiarSecuenciasConsola(node.path("name").asText(null));
+                String name = Utilidades.limpiarSecuenciasConsola(text(node.path("name"), null));
                 if (name == null || name.isBlank()) {
                     continue;
                 }
                 KnownUser user = new KnownUser();
                 user.name = name.strip();
-                String uuid = node.path("uuid").asText(null);
+                String uuid = text(node.path("uuid"), null);
                 user.uuid = uuid == null || uuid.isBlank() ? null : uuid.strip();
-                String skinUrl = node.path("skinUrl").asText(null);
+                String skinUrl = text(node.path("skinUrl"), null);
                 user.skinUrl = skinUrl == null || skinUrl.isBlank() ? null : skinUrl.strip();
-                String lastSeenAt = node.path("lastSeenAt").asText(null);
+                String lastSeenAt = text(node.path("lastSeenAt"), null);
                 user.lastSeenAt = lastSeenAt == null || lastSeenAt.isBlank() ? Instant.now().toString() : lastSeenAt.strip();
                 JsonNode sourcesNode = node.path("sources");
                 if (sourcesNode.isArray()) {
                     for (JsonNode sourceNode : sourcesNode) {
-                        String source = sourceNode.asText(null);
+                        String source = text(sourceNode, null);
                         if (source != null && !source.isBlank()) {
                             user.sources.add(source.strip());
                         }

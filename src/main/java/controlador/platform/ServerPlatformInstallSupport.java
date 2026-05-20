@@ -17,10 +17,10 @@ final class ServerPlatformInstallSupport {
 
     static void requireServerAndRequest(Server server, ServerInstallationRequest request, String platformVersionName) throws IOException {
         if (server == null) {
-            throw new IOException("El servidor no es valido.");
+            throw new IOException("El servidor no es válido.");
         }
         if (request == null || request.targetDirectory() == null) {
-            throw new IOException("No se ha indicado la carpeta de instalacion.");
+            throw new IOException("No se ha indicado la carpeta de instalación.");
         }
         if (request.minecraftVersion() == null || request.minecraftVersion().isBlank()) {
             throw new IOException("No se ha indicado la versión de Minecraft.");

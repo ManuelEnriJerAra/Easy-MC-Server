@@ -669,7 +669,7 @@ class ExtensionCatalogServiceTest {
                         10
                 )))
                 .isInstanceOf(IOException.class)
-                .hasMessageContaining("ningun proveedor");
+                .hasMessageContaining("ningún proveedor");
     }
 
     private static class FakeProvider implements ExtensionCatalogProvider {

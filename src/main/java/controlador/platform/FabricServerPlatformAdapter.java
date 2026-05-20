@@ -62,7 +62,7 @@ public final class FabricServerPlatformAdapter extends AbstractServerPlatformAda
                 || existsFabricNamedFile(serverDir);
         return (hasServerJar || hasFabricRuntime)
                 ? ServerValidationResult.ok()
-                : ServerValidationResult.error("No se ha encontrado una instalacion valida de Fabric.");
+                : ServerValidationResult.error("No se ha encontrado una instalación válida de Fabric.");
     }
 
     @Override

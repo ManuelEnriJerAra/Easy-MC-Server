@@ -18,7 +18,7 @@ class AppPathsTest {
     }
 
     @Test
-    void appPaths_debeResolverSubdirectoriosDesdeRaizDeDatosDeUsuario() {
+    void appPaths_debeResolverSubdirectoríosDesdeRaizDeDatosDeUsuario() {
         Path appRoot = tempDir.resolve("app-data");
         System.setProperty(AppPaths.APP_ROOT_PROPERTY, appRoot.toString());
 

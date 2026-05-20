@@ -1,5 +1,6 @@
 package controlador.extensions;
 
+import controlador.JsonNodeText;
 import controlador.platform.FileDownloader;
 import controlador.platform.ServerPlatformAdapter;
 import controlador.platform.ServerPlatformAdapters;
@@ -33,7 +34,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -575,7 +575,7 @@ public final class ServerExtensionsService {
             problems.add("El archivo instalado no existe o no se puede leer.");
         }
         if (installState == ExtensionInstallState.FAILED) {
-            problems.add("La instalacion quedo marcada como fallida.");
+            problems.add("La instalación quedó marcada como fallida.");
         } else if (installState == ExtensionInstallState.UNKNOWN) {
             warnings.add("No se conoce el estado de instalación local.");
         }
@@ -2208,7 +2208,7 @@ public final class ServerExtensionsService {
         if (value.isMissingNode() || value.isNull()) {
             return null;
         }
-        String text = value.asText(null);
+        String text = JsonNodeText.text(value, null);
         return text == null || text.isBlank() ? null : text.trim();
     }
 
@@ -2225,7 +2225,7 @@ public final class ServerExtensionsService {
             if (candidate.isObject()) {
                 return firstNonBlank(text(candidate, "name"), text(candidate, "user"));
             }
-            String text = candidate.asText(null);
+            String text = JsonNodeText.text(candidate, null);
             return text == null || text.isBlank() ? null : text.trim();
         }
         return text(node, fieldName);
@@ -2245,12 +2245,12 @@ public final class ServerExtensionsService {
         }
         if (minecraft.isArray() && !minecraft.isEmpty()) {
             JsonNode first = minecraft.get(0);
-            return first == null ? null : first.asText(null);
+            return first == null ? null : JsonNodeText.text(first, null);
         }
         if (minecraft.isObject()) {
             return firstNonBlank(text(minecraft, "version"), text(minecraft, "versions", 0));
         }
-        return minecraft.asText(null);
+        return JsonNodeText.text(minecraft, null);
     }
 
     private List<String> copyStrings(List<String> values) {
@@ -2692,7 +2692,7 @@ public final class ServerExtensionsService {
                 }
                 return;
             }
-            addString(target, value.asText(null));
+            addString(target, JsonNodeText.text(value, null));
         }
 
         private void addJsonValue(List<String> target, JsonNode value) {
@@ -2702,7 +2702,7 @@ public final class ServerExtensionsService {
             if (value.isObject()) {
                 addString(target, firstNonBlank(text(value, "name"), text(value, "user"), text(value, "email")));
             } else {
-                addString(target, value.asText(null));
+                addString(target, JsonNodeText.text(value, null));
             }
         }
 
@@ -2732,7 +2732,7 @@ public final class ServerExtensionsService {
                     JsonNode dependency = dependencies.get(i);
                     String id = firstNonBlank(text(dependency, "id"), text(dependency, "modid"));
                     String version = jsonDependencyVersion(dependency);
-                    addString(localDependencyDescriptions, firstNonBlank(id, dependency.asText(null)) + (version == null ? "" : " " + version));
+                    addString(localDependencyDescriptions, firstNonBlank(id, JsonNodeText.text(dependency, null)) + (version == null ? "" : " " + version));
                     if ("minecraft".equalsIgnoreCase(id)) {
                         addString(supportedMinecraftVersions, version);
                     } else if (!isRuntimeDependencyId(id)) {
@@ -2754,9 +2754,9 @@ public final class ServerExtensionsService {
                 return firstNonBlank(text(value, "version"), text(value, "versions"));
             }
             if (value.isArray() && !value.isEmpty()) {
-                return value.get(0).asText(null);
+                return JsonNodeText.text(value.get(0), null);
             }
-            return value.asText(null);
+            return JsonNodeText.text(value, null);
         }
 
         private void addIcon(String iconPath) {

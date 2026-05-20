@@ -1,7 +1,6 @@
 package controlador.platform;
 
 import modelo.Server;
-import modelo.extensions.ServerPlatform;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,7 +19,7 @@ abstract class AbstractServerPlatformAdapter implements ServerPlatformAdapter {
         try {
             Path executableJar = resolveExecutableJar(serverDir);
             if (executableJar == null || !Files.isRegularFile(executableJar)) {
-                return ServerValidationResult.error("No se ha encontrado un .jar ejecutable valido.");
+                return ServerValidationResult.error("No se ha encontrado un .jar ejecutable válido.");
             }
             if (!MinecraftServerJarInspector.looksLikeMinecraftServerJar(executableJar)) {
                 return ServerValidationResult.error("El .jar localizado no parece un servidor de Minecraft.");
@@ -33,7 +32,7 @@ abstract class AbstractServerPlatformAdapter implements ServerPlatformAdapter {
 
     @Override
     public void install(Server server, ServerInstallationRequest request) throws IOException {
-        throw new UnsupportedOperationException("La instalacion automatica para " + getPlatform().getLegacyTypeName() + " aun no esta implementada.");
+        throw new UnsupportedOperationException("La instalación automática para " + getPlatform().getLegacyTypeName() + " aún no está implementada.");
     }
 
     @Override

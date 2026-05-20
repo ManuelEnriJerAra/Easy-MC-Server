@@ -72,13 +72,13 @@ public final class ExtensionCatalogService {
                     LOGGER.log(Level.WARNING, "Fallo al buscar en el proveedor " + provider.getProviderId(), ex);
                 } catch (RuntimeException ex) {
                     if (firstFailure == null) {
-                        firstFailure = new IOException("El proveedor " + provider.getProviderId() + " ha devuelto una respuesta invalida.", ex);
+                        firstFailure = new IOException("El proveedor " + provider.getProviderId() + " ha devuelto una respuesta inválida.", ex);
                     }
                     LOGGER.log(Level.WARNING, "Fallo inesperado al buscar en el proveedor " + provider.getProviderId(), ex);
                 }
             }
             if (aggregated.isEmpty() && firstFailure != null) {
-                throw new IOException("No se ha podido consultar ningun proveedor del marketplace.", firstFailure);
+                throw new IOException("No se ha podido consultar ningún proveedor del marketplace.", firstFailure);
             }
             List<ExtensionCatalogEntry> filtered = aggregated.stream()
                     .filter(entry -> matchesQuerySafety(normalized, entry))

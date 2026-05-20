@@ -25,7 +25,7 @@ final class CurseForgeExtensionCatalogProvider extends AbstractStubExtensionCata
                         "Just Enough Items",
                         "mezz",
                         "19.8.2",
-                        "Catalogo visual de recetas preparado para Forge y NeoForge.",
+                        "Catálogo visual de recetas preparado para Forge y NeoForge.",
                         ServerExtensionType.MOD,
                         Set.of(ServerPlatform.FORGE, ServerPlatform.NEOFORGE),
                         Set.of("1.21.1"),
@@ -72,7 +72,7 @@ final class CurseForgeExtensionCatalogProvider extends AbstractStubExtensionCata
 
     @Override
     public String getLimitations() {
-        return "Catalogo CurseForge no implementado con API real; el soporte actual de CurseForge se limita a import/export de manifest.";
+        return "Catálogo CurseForge no implementado con API real; el soporte actual de CurseForge se limita a import/export de manifest.";
     }
 
     @Override

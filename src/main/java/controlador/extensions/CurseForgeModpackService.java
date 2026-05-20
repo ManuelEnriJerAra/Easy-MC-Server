@@ -1,5 +1,6 @@
 package controlador.extensions;
 
+import controlador.JsonNodeText;
 import controlador.GestorConfiguracion;
 import modelo.Server;
 import modelo.extensions.ExtensionLocalMetadata;
@@ -278,7 +279,7 @@ public final class CurseForgeModpackService {
 
     private String displayName(ServerExtension extension) {
         if (extension == null || extension.getDisplayName() == null || extension.getDisplayName().isBlank()) {
-            return "Extension";
+            return "Extensión";
         }
         return extension.getDisplayName().trim();
     }
@@ -303,7 +304,7 @@ public final class CurseForgeModpackService {
         if (value.isMissingNode() || value.isNull()) {
             return null;
         }
-        String text = value.asText(null);
+        String text = JsonNodeText.text(value, null);
         return text == null || text.isBlank() ? null : text;
     }
 
